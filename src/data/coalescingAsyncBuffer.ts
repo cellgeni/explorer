@@ -33,12 +33,15 @@ interface CoalescedRange {
   readonly slices: PendingSlice[]
 }
 
-// hyparquet asks for every column chunk of a read at once, one range request
-// each: 6,738 for the Visium HD reference's barcode_mappings.parquet, which
-// Chromium fails with net::ERR_INSUFFICIENT_RESOURCES. This buffer collects
-// the slices asked for in one turn, merges neighbours into larger ranges, and
-// keeps at most `maxConcurrent` range requests in flight, in file order. Each
-// slice resolves with a copy of its bytes, so a range is freed once read.
+// hyparquet asks for every column chunk of a read at once. Since 1.31.2 it
+// merges a row group's chunks that lie within 8 KB of each other; before,
+// it made one range request per chunk: 6,738 for the Visium HD reference's
+// barcode_mappings.parquet, which Chromium failed with
+// net::ERR_INSUFFICIENT_RESOURCES. Its 1,123 row groups are still too many
+// at once. This buffer collects the slices asked for in one turn, merges
+// neighbours into larger ranges, and keeps at most `maxConcurrent` range
+// requests in flight, in file order. Each slice resolves with a copy of its
+// bytes, so a range is freed once read.
 export function coalescingAsyncBuffer(
   file: AsyncByteSource,
   options: CoalescingAsyncBufferOptions = {},

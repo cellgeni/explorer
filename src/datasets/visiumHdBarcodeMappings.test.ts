@@ -168,8 +168,8 @@ const FIXTURE_BYTES = new Uint8Array(
     join(process.cwd(), 'src/test/fixtures/visium-hd/barcode_mappings.parquet'),
   ),
 )
-const FIXTURE_ROWS = 48 * 40
-const FIXTURE_COLUMN_CHUNKS = 48 * 6
+const FIXTURE_ROW_GROUPS = 48
+const FIXTURE_ROWS = FIXTURE_ROW_GROUPS * 40
 
 // Serves the fixture with HEAD and Range, recording each request and how many
 // are in flight. A response arrives on the next macrotask.
@@ -229,9 +229,8 @@ describe('Visium HD barcode mappings over HTTP', () => {
   it('keeps column chunk reads under the concurrency limit', async () => {
     const recorded = fixtureFetcher()
 
-    // With 1-byte ranges nothing merges, so each of the 288 column chunks is
-    // a request of its own, as before coalescing; hyparquet asks for them all
-    // at once.
+    // With 1-byte ranges nothing merges here. hyparquet reads the 6 column
+    // chunks of a row group as one range and asks for all 48 at once.
     const mappings = await readVisiumHdBarcodeMappings(FIXTURE_BASE_URL, {
       fetcher: recorded.fetcher,
       byteRangeCache: null,
@@ -239,8 +238,8 @@ describe('Visium HD barcode mappings over HTTP', () => {
     })
 
     expect(mappings).toHaveLength(FIXTURE_ROWS)
-    // HEAD, the footer (the whole small file), then each column chunk.
-    expect(recorded.requests).toHaveLength(2 + FIXTURE_COLUMN_CHUNKS)
+    // HEAD, the footer (the whole small file), then each row group.
+    expect(recorded.requests).toHaveLength(2 + FIXTURE_ROW_GROUPS)
     expect(recorded.peak()).toBe(DEFAULT_COALESCED_RANGE_CONCURRENCY)
   })
 

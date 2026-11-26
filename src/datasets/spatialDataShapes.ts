@@ -1,6 +1,5 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import type { AsyncBuffer, Compressors, FileMetaData, ParquetParsers } from 'hyparquet'
-import { DEFAULT_PARSERS } from 'hyparquet/src/convert.js'
 import { retryingFetch } from '../data/fetchRetry'
 import { readMaybeGzipBytes } from '../data/readMaybeGzipText'
 import {
@@ -76,9 +75,7 @@ interface GeoJsonGeometry {
 const DEFAULT_CIRCLE_RADIUS = 1
 // Geometry stays WKB so rows are read straight into typed rings: hyparquet's
 // GeoJSON costs an array per vertex, gigabytes for a large segmentation.
-// hyparquet replaces rather than merges a partial `parsers`, so all are given.
-const WKB_PARSERS: ParquetParsers = {
-  ...DEFAULT_PARSERS,
+const WKB_PARSERS: Partial<ParquetParsers> = {
   geometryFromBytes: (bytes) => bytes,
   geographyFromBytes: (bytes) => bytes,
 }
