@@ -216,6 +216,9 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
   private readonly validateRangeSupport: DatasetRangeValidator
   private readonly ownsDuckClient: boolean
   private duckClientPromise: Promise<DuckDbClientLike> | null = null
+  // Nucleus outlines' own client, started on their first read (see
+  // nucleusConn).
+  private nucleusClientPromise: Promise<DuckDbClientLike> | null = null
   private metaPromise: Promise<DatasetMeta> | null = null
   // Cleared when nucleus_boundaries.parquet has no label_id column.
   private nucleusLabelIds = true
@@ -293,12 +296,18 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
     return this.metaPromise
   }
 
-  // Closes the DuckDB client this dataset started, ending its worker. A
+  // Closes the DuckDB clients this dataset started, ending their workers. A
   // client passed in belongs to the caller. A later query starts another.
   dispose(): void {
-    const client = this.ownsDuckClient ? this.duckClientPromise : null
+    const clients = this.ownsDuckClient
+      ? [this.duckClientPromise, this.nucleusClientPromise]
+      : []
     this.duckClientPromise = null
-    void client?.then((started) => started.close?.()).catch(() => undefined)
+    this.nucleusClientPromise = null
+
+    for (const client of clients) {
+      void client?.then((started) => started.close?.()).catch(() => undefined)
+    }
   }
 
   async warm(): Promise<void> {
@@ -367,7 +376,7 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
     await this.validateRangeSupport(this.urlFor('nucleusBoundaries'), {
       label: datasetFileLabelFor(this.baseUrl, 'nucleusBoundaries'),
     })
-    const conn = await this.conn()
+    const conn = await this.nucleusConn()
     const urls = {
       cells: this.urlFor('cells'),
       nucleusBoundaries: this.urlFor('nucleusBoundaries'),
@@ -662,6 +671,26 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
     }
 
     return client.conn
+  }
+
+  // Nucleus outlines are read on a DuckDB client of their own, so that they
+  // are read alongside the cells' outlines rather than after them: one
+  // client runs its queries in turn. It costs another DuckDB worker, started
+  // when nuclei are first read. A client passed in is shared.
+  private async nucleusConn(): Promise<XeniumDuckDbConnection> {
+    if (!this.ownsDuckClient) {
+      return this.conn()
+    }
+
+    if (this.nucleusClientPromise === null) {
+      const starting = this.duckFactory()
+      this.nucleusClientPromise = starting
+      starting.catch(() => {
+        if (this.nucleusClientPromise === starting) this.nucleusClientPromise = null
+      })
+    }
+
+    return (await this.nucleusClientPromise).conn
   }
 
   // Concurrent callers share one start. A start that fails is forgotten, so

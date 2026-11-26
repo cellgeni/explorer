@@ -609,6 +609,60 @@ describe('XeniumDataset', () => {
     expect(createDuckDbClient).toHaveBeenCalledTimes(2)
   })
 
+  it('reads nucleus outlines on a DuckDB client of their own, alongside a cell query', async () => {
+    const cellConn = new FakeConnection([[], []])
+    let release = () => {}
+    const cellQueryHeld = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const heldConn: XeniumDuckDbConnection = {
+      prepare: async (sql) => {
+        await cellQueryHeld
+        return cellConn.prepare(sql)
+      },
+    }
+    const nucleusConn = new FakeConnection([
+      [{ cell_id: 'aaaaaaaa-1', label_id: 7n, x: [0, 2, 2], y: [0, 0, 2] }],
+      [{ cell_id: 'aaaaaaaa-1', label_id: 7n, x: [0, 2, 2], y: [0, 0, 2] }],
+    ])
+    const close = vi.fn(async () => {})
+    const createDuckDbClient = vi
+      .fn<() => Promise<DuckDbClientLike>>()
+      .mockResolvedValueOnce({ conn: heldConn, loadSpatial: async () => {}, close })
+      .mockResolvedValueOnce({ conn: nucleusConn, loadSpatial: async () => {}, close })
+    const dataset = new XeniumDataset({
+      baseUrl: 'https://example.test/xenium/',
+      createDuckDbClient,
+      fetcher: async () => new Response(JSON.stringify({})),
+      openTiff: async () => ({}) as TiffPyramidLoader,
+      validateRangeSupport: async () => undefined,
+    })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    const cells = dataset.cells(bbox)
+    await vi.waitFor(() => expect(createDuckDbClient).toHaveBeenCalledOnce())
+
+    // The cell query is still held; the nuclei do not wait for it.
+    await expect(dataset.segmentationElements('nucleus', bbox)).resolves.toMatchObject([
+      { id: 'aaaaaaaa-1' },
+    ])
+    await dataset.segmentationElements('nucleus', bbox)
+    release()
+    await cells
+
+    expect(createDuckDbClient).toHaveBeenCalledTimes(2)
+    expect(nucleusConn.statements).toHaveLength(2)
+    expect(cellConn.preparedSql.join('\n')).not.toContain('label_id')
+
+    dataset.dispose()
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2))
+  })
+
   it('leaves a DuckDB client passed in open when disposed', async () => {
     const close = vi.fn(async () => {})
     const dataset = makeDataset(new FakeConnection([[]]), {

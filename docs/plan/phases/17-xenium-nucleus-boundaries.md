@@ -119,10 +119,12 @@ hyparquet:
 
 ## Known Gaps
 
-- [ ] With both outline types on and cold, the nuclei are drawn about 6 s
+- [x] With both outline types on and cold, the nuclei are drawn about 6 s
       after the cells on the demo, because one DuckDB instance runs both
       queries in turn. A second instance for nuclei would run them side by
-      side, at the cost of another DuckDB worker and file cache.
+      side, at the cost of another DuckDB worker and file cache. Closed by
+      the optimization pass's O12 (2026-11-26): see
+      [Nucleus Outlines Read Alongside Cells](optimization-pass.md#nucleus-outlines-read-alongside-cells-2026-11-26).
 - [ ] On Visium HD, bins are drawn above cell and nucleus outlines and take
       the pointer, so outlines cannot be hovered or clicked where bins are
       drawn. The nucleus-to-cell link is in place for when they can.

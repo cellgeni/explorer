@@ -150,9 +150,13 @@ and a failed nucleus read leaves the cell outlines in place. Each checkbox
 reads only its own outline type: with `Cell boundaries` off no cell query
 runs (`cellBoundaryLoadingEnabled` in `platformAdapter.ts`). Unticking a
 checkbox stops that layer's request but keeps the outlines it already read,
-so ticking it again in the same area reads nothing. Both queries share the
-viewport `XeniumDataset`, whose DuckDB instance runs one query at a time, so
-with both on and cold the nuclei arrive after the cells.
+so ticking it again in the same area reads nothing. A DuckDB client runs one
+query at a time, so nuclei are read on a client of their own, started when
+they are first read, and the two queries run side by side. They share the
+host: on the demo, with both on and cold, both outline types are ready in
+9.0–9.7 s, where one client drew the cells in 7.3–7.6 s and the nuclei in
+12.2–12.7 s
+([Nucleus Outlines Read Alongside Cells](../plan/phases/optimization-pass.md#nucleus-outlines-read-alongside-cells-2026-11-26)).
 
 Nuclei are drawn as a blue layer that can be hovered and clicked. The tooltip
 shows the nucleus ID, its place among its cell's nuclei in view (`2 of 3`),
@@ -368,7 +372,8 @@ not passed to the readers, so it does not change the result.
 - In-memory: range-probe results, Zarr matrix metadata and `cell_id` index,
   H5 matrices, transcript Zarr metadata, and `XeniumDataset` instances.
 - DuckDB-WASM runs in a worker per client; each `XeniumDataset` creates its own
-  client at its first query and keeps it until the page is reloaded. The H5
+  client at its first query, and the viewport's a second for nucleus outlines
+  when they are first read. `dispose()` closes both. The H5
   fallback's file is fetched, opened and read in an H5 file worker, and the
   overview's `cells.parquet` columns in a cells overview worker. zarrita reads (matrix, transcripts, analysis) run on the main
   thread, with their chunks decompressed in the Zarr decode workers.
@@ -403,10 +408,9 @@ not passed to the readers, so it does not change the result.
 
 ## Known Limitations
 
-- With both outline types on and cold, the nuclei are drawn about 6 s after
-  the cells on the demo, because both queries run one at a time on one
-  DuckDB instance. A second instance for nuclei would run them side by side,
-  at the cost of another DuckDB worker and file cache.
+- Nucleus outlines cost a DuckDB worker of their own, about 46–60 MB. With
+  both outline types on and cold, the two queries share the host, so the
+  cell outlines arrive 1.3–2.5 s later on the demo than when they ran first.
 - The Magic Lens has no QV filter. A `Min QV` setting that had no effect on
   results was removed in Phase 15.5.
 - The morphology image is the first `experiment.xenium` path the folder's
