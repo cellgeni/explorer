@@ -287,13 +287,15 @@ M2, requests:
       OME-XML names them.
   - A test counts reads on a SubIFD fixture.
   - Measure S7.
-- [ ] **O10. QPTIFF auto-contrast reads its tiles together.** (S) Fetch 4–6
+- [x] **O10. QPTIFF auto-contrast reads its tiles together.** (S) Fetch 4–6
       tiles at a time, passing `upcoming` so that neighbours share a
       request, and sample them in order, since each tile's first sample
       depends on the one before (`tileSamples.ts:26`). The samples and the
       contrast stay the same.
   - A test with a delayed fake loader.
   - Measure on the 19-plex tonsil through the mirror (S9).
+  - Built in [#449](https://github.com/cellgeni/explorer/pull/449):
+    [Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26).
 - [ ] **O11. Shorter chains on load.** (M, one PR per group)
   - Probe every Visium HD bin size at once.
   - Pass the probe's size to hyparquet, so it skips its `HEAD`.
@@ -888,6 +890,60 @@ image's header), Visium HD bin-size and LOD reads and the image-only
 opening, which have no controller, and the reads of a Space Ranger MEX
 matrix in its worker.
 
+## Auto-Contrast Reads Tiles Together (2026-11-26)
+
+Task O10, [#449](https://github.com/cellgeni/explorer/pull/449).
+Auto-contrast fetches a TIFF channel's tiles six at a time while it samples
+one, each fetch naming the eight tiles after it as `upcoming`, so that the
+loader reads tiles stored back to back in one request. Tiles are still
+sampled in order, in one worker, so the samples and the window are the same
+([Auto-Contrast](../../modalities/image.md#auto-contrast)).
+
+The first runs showed that the request count, not the order, set the time.
+As a QPTIFF opens, the canvas and auto-contrast read the same coarsest
+tiles, and a tile that one of them was reading was read again by the other,
+unless a run had read it ahead: main read 27–28 tiles per channel for 18. A
+tile fetched while another fetch reads it now waits for that request, and
+takes its own copy of the bytes
+([Fetching And Decoding](../../modalities/image.md#fetching-and-decoding)).
+
+Measured on the tonsil QPTIFF (S-BIAD2491: 19 channels, 13 GB) through
+`scripts/range-server.mjs --mirror` at 300 ms a request (S9): production
+builds of main (`25ff4b4`) and the branch, alternating, three runs each,
+with GPU drawing, until the six channels that are on have their
+histograms. Main-thread time is from CPU profiles of three more runs each,
+from the page's start.
+
+| Measure                      | Main           | Branch         |
+| ---------------------------- | -------------- | -------------- |
+| Six channels auto-contrasted | 6.62–6.76 s    | 3.86–4.07 s    |
+| Requests                     | 97–98          | 41–42          |
+| Data                         | 29.2–29.3 MB   | 17.7–18.5 MB   |
+| Main thread busy             | 1,420–1,537 ms | 1,101–1,330 ms |
+| Longest stretch without idle | 146–166 ms     | 134–141 ms     |
+
+- **Per channel.** Each channel's coarsest level is 18 tiles of about
+  300 KB, stored back to back within each row of 3. The branch reads each
+  tile once, in 6 requests, or 8 for DAPI, whose rows pass 1 MiB; main read
+  27–28 tiles in 15–16 requests.
+- **Time follows the request count.** Both builds open the file in 1.6 s
+  with 3 requests. Chromium then sends six requests at a time to the host
+  over HTTP/1.1, about 0.3 s for each six.
+- **The same result.** The windows and the screenshots are the same on both
+  builds.
+- **One stall, not repeated.** In one branch run, the first after a
+  rebuild, no request was sent for 15 s between the opening and the first
+  tile. It did not recur in ten runs.
+
+Leads:
+
+- `computeChannelAutoContrast` sorts each channel's 234,000 samples on the
+  main thread: about 110 ms of the 124–136 ms it takes over six channels,
+  on both builds.
+- When the canvas draws another level than the coarsest, as for a large
+  image without a pyramid, six auto-contrast fetches per channel may queue
+  ahead of its tiles. Not measured.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1054,3 +1110,9 @@ Closed by the pass's tasks:
       shared first read and its requests
       ([#443](https://github.com/cellgeni/explorer/pull/443))
       ([Cancelled Loads Stop Their Reads](#cancelled-loads-stop-their-reads-2026-11-26)).
+- [x] QPTIFF auto-contrast read the coarsest level's tiles one at a time,
+      about 15 s per channel against EBI (O10, 2026-11-26, part of the
+      QPTIFF item). The six channels on at load are auto-contrasted in
+      3.9–4.1 s rather than 6.6–6.8 s at 300 ms a request
+      ([#449](https://github.com/cellgeni/explorer/pull/449))
+      ([Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26)).

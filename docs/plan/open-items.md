@@ -302,9 +302,8 @@ to it.
       2026-11-22).
 - [ ] OME-Zarr chunks read over HTTP are not kept in the IndexedDB cache;
       only zipped stores use it ([Phase 9](phases/09-ome-zarr.md)).
-- [ ] QPTIFF: the stripped smallest pyramid level is not shown; auto-contrast
-      reads the coarsest level's tiles one at a time, about 15 s per channel
-      against EBI; and a QPTIFF cannot be placed over Xenium
+- [ ] QPTIFF: the stripped smallest pyramid level is not shown, and a QPTIFF
+      cannot be placed over Xenium
       ([Phase 13](phases/13-qptiff.md#known-gaps)).
 - [ ] Standard Visium: `spaceranger aggr` output is not detected, the
       full-resolution microscope image is not shown, and k-means clusterings
