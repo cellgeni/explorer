@@ -1,3 +1,4 @@
+import { xeniumCellIdText } from './cellid'
 import type { NumericArrayLike } from './numericArray'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { throwIfAborted } from '../utils/abort'
@@ -48,14 +49,50 @@ export type GeneValuesRowIds =
       readonly count: number
     }
 
+// Each row's ID as text, by row, from either form.
+export function geneValuesRowIdAt(rowIds: GeneValuesRowIds): {
+  readonly count: number
+  readonly idAt: (row: number) => string
+} {
+  if ('kind' in rowIds) {
+    const { pairs, stride } = rowIds
+    return {
+      count: rowIds.count,
+      idAt: (row) =>
+        xeniumCellIdText(pairs[row * stride] ?? 0, pairs[row * stride + 1] ?? 0),
+    }
+  }
+
+  return { count: rowIds.length, idAt: (row) => rowIds[row] ?? '' }
+}
+
 export interface GeneValuesSource {
   geneValuesRowIds(): Promise<GeneValuesRowIds>
-  estimateGeneValuesRead(genes: readonly string[]): Promise<GeneValuesReadEstimate>
+  // `layer` names a matrix other than the one Plots reads, as an AnnData
+  // layer or `raw`; without one, that matrix.
+  estimateGeneValuesRead(
+    genes: readonly string[],
+    options?: { readonly layer?: string | undefined },
+  ): Promise<GeneValuesReadEstimate>
   // One result per gene, in the order asked.
   geneValues(
     genes: readonly string[],
-    options?: { readonly signal?: AbortSignal },
+    options?: {
+      readonly signal?: AbortSignal | undefined
+      readonly layer?: string | undefined
+    },
   ): Promise<readonly GeneValuesRead[]>
+  // The matrices `layer` can name; absent for a source with one matrix.
+  geneValuesLayers?(): Promise<readonly string[]>
+}
+
+// What a source with one matrix says to a layer asked for.
+export function noGeneValuesLayerMessage(
+  platform: string,
+  matrix: string,
+  layer: string,
+): string {
+  return `${platform} has one matrix (${matrix}); it has no layer "${layer}".`
 }
 
 export function isGeneValuesSource(value: unknown): value is GeneValuesSource {

@@ -731,6 +731,23 @@ holds with their names, which the panel reads again. If the worker fails, or
 there is no `Worker`, the same store runs on the main thread. See
 [plan 22](plan/phases/22-plots-panel.md).
 
+The Python console reads a gene per overview cell through `GeneRowReader`
+(`src/data/geneValuesByRow.ts`), over the same `GeneValuesSource`. On its
+first read it joins the matrix's rows to the overview's by cell ID, once,
+into an `Int32Array` (each matrix row's overview row, or -1) and an empty
+overview column: 0 for each cell the matrix lists, NaN for each it does not.
+A read copies that column and places the gene's stored values. It holds a
+read to the Plots budget (`plotReadDecision`): over 32 MiB it throws
+`GeneReadTooLarge` unless the call allows large reads, and over 256 MiB
+`GeneReadRefused`. `estimateGeneValuesRead` and `geneValues` take an optional
+`layer`, which Plots never passes. An H5AD (and a SpatialData table) reads
+`layers/<name>`, or `raw/X` for `raw` with `raw/var`'s genes; each is opened
+when first asked for and kept, and a section shares its file's. A file in an
+H5 file worker walks the layers then, with the worker's `tree` request, as
+its load walks only the groups the viewer reads; a file read by range slices
+them per request rather than reading them whole. `geneValuesLayers()` lists
+them. Xenium, Atera and MERSCOPE have one matrix, and say so for any layer.
+
 The Cell Query panel keeps the columns its conditions and table use in its
 own worker (`src/features/query/cellQuery.ts`), started once per dataset and
 given the overview's cell IDs, so rows are the overview's cells in their
