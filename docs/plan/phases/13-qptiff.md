@@ -41,6 +41,8 @@ post-Xenium skin scan in BioImage Archive `S-BIAD3788`
 ## Known Gaps
 
 - [ ] The stripped smallest pyramid level is not shown.
-- [ ] Auto-contrast reads the coarsest level's tiles one at a time: about
-      15 s per channel against EBI.
+- [x] Auto-contrast reads the coarsest level's tiles one at a time: about
+      15 s per channel against EBI. Closed by the optimization pass's O10
+      (2026-11-26): see
+      [Auto-Contrast Reads Tiles Together](optimization-pass.md#auto-contrast-reads-tiles-together-2026-11-26).
 - [ ] QPTIFF placement over Xenium (registration) is not supported.

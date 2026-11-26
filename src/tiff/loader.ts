@@ -2846,8 +2846,10 @@ export class TiffPyramidLoader {
     return new Uint8Array(await response.arrayBuffer())
   }
 
-  // A tile read ahead with a neighbour is taken from memory. Otherwise it is
-  // read together with the upcoming tiles stored next to it, which wait in
+  // A tile read ahead with a neighbour is taken from memory, and a tile
+  // another fetch is reading waits for that request: the canvas and
+  // auto-contrast read the same coarse tiles as an image opens. Otherwise it
+  // is read together with the upcoming tiles stored next to it, which wait in
   // memory for their own fetch. A run is cancelled only when every tile that
   // has asked for it has stopped waiting, and the tiles it was reading for
   // later are then read again by their own fetch.
@@ -2866,16 +2868,18 @@ export class TiffPyramidLoader {
       return this.waitForRun(prefetched.run, prefetched.bytes, signal)
     }
 
+    const reading = this.tilesInRuns.get(key)
+
+    if (reading !== undefined && !reading.controller.signal.aborted) {
+      adjacent.options?.onSharedRead?.()
+      return this.waitForRun(reading, runTileBytes(reading, chunk), signal)
+    }
+
     const upcoming = new Set(
       (adjacent.options?.upcoming ?? []).map((tile) =>
         tiffChunkKey(adjacent.level, tile.row, tile.col),
       ),
     )
-
-    if (upcoming.size === 0) {
-      return this.fetchRange(chunk.offset, chunk.offset + chunk.length, signal)
-    }
-
     const tiles = readAdjacentTileRun(
       this.fileOrder(adjacent.level, adjacent.chunks),
       key,
@@ -2891,22 +2895,21 @@ export class TiffPyramidLoader {
       throw new Error(`No TIFF chunk for ${key}.`)
     }
 
-    if (tiles.length === 1) {
-      return this.fetchRange(chunk.offset, chunk.offset + chunk.length, signal)
-    }
-
-    const run: TileRun = {
-      controller: new AbortController(),
-      waiters: 0,
-      settled: false,
-      unclaimed: new Set(),
-    }
+    const controller = new AbortController()
     const runStart = first.chunk.offset
     const runBytes = this.fetchRange(
       runStart,
       last.chunk.offset + last.chunk.length,
-      run.controller.signal,
+      controller.signal,
     )
+    const run: TileRun = {
+      controller,
+      start: runStart,
+      bytes: runBytes,
+      waiters: 0,
+      settled: false,
+      unclaimed: new Set(),
+    }
     const settle = () => {
       run.settled = true
 
@@ -2921,10 +2924,7 @@ export class TiffPyramidLoader {
 
     for (const tile of tiles) {
       this.tilesInRuns.set(tile.key, run)
-      const tileStart = tile.chunk.offset - runStart
-      const bytes = runBytes.then((data) =>
-        data.slice(tileStart, tileStart + tile.chunk.length),
-      )
+      const bytes = runTileBytes(run, tile.chunk)
 
       if (tile.key === key) {
         requested = bytes
@@ -3078,6 +3078,10 @@ interface AdjacentTileContext {
 // One request for tiles stored back to back.
 interface TileRun {
   readonly controller: AbortController
+  // The file offset of the run's first byte, and its bytes, which each tile
+  // takes a copy from: a caller may transfer its tile to a worker.
+  readonly start: number
+  readonly bytes: Promise<Uint8Array>
   // Fetches waiting for the run's bytes.
   waiters: number
   settled: boolean
@@ -3126,6 +3130,12 @@ function levelFileOrder(
     tiles,
     indexByKey: new Map(tiles.map((tile, index) => [tile.key, index])),
   }
+}
+
+// A copy of `chunk`'s bytes from the run reading it.
+function runTileBytes(run: TileRun, chunk: TiffChunk): Promise<Uint8Array> {
+  const start = chunk.offset - run.start
+  return run.bytes.then((data) => data.slice(start, start + chunk.length))
 }
 
 // The tile `key` and the tiles stored back to back with it that may join it,
