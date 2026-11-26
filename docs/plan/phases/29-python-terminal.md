@@ -458,8 +458,9 @@ M1 was built as a stack of PRs, each on the one before: #450 (B), #451 (C),
 - The worker asks Python whether an input is complete before running it and
   posts `started`, so the console logs the input above its output and leaves
   an incomplete one in the prompt.
-- The real-Pyodide test runs in Node, which has JSPI from 25; CI's Node 24
-  runs it with `--experimental-wasm-jspi`.
+- The real-Pyodide test runs in Node, which has JSPI from 25; CI ran it on
+  Node 24 with `--experimental-wasm-jspi`, and since CI moved to Node 26 it
+  runs in `npm test`.
 
 On the Xenium demo (1,414,155 cells, production build, Chromium) the prompt
 was ready about 1.2 s after the window opened with Pyodide in the browser's
