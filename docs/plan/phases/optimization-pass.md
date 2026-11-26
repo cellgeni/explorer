@@ -271,12 +271,14 @@ M2, requests:
       ([Answered Questions](#answered-questions)).
   - Tests with a fake fetch that hangs, fails, or stalls mid-body.
   - Measure with range-server's stall option.
-- [ ] **O8. Cancelling a load stops its reads.** (M–L) A signal through
+- [x] **O8. Cancelling a load stops its reads.** (M–L) A signal through
       `cachedSpatialDataset`, `overview()`, `readBinnedOverview()`,
       `summary()` and `visiumSummary()`. A shared read is aborted only
       when all its callers have aborted, as `utils/sharedLoad.ts` does.
   - Measure with `--delay 300`: open one fixture, switch to another, and
     count the first one's requests after the switch.
+  - Built in [#443](https://github.com/cellgeni/explorer/pull/443):
+    [Cancelled Loads Stop Their Reads](#cancelled-loads-stop-their-reads-2026-11-26).
 - [ ] **O9. Fewer rounds when a TIFF opens.** (S–M) Read the decode tags
       together, the tile offsets with their byte counts, and the SubIFDs
       with the description; open the other channel files as soon as the
@@ -785,13 +787,14 @@ draw at the full view (M3, Metal, 2× pixel ratio, 1400 × 900, timed with a
 
 ## Cancelled Loads Stop Their Reads (2026-11-26)
 
-Task O8. A dataset's first read is a `sharedLoad`, aborted once every caller
-waiting on it has cancelled: an AnnData table's arrays (H5AD, AnnData Zarr,
-Icechunk, references, and the tables of SpatialData, MERSCOPE, Atera and
-Space Ranger Visium), the MERSCOPE and Atera overviews, each Visium HD bin
-size's overview, and opening the dataset in `DatasetCache`. The load passes
-its signal to `getSpatialDataset` and to every read it makes before the
-dataset is ready ([Caching](../../architecture.md#caching)).
+Task O8, [#443](https://github.com/cellgeni/explorer/pull/443). A dataset's
+first read is a `sharedLoad`, aborted once every caller waiting on it has
+cancelled: an AnnData table's arrays (H5AD, AnnData Zarr, Icechunk,
+references, and the tables of SpatialData, MERSCOPE, Atera and Space Ranger
+Visium), the MERSCOPE and Atera overviews, each Visium HD bin size's
+overview, and opening the dataset in `DatasetCache`. The load passes its
+signal to `getSpatialDataset` and to every read it makes before the dataset
+is ready ([Caching](../../architecture.md#caching)).
 
 The first runs left a SpatialData store's table reading after Cancel: its
 image, which opens alongside the table, waited on the table for its units
@@ -989,4 +992,5 @@ Closed by the pass's tasks:
       2026-11-26). After Cancel, a 1M-cell H5AD read on for 35 s, 197 MB,
       alongside the next load. A load's signal now reaches the dataset's
       shared first read and its requests
+      ([#443](https://github.com/cellgeni/explorer/pull/443))
       ([Cancelled Loads Stop Their Reads](#cancelled-loads-stop-their-reads-2026-11-26)).
