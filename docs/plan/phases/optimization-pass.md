@@ -307,10 +307,12 @@ M2, requests:
     (`transcriptZarr.ts:208`).
   - Measure each with `--delay 300` on the `anndata-zarr`, `spatialdata`
     and `visium-hd` fixtures.
-- [ ] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
+- [x] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
       when nucleus outlines are first shown, closed by `dispose()`.
   - It costs a worker and a WebAssembly heap: measure both (S8), and the
     time to both outline types (S4).
+  - Built in [#458](https://github.com/cellgeni/explorer/pull/458):
+    [Nucleus Outlines Read Alongside Cells](#nucleus-outlines-read-alongside-cells-2026-11-26).
 - [ ] **O13. The Zarr decode pool remembers a failed worker.** (S) After
       one fails, OME-Zarr tiles and SpatialData labels decode on the main
       thread without starting new workers, as the codecs already do.
@@ -1017,6 +1019,47 @@ Leads:
   image without a pyramid, six auto-contrast fetches per channel may queue
   ahead of its tiles. Not measured.
 
+## Nucleus Outlines Read Alongside Cells (2026-11-26)
+
+Task O12, [#458](https://github.com/cellgeni/explorer/pull/458). A DuckDB
+client runs one query at a time, so with cell and nucleus outlines both on,
+the nucleus query waited for the cell query. The viewport's `XeniumDataset`
+now starts a second client when nucleus outlines are first read, and
+`dispose()` closes both
+([Nucleus Boundaries](../../modalities/xenium.md#nucleus-boundaries)).
+Nucleus outlines are off by default on Xenium, so most loads never start
+it. A client passed in is still shared.
+
+It is a trade-off: the two queries share the host, so each slows the
+other. Measured with production builds of main (`dbd672c`) and the branch,
+alternating, three runs each, with GPU drawing. Each run opens the dataset
+with `cellBounds=1&nucleusBounds=1` and zooms in until outlines first show.
+Times are the app's Log lines, from the request to the outlines being
+ready.
+
+| Ready                                | Main        | Branch      |
+| ------------------------------------ | ----------- | ----------- |
+| Demo (S9): cell outlines             | 7.3–7.6 s   | 8.6–9.7 s   |
+| Demo: nucleus outlines               | 12.2–12.7 s | 8.8–9.6 s   |
+| 1.4M cells, local: cell outlines     | 2.7–3.6 s   | 3.7–4.3 s   |
+| 1.4M cells, local: nucleus outlines  | 4.1–6.1 s   | 4.1–4.9 s   |
+| 1.4M cells, 300 ms: cell outlines    | 18.1–18.6 s | 22.6–22.7 s |
+| 1.4M cells, 300 ms: nucleus outlines | 31.6–32.2 s | 26.9–27.0 s |
+
+- **The demo** is the Xenium demo on the Sanger bucket, with 66,835 cells
+  at the fourth zoom step. Both outline types are ready in 9.0–9.7 s rather
+  than 12.2–12.7 s, but the cells arrive 1.3–2.5 s later (paired runs).
+- **The 1.4M-cell folder** is S4's, through `scripts/range-server.mjs`,
+  with 57,013 cells at the third zoom step.
+- **Side by side.** On main, the first nucleus request is sent as the last
+  cell request finishes. On the branch, it is sent 0.3–0.6 s after the
+  first cell request, once the new client has started. Both queries read
+  the same bytes as before.
+- **Memory (S8).** After the outlines show, main has 2 DuckDB workers (the
+  viewport's, and the one ROI and annotation queries use) and the branch 3.
+  The new worker's JavaScript heap is 37–48 MB, and its buffers, which
+  include DuckDB's WebAssembly memory, 8–15 MB. Page heaps are the same.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1194,3 +1237,9 @@ Closed by the pass's tasks:
       3.9–4.1 s rather than 6.6–6.8 s at 300 ms a request
       ([#449](https://github.com/cellgeni/explorer/pull/449))
       ([Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26)).
+- [x] Xenium nucleus outlines were drawn about 6 s after the cells, with
+      both outline types on and cold (O12, 2026-11-26, part of the nucleus
+      boundaries item). On the demo, both are ready in 9.0–9.7 s rather
+      than 12.2–12.7 s, and the cells 1.3–2.5 s later than before
+      ([#458](https://github.com/cellgeni/explorer/pull/458))
+      ([Nucleus Outlines Read Alongside Cells](#nucleus-outlines-read-alongside-cells-2026-11-26)).
