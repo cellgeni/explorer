@@ -472,6 +472,10 @@ describe('App', () => {
       await waitFor(() => {
         expect(imageDataset.image).toHaveBeenCalledTimes(1)
       })
+      // The image layout replaces the default one (with cells, transcripts and
+      // Magic Lens) once the image has opened, after image() resolves; only it
+      // has a Segmentation section.
+      await screen.findByTitle('Show Segmentation')
       expect(imageDataset.meta).toHaveBeenCalled()
       expect(loadDatasetOverview).not.toHaveBeenCalled()
       expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
