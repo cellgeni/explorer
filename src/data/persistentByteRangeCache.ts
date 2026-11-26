@@ -9,6 +9,7 @@ export const DEFAULT_PARQUET_FOOTER_CACHE_BYTES = 512 * 1024
 export const PARQUET_FOOTER_CACHE_NAMESPACE = 'parquet-footer'
 export const TIFF_TILE_CACHE_NAMESPACE = 'tiff-tile'
 export const ZARR_ZIP_CACHE_NAMESPACE = 'zarr-zip'
+export const ZARR_RANGE_CACHE_NAMESPACE = 'zarr-range'
 
 // Each range's bytes, its size and last access, and the cache's totals live in
 // separate stores, so a write can check the limits and pick the least recently
