@@ -18,8 +18,7 @@ export interface OneShotWorker<Request, Response> {
 // How a message ends the read: with a value, or with the error the worker
 // reports (the same shape as the error responses the workers send).
 export type WorkerOutcome<Result> =
-  | { readonly value: Result }
-  | { readonly error: string; readonly errorName?: string }
+  { readonly value: Result } | { readonly error: string; readonly errorName?: string }
 
 export interface RunWorkerOnceOptions<Request, Response, Result> {
   readonly signal?: AbortSignal | undefined

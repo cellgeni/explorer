@@ -35,8 +35,7 @@ export type VisiumHdSegmentationIndexReader = (
 
 export interface VisiumHdSegmentationIndexWorkerLike {
   onmessage:
-    | ((event: MessageEvent<VisiumHdSegmentationIndexWorkerResponse>) => void)
-    | null
+    ((event: MessageEvent<VisiumHdSegmentationIndexWorkerResponse>) => void) | null
   onerror: ((event: ErrorEvent) => void) | null
   postMessage(
     message: VisiumHdSegmentationIndexWorkerRequest,

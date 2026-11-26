@@ -240,7 +240,7 @@ export class ScreenshotImageComposer {
     const loader: ImagePyramidLoader = read.channel.loader
     const waitUntil = this.options.waitUntil ?? waitUntilTime
 
-    for (let failures = 0; ; ) {
+    for (let failures = 0; ;) {
       const entry = await read.cache.request(
         loader,
         read.level,

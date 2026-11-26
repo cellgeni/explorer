@@ -601,8 +601,7 @@ interface ViewerSurfaceProps {
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onPointPick?:
-    | ((point: { readonly x: number; readonly y: number }) => void)
-    | undefined
+    ((point: { readonly x: number; readonly y: number }) => void) | undefined
   readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
   readonly onGridCellClick?: (cell: GridCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void

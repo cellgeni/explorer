@@ -61,8 +61,7 @@ export interface PythonConsoleWiring {
   readonly model: PythonConsoleModel | null
   // Set while Pick point waits for a click on the canvas.
   readonly onPointPick:
-    | ((point: { readonly x: number; readonly y: number }) => void)
-    | undefined
+    ((point: { readonly x: number; readonly y: number }) => void) | undefined
   // The layers Python drew, for the canvas and the legend.
   readonly overlay: PythonOverlay
   // The legend's clear button.

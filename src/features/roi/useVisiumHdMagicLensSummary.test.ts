@@ -306,14 +306,12 @@ describe('summarizeVisiumHdMagicLensSelection counts', () => {
         { gene: 'VIM', count: 8 },
       ],
     }))
-    const matrix = vi.fn(
-      async (): Promise<GexResult<string>> => ({
-        geneNames: ['VIM', 'DCN', 'ACTB'],
-        cells: new Map([
-          ['s_008um_1_1', { geneNames: ['VIM', 'DCN', 'ACTB'], counts: [3, 4, 9] }],
-        ]),
-      }),
-    )
+    const matrix = vi.fn(async (): Promise<GexResult<string>> => ({
+      geneNames: ['VIM', 'DCN', 'ACTB'],
+      cells: new Map([
+        ['s_008um_1_1', { geneNames: ['VIM', 'DCN', 'ACTB'], counts: [3, 4, 9] }],
+      ]),
+    }))
 
     const summary = await summarizeVisiumHdMagicLensSelection({
       ...baseOptions,

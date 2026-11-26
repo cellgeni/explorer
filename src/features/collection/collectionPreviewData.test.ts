@@ -123,13 +123,11 @@ describe('openPreviewSource', () => {
       z,
     })
     const dataset = {
-      overview: vi.fn(
-        async (): Promise<CellOverviewPoint[]> => [
-          deep(0, 5, 'a'),
-          deep(10, 25, 'b'),
-          deep(20, 15, 'c'),
-        ],
-      ),
+      overview: vi.fn(async (): Promise<CellOverviewPoint[]> => [
+        deep(0, 5, 'a'),
+        deep(10, 25, 'b'),
+        deep(20, 15, 'c'),
+      ]),
       geneExpression: vi.fn(async () => ({
         genes: ['Aqp4'],
         maxCount: 4,

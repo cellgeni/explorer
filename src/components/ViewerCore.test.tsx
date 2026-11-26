@@ -986,14 +986,12 @@ describe('ViewerCore', () => {
         fillColor: [215, 63, 124, 220],
       }),
     )
-    const expressionElements = cells.map(
-      (cell, index): OverviewCellDatum => ({
-        ...cell,
-        fillColor: [240, 128, 120, 220],
-        expressionCount: index % 3,
-        expressionGenes: ['COL4A1'],
-      }),
-    )
+    const expressionElements = cells.map((cell, index): OverviewCellDatum => ({
+      ...cell,
+      fillColor: [240, 128, 120, 220],
+      expressionCount: index % 3,
+      expressionGenes: ['COL4A1'],
+    }))
     const idsScoring = (count: number) =>
       expressionElements
         .filter((element) => element.expressionCount === count)
@@ -2540,15 +2538,12 @@ describe('ViewerCore', () => {
     })
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     const onViewportChange = vi.fn<(detail: ViewerViewportDetail) => void>()
-    const cells = Array.from(
-      { length: 100 },
-      (_value, index): OverviewCellDatum => ({
-        id: `cell-${index}`,
-        position: [(index % 10) * 1000, -Math.floor(index / 10) * 1000, 0],
-        radiusPixels: 4,
-        fillColor: [215, 63, 124, 220],
-      }),
-    )
+    const cells = Array.from({ length: 100 }, (_value, index): OverviewCellDatum => ({
+      id: `cell-${index}`,
+      position: [(index % 10) * 1000, -Math.floor(index / 10) * 1000, 0],
+      radiusPixels: 4,
+      fillColor: [215, 63, 124, 220],
+    }))
 
     render(
       <ViewerCore

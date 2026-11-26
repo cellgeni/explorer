@@ -118,14 +118,11 @@ describe('ROI gene stats', () => {
   })
 
   it('can use a contiguous head sample for low-latency previews', async () => {
-    const cells = Array.from(
-      { length: 5 },
-      (_value, index): DatasetCell => ({
-        id: intToCellId(1, index + 1),
-        position: { x: micrometers(index), y: micrometers(index) },
-        transcriptCount: 1,
-      }),
-    )
+    const cells = Array.from({ length: 5 }, (_value, index): DatasetCell => ({
+      id: intToCellId(1, index + 1),
+      position: { x: micrometers(index), y: micrometers(index) },
+      transcriptCount: 1,
+    }))
     const matrix: GexResult = {
       geneNames: ['Actb'],
       cells: new Map(
@@ -301,12 +298,10 @@ describe('ROI gene stats', () => {
       }),
     }
     const validateRangeSupport = vi.fn(async () => undefined)
-    const readH5Matrix = vi.fn(
-      async (): Promise<GexResult> => ({
-        geneNames: ['Actb'],
-        cells: new Map([[cellId, { geneNames: ['Actb'], counts: [6] }]]),
-      }),
-    )
+    const readH5Matrix = vi.fn(async (): Promise<GexResult> => ({
+      geneNames: ['Actb'],
+      cells: new Map([[cellId, { geneNames: ['Actb'], counts: [6] }]]),
+    }))
     const onFallback = vi.fn()
 
     const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {

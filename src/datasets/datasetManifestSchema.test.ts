@@ -354,8 +354,7 @@ describe('dataset manifest JSON Schema rules', () => {
       ),
     ).toEqual(sizes)
     const once = definition('visiumHdFiles')?.properties?.bins as
-      | { readonly allOf?: readonly unknown[] }
-      | undefined
+      { readonly allOf?: readonly unknown[] } | undefined
     expect(
       once?.allOf?.map((rule) => at(['contains', 'properties', 'size', 'const'], rule)),
     ).toEqual(sizes)

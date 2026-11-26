@@ -60,11 +60,7 @@ export interface H5DatasetInfo {
 }
 
 export type H5StructureNodeKind =
-  | 'group'
-  | 'dataset'
-  | 'datatype'
-  | 'soft-link'
-  | 'external-link'
+  'group' | 'dataset' | 'datatype' | 'soft-link' | 'external-link'
 
 export interface H5SkippedAttribute {
   readonly name: string

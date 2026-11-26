@@ -269,11 +269,7 @@ export function parseVisiumTissuePositions(text: string): VisiumTissuePositions 
 }
 
 export type VisiumUnitsSource =
-  | 'scalefactors'
-  | 'spot-grid'
-  | 'spot-pitch'
-  | 'spot-diameter'
-  | 'unknown'
+  'scalefactors' | 'spot-grid' | 'spot-pitch' | 'spot-diameter' | 'unknown'
 
 export interface VisiumUnits {
   readonly micrometersPerPixel: number

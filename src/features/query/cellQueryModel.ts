@@ -14,10 +14,7 @@ import type { Annotation } from '../../data/annotation'
 
 // The overview's own columns (23-D2), where the platform fills them.
 export type CellQueryCellField =
-  | 'transcriptCount'
-  | 'cellArea'
-  | 'nucleusCount'
-  | 'segmentationMethod'
+  'transcriptCount' | 'cellArea' | 'nucleusCount' | 'segmentationMethod'
 
 export type CellQueryColumnSource =
   | { readonly kind: 'cell'; readonly field: CellQueryCellField }

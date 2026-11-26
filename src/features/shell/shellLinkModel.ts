@@ -10,12 +10,7 @@ import { TOOL_ORDER } from './shortcuts'
 // the hidden layers. Each is left out at its default.
 
 export type ShellPanelId =
-  | LayerSectionId
-  | 'info'
-  | 'embedding'
-  | 'plots'
-  | 'query'
-  | 'python'
+  LayerSectionId | 'info' | 'embedding' | 'plots' | 'query' | 'python'
 
 const LAYER_SECTION_IDS: readonly LayerSectionId[] = [
   'image',

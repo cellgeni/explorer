@@ -15,12 +15,7 @@ import {
 // and starts another, and the variables are lost (29-D2).
 
 export type PythonSessionStatus =
-  | 'idle'
-  | 'unsupported'
-  | 'loading'
-  | 'ready'
-  | 'running'
-  | 'failed'
+  'idle' | 'unsupported' | 'loading' | 'ready' | 'running' | 'failed'
 
 export type PythonLogKind = 'input' | 'stdout' | 'stderr' | 'result' | 'error' | 'info'
 

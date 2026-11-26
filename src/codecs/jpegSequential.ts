@@ -473,7 +473,7 @@ function decodeBlock(
   coefficients[0] = component.dcPredictor * (quant[0] ?? 0)
   let hasAc = false
 
-  for (let k = 1; k < 64; ) {
+  for (let k = 1; k < 64;) {
     const symbol = reader.decode(ac)
     const run = symbol >> 4
     const bits = symbol & 15

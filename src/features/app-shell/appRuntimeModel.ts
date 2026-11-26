@@ -129,8 +129,7 @@ interface LoadingTaskStateInputs {
   readonly segmentationLoading?: { readonly detail?: string } | undefined
   // A screenshot being drawn: how far it has got (plan 27-D12).
   readonly screenshotLoading?:
-    | { readonly detail: string; readonly progress?: number | undefined }
-    | undefined
+    { readonly detail: string; readonly progress?: number | undefined } | undefined
   // An image's outlines are its imported segmentation's, in the
   // Segmentation section.
   readonly boundariesAreSegmentation?: boolean

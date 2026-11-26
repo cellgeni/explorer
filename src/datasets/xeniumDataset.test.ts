@@ -451,12 +451,10 @@ describe('XeniumDataset', () => {
         cells: new Map(ids.map((id) => [id, { geneNames: ['Gad1'], counts: [1] }])),
       }),
     )
-    const transcriptReader = vi.fn(
-      async (): Promise<GexResult> => ({
-        geneNames: [],
-        cells: new Map(),
-      }),
-    )
+    const transcriptReader = vi.fn(async (): Promise<GexResult> => ({
+      geneNames: [],
+      cells: new Map(),
+    }))
     const overviewReader = vi.fn(async () => [
       {
         cellId,
@@ -523,9 +521,10 @@ describe('XeniumDataset', () => {
         },
       ],
     ])
-    const createDuckDbClient = vi.fn(
-      async (): Promise<DuckDbClientLike> => ({ conn, loadSpatial: async () => {} }),
-    )
+    const createDuckDbClient = vi.fn(async (): Promise<DuckDbClientLike> => ({
+      conn,
+      loadSpatial: async () => {},
+    }))
     const dataset = new XeniumDataset({
       baseUrl: 'https://example.test/xenium/',
       createDuckDbClient,
@@ -583,13 +582,11 @@ describe('XeniumDataset', () => {
   it('closes the DuckDB client it started when disposed, and starts another after', async () => {
     const close = vi.fn(async () => {})
     const conn = new FakeConnection([[], []])
-    const createDuckDbClient = vi.fn(
-      async (): Promise<DuckDbClientLike> => ({
-        conn,
-        loadSpatial: async () => {},
-        close,
-      }),
-    )
+    const createDuckDbClient = vi.fn(async (): Promise<DuckDbClientLike> => ({
+      conn,
+      loadSpatial: async () => {},
+      close,
+    }))
     const dataset = new XeniumDataset({
       baseUrl: 'https://example.test/xenium/',
       createDuckDbClient,
@@ -636,12 +633,10 @@ describe('XeniumDataset', () => {
   it('loads transcript expression directly for known cell ids', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([])
-    const transcriptReader = vi.fn(
-      async (): Promise<GexResult> => ({
-        geneNames: ['Actb'],
-        cells: new Map([[cellId, { geneNames: ['Actb'], counts: [4] }]]),
-      }),
-    )
+    const transcriptReader = vi.fn(async (): Promise<GexResult> => ({
+      geneNames: ['Actb'],
+      cells: new Map([[cellId, { geneNames: ['Actb'], counts: [4] }]]),
+    }))
     const dataset = makeDataset(conn, { transcriptReader })
 
     await expect(dataset.transcriptsForCellIds([cellId], 30)).resolves.toMatchObject({
@@ -1288,9 +1283,10 @@ describe('XeniumDataset', () => {
     const loadSpatial = vi.fn(async () => {
       calls.push('load spatial')
     })
-    const transcriptReader = vi.fn(
-      async (): Promise<GexResult> => ({ geneNames: [], cells: new Map() }),
-    )
+    const transcriptReader = vi.fn(async (): Promise<GexResult> => ({
+      geneNames: [],
+      cells: new Map(),
+    }))
     const dataset = makeDataset(conn, {
       duckDbClient: { conn, loadSpatial },
       transcriptReader,

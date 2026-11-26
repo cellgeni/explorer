@@ -152,8 +152,7 @@ export interface ViewerCoreProps {
   // While set, a click on the map gives its point (µm, y down) instead of
   // picking what is under it, for the Python console's Pick point (29-D11).
   readonly onPointPick?:
-    | ((point: { readonly x: number; readonly y: number }) => void)
-    | undefined
+    ((point: { readonly x: number; readonly y: number }) => void) | undefined
   readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
   readonly onGridCellClick?: (cell: GridCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void

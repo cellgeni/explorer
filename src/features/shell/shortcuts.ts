@@ -46,13 +46,11 @@ export const TOOL_ORDER: readonly ActiveTool[] = [
 ]
 
 export const SHORTCUTS: readonly Shortcut[] = [
-  ...TOOL_ORDER.map(
-    (tool): Shortcut => ({
-      keys: [TOOL_SHORTCUT_KEYS[tool]],
-      action: `${TOOL_LABELS[tool]} tool`,
-      group: 'Tools',
-    }),
-  ),
+  ...TOOL_ORDER.map((tool): Shortcut => ({
+    keys: [TOOL_SHORTCUT_KEYS[tool]],
+    action: `${TOOL_LABELS[tool]} tool`,
+    group: 'Tools',
+  })),
   { keys: ['Esc'], action: 'Back to Pan, or clear the selection', group: 'Tools' },
   // ViewerCore handles these while the canvas has focus (viewerNavigation.ts).
   {

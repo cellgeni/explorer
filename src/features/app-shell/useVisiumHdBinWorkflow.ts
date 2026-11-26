@@ -123,8 +123,7 @@ interface VisiumHdBinWorkflowSetters {
   readonly setGeneExpressionBatch?: Setter<GeneExpressionBatch | null> | undefined
   readonly setGeneExpressionScaleDomain?: Setter<GeneExpressionScaleDomain> | undefined
   readonly setGeneExpressionState?:
-    | Setter<GeneExpressionState<StructuredLoadError>>
-    | undefined
+    Setter<GeneExpressionState<StructuredLoadError>> | undefined
   readonly setGenePanelState: Setter<GenePanelState<StructuredLoadError>>
   readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
   readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
@@ -405,8 +404,7 @@ function resetVisiumHdExpressionState({
   readonly setGeneExpressionBatch?: Setter<GeneExpressionBatch | null> | undefined
   readonly setGeneExpressionScaleDomain?: Setter<GeneExpressionScaleDomain> | undefined
   readonly setGeneExpressionState?:
-    | Setter<GeneExpressionState<StructuredLoadError>>
-    | undefined
+    Setter<GeneExpressionState<StructuredLoadError>> | undefined
 }): void {
   if (geneExpressionAbortRef !== undefined && geneExpressionRequestIdRef !== undefined) {
     invalidateLatestRequest({

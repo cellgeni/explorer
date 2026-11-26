@@ -178,15 +178,12 @@ function outlineColors(
     cellBoundaryOpacity: options.cellBoundaryOpacity,
   })
   const fill = layers.find((layer) => layerId(layer) === 'cell-boundary-fills') as
-    | SolidPolygonLayer
-    | undefined
+    SolidPolygonLayer | undefined
   const path = layers.find((layer) => layerId(layer) === 'cell-boundary-paths') as
-    | PathLayer
-    | undefined
+    PathLayer | undefined
   const colors = (layer: SolidPolygonLayer | PathLayer | undefined, name: string) => {
     const data = layer?.props.data as
-      | { readonly attributes: Record<string, { readonly value: Uint8Array }> }
-      | undefined
+      { readonly attributes: Record<string, { readonly value: Uint8Array }> } | undefined
 
     return Array.from(data?.attributes[name]?.value ?? [])
   }
