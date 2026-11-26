@@ -349,7 +349,7 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
       `panel=python`, a `python` control area in `src/test/controlAreas.ts`
       and `tests/e2e/controls.ts`. Gate as Cell Query is gated (plan 23-D1),
       and on JSPI (D5).
-- [x] **G. Layers on the canvas.** (L) PR #PRNUM. D7, D8, D10. `PythonLayerStore`;
+- [x] **G. Layers on the canvas.** (L) PR #456. D7, D8, D10. `PythonLayerStore`;
       the overlay in `packCellPointColors` and the boundary styler; hidden
       cells left out of drawing, picking and hover; the ring layer;
       single-hue ramps and named colour maps; the legend section; screenshots
@@ -468,7 +468,7 @@ values.
 
 ## M2 Notes (2026-11-26)
 
-M2 (task G) is PR #PRNUM. What changed from the plan while building it:
+M2 (task G) is PR #456. What changed from the plan while building it:
 
 - The store is `PythonLayerStore` in `src/features/python/`; the overlay's
   composition is in `src/rendering/pythonOverlay.ts`, so the canvas reads it
