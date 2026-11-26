@@ -13,3 +13,7 @@ old
 .DS_Store
 .claude
 .venv
+
+# Python (src/python)
+__pycache__/
+.pytest_cache/

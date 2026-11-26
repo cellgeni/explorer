@@ -1,0 +1,235 @@
+{
+  "description": "Shared by the Python fake bridge and src/data/roiSelectionContains.fixture.test.ts: µm, y down. A lasso selects by the even-odd rule after an inclusive bounding-box test; a box selects its inclusive bounds.",
+  "lasso": [
+    [5200.0, 2900.0],
+    [5376.3, 3442.7],
+    [4914.7, 3107.3],
+    [5485.3, 3107.3],
+    [5023.7, 3442.7]
+  ],
+  "box": {
+    "minX": 4600.0,
+    "minY": 3500.0,
+    "maxX": 4800.0,
+    "maxY": 3650.0
+  },
+  "points": [
+    {
+      "x": 5200.0,
+      "y": 3200.0,
+      "lasso": false,
+      "box": false,
+      "note": "centre of the star: outside under even-odd"
+    },
+    {
+      "x": 5210.0,
+      "y": 3190.0,
+      "lasso": false,
+      "box": false,
+      "note": "near the centre: outside"
+    },
+    {
+      "x": 5200.0,
+      "y": 2960.0,
+      "lasso": true,
+      "box": false,
+      "note": "top point of the star"
+    },
+    {
+      "x": 5200.0,
+      "y": 3060.0,
+      "lasso": true,
+      "box": false,
+      "note": "top point, near the centre pentagon"
+    },
+    {
+      "x": 4960.0,
+      "y": 3115.0,
+      "lasso": true,
+      "box": false,
+      "note": "left point"
+    },
+    {
+      "x": 5440.0,
+      "y": 3115.0,
+      "lasso": true,
+      "box": false,
+      "note": "right point"
+    },
+    {
+      "x": 5330.0,
+      "y": 3400.0,
+      "lasso": true,
+      "box": false,
+      "note": "lower-right point"
+    },
+    {
+      "x": 5070.0,
+      "y": 3400.0,
+      "lasso": true,
+      "box": false,
+      "note": "lower-left point"
+    },
+    {
+      "x": 5200.0,
+      "y": 3380.0,
+      "lasso": false,
+      "box": false,
+      "note": "between the two lower points: outside"
+    },
+    {
+      "x": 5100.0,
+      "y": 3000.0,
+      "lasso": false,
+      "box": false,
+      "note": "between the top and left points: outside"
+    },
+    {
+      "x": 5300.0,
+      "y": 3000.0,
+      "lasso": false,
+      "box": false,
+      "note": "between the top and right points: outside"
+    },
+    {
+      "x": 4900.0,
+      "y": 3200.0,
+      "lasso": false,
+      "box": false,
+      "note": "just left of the star's bounding box"
+    },
+    {
+      "x": 4930.0,
+      "y": 3430.0,
+      "lasso": false,
+      "box": false,
+      "note": "inside the bounding box, beyond the star: outside"
+    },
+    {
+      "x": 5200.0,
+      "y": 2899.9,
+      "lasso": false,
+      "box": false,
+      "note": "just above the star's bounding box"
+    },
+    {
+      "x": 5490.0,
+      "y": 3200.0,
+      "lasso": false,
+      "box": false,
+      "note": "just right of the star's bounding box"
+    },
+    {
+      "x": 5200.0,
+      "y": 3450.0,
+      "lasso": false,
+      "box": false,
+      "note": "just below the star's bounding box"
+    },
+    {
+      "x": 5150.0,
+      "y": 3140.0,
+      "lasso": false,
+      "box": false,
+      "note": "inside the centre pentagon: outside"
+    },
+    {
+      "x": 5260.0,
+      "y": 3300.0,
+      "lasso": true,
+      "box": false,
+      "note": "in the lower-right arm, beside the centre pentagon"
+    },
+    {
+      "x": 4700.0,
+      "y": 3575.0,
+      "lasso": false,
+      "box": true,
+      "note": "middle of the box"
+    },
+    {
+      "x": 4600.0,
+      "y": 3575.0,
+      "lasso": false,
+      "box": true,
+      "note": "on the box's left edge"
+    },
+    {
+      "x": 4800.0,
+      "y": 3575.0,
+      "lasso": false,
+      "box": true,
+      "note": "on the box's right edge"
+    },
+    {
+      "x": 4700.0,
+      "y": 3500.0,
+      "lasso": false,
+      "box": true,
+      "note": "on the box's top edge"
+    },
+    {
+      "x": 4700.0,
+      "y": 3650.0,
+      "lasso": false,
+      "box": true,
+      "note": "on the box's bottom edge"
+    },
+    {
+      "x": 4600.0,
+      "y": 3500.0,
+      "lasso": false,
+      "box": true,
+      "note": "the box's top-left corner"
+    },
+    {
+      "x": 4800.0,
+      "y": 3650.0,
+      "lasso": false,
+      "box": true,
+      "note": "the box's bottom-right corner"
+    },
+    {
+      "x": 4599.99,
+      "y": 3575.0,
+      "lasso": false,
+      "box": false,
+      "note": "just left of the box"
+    },
+    {
+      "x": 4800.01,
+      "y": 3575.0,
+      "lasso": false,
+      "box": false,
+      "note": "just right of the box"
+    },
+    {
+      "x": 4700.0,
+      "y": 3499.99,
+      "lasso": false,
+      "box": false,
+      "note": "just above the box"
+    },
+    {
+      "x": 4700.0,
+      "y": 3650.01,
+      "lasso": false,
+      "box": false,
+      "note": "just below the box"
+    },
+    {
+      "x": 4900.0,
+      "y": 3700.0,
+      "lasso": false,
+      "box": false,
+      "note": "beyond the box's corner"
+    },
+    {
+      "x": 0.0,
+      "y": 0.0,
+      "lasso": false,
+      "box": false,
+      "note": "the origin"
+    }
+  ]
+}
