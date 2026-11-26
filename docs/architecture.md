@@ -470,6 +470,18 @@ All screen↔data conversions go through `coords.ts`.
   - Not covered: DuckDB's own reads, the transcript zip read by
     `@zarrita/storage`, the Visium HD nucleus mask read by geotiff's
     `fromUrl`, and whole-file reads such as CSV and matrix files.
+- **TIFF headers and tags.** geotiff reads a TIFF's header, each IFD, and
+  each tag value its IFD's read leaves out with a request of its own.
+  `openRemoteTiff` (`src/tiff/remoteTiff.ts`) reads on from the header's
+  read to 64 KiB, and from a later shorter read to 16 KiB, and answers reads
+  inside those from memory, since tifffile and Bio-Formats write an IFD's tag
+  values right after it. A read
+  sent while another of the file is on its way skips the HTTP cache
+  (`cache: 'no-store'`), as tile reads do, because Chromium lets one request
+  at a time use a URL's cache entry. An OME-TIFF's `.zchunkstore` lookups go
+  out with its header read, its SubIFDs are read with its description, and
+  the other files of a multi-file OME-TIFF are opened as soon as its OME-XML
+  names them (up to the four files kept open).
 - **Zipped run folders.** A zip that holds an Atera run instead of a Zarr
   store is registered as a folder (`registerZipFolder`,
   `src/data/zipFolder.ts`), and `installZipFolderFetch` (called from
