@@ -43,6 +43,19 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run build
 
+  # The console's Python package (src/python), on CPython against a fake bridge.
+  # Pyodide runs Python 3.14, so the tests do too.
+  python:
+    name: Python package tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: '3.14'
+      - run: uv run --project src/python pytest src/python/tests
+
   # Reports coverage and its thresholds without blocking: under V8 coverage
   # the runner is slow enough that timing-sensitive App tests time out
   # (CI #94, #97, #98), while `npm test` above passes.
