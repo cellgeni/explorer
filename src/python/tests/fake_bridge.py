@@ -248,8 +248,8 @@ def demo_bridge(count: int = 5000, seed: int = 1) -> FakeBridge:
         y=y,
         name="Xenium demo",
         numbers={
-            "cell:cellArea": ("Cell area", "Cell", area),
-            "cell:transcriptCount": ("Transcripts", "Cell", transcripts),
+            "cell:area": ("Cell area", "Cell", area),
+            "cell:transcripts": ("Transcripts", "Cell", transcripts),
             "track:score": ("Score", "Metadata", score),
         },
         categories={

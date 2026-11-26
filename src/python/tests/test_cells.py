@@ -29,8 +29,8 @@ def test_positions_and_ids(bridge: FakeBridge) -> None:
 
 
 def test_cell_columns(bridge: FakeBridge) -> None:
-    np.testing.assert_array_equal(cells.area, bridge.numbers["cell:cellArea"][2])
-    np.testing.assert_array_equal(cells.transcripts, bridge.numbers["cell:transcriptCount"][2])
+    np.testing.assert_array_equal(cells.area, bridge.numbers["cell:area"][2])
+    np.testing.assert_array_equal(cells.transcripts, bridge.numbers["cell:transcripts"][2])
     assert cells.area.dtype == np.float64
 
 
@@ -39,7 +39,7 @@ def test_missing_cell_column_is_all_nan(bridge: FakeBridge) -> None:
     assert nuclei.dtype == np.float64
     assert nuclei.shape == (5000,)
     assert np.isnan(nuclei).all()
-    assert bridge.calls["number:cell:nucleusCount"] == 0
+    assert bridge.calls["number:cell:nuclei"] == 0
 
 
 def test_number_column_by_label_and_id(bridge: FakeBridge) -> None:
@@ -86,7 +86,7 @@ def test_arrays_are_cached(bridge: FakeBridge) -> None:
         assert cells.gene_names
     assert bridge.calls["positions"] == 1
     assert bridge.calls["cell_ids"] == 1
-    assert bridge.calls["number:cell:cellArea"] == 1
+    assert bridge.calls["number:cell:area"] == 1
     assert bridge.calls["number:track:score"] == 1
     assert bridge.calls["category:class:type"] == 1
     assert bridge.calls["gene:CD3E:None"] == 1

@@ -8,9 +8,9 @@ import numpy as np
 from ._bridge import DataError, cached, frozen, get_bridge, read_only
 from ._text import NotFound, count_noun, suggest
 
-AREA = "cell:cellArea"
-TRANSCRIPTS = "cell:transcriptCount"
-NUCLEI = "cell:nucleusCount"
+AREA = "cell:area"
+TRANSCRIPTS = "cell:transcripts"
+NUCLEI = "cell:nuclei"
 
 
 def dataset() -> dict[str, Any]:

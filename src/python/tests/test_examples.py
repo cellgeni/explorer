@@ -51,7 +51,7 @@ color(a | b, "orange", name="ROI picks")
 others("hide")
 """
     )
-    area = bridge.numbers["cell:cellArea"][2]
+    area = bridge.numbers["cell:area"][2]
     in_one = bridge.contains("sel-1")
     in_two = bridge.contains("sel-2")
     expected = (in_one & (area > 50)) | (in_two & (bridge.genes["Y"] > 99))
