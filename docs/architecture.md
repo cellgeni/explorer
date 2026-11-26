@@ -749,6 +749,16 @@ collator would take seconds over a million IDs. If the worker fails, or there
 is no `Worker`, the same store runs on the main thread, given the rows and
 columns again. See [plan 23](plan/phases/23-cell-query.md).
 
+What a column's values are, and the reads they wait on, is
+`CellColumnReader` (`src/features/query/cellColumnReader.ts`), outside
+React so another caller reads columns as the window does (plan 29-B). It
+reads a dataset set Clusters has not loaded, or a track whose values the
+dataset left out, the first time a column needs it, keeps it for the
+dataset, and stops the reads in flight when another opens. The window
+syncs it with the columns in use and renders from its snapshot;
+`read(column)` waits for a column's values, sharing the reads in flight
+and reading a failed one again.
+
 Image columns (plan 26) are measured by `CellImageMeasurements`
 (`src/features/query/cellImageMeasurements.ts`), one per Cell Query model.
 A measurement is one channel at one level, z plane, disc radius and
