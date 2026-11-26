@@ -39,6 +39,12 @@ jobs:
       - name: Unit tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm test
+      # The Python console's worker with the real Pyodide (plan 29-D). Its
+      # reads need WebAssembly JSPI, which Node 24 has behind a flag; without
+      # it `npm test` skips this file.
+      - name: Python worker with Pyodide
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node --experimental-wasm-jspi ./node_modules/vitest/vitest.mjs run src/workers/pythonCore.pyodide.test.ts
       - name: Build
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run build

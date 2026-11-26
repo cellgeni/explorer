@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { pyodideRuntime } from './scripts/pyodideRuntime.ts'
 
 export const crossOriginIsolationHeaders = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -83,7 +84,7 @@ export default defineConfig({
     // The decode-only OpenJPEG glue is CommonJS; its .wasm is a separate asset.
     include: ['@cornerstonejs/codec-openjpeg/decodewasmjs'],
   },
-  plugins: [react(), buildCommitMeta()],
+  plugins: [react(), buildCommitMeta(), pyodideRuntime()],
   preview: {
     headers: crossOriginIsolationHeaders,
   },
