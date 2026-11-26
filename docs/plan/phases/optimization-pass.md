@@ -311,10 +311,12 @@ M2, requests:
       when nucleus outlines are first shown, closed by `dispose()`.
   - It costs a worker and a WebAssembly heap: measure both (S8), and the
     time to both outline types (S4).
-- [ ] **O13. The Zarr decode pool remembers a failed worker.** (S) After
+- [x] **O13. The Zarr decode pool remembers a failed worker.** (S) After
       one fails, OME-Zarr tiles and SpatialData labels decode on the main
       thread without starting new workers, as the codecs already do.
   - A test counts worker starts.
+  - Built in [#457](https://github.com/cellgeni/explorer/pull/457):
+    [Failed Zarr Decode Workers Stay Failed](#failed-zarr-decode-workers-stay-failed-2026-11-26).
 - [ ] **O14. OME-Zarr chunks in the IndexedDB cache.** (M) Measure a second
       load first, from a host that sends validators and from one that
       does not; skip if Chromium's HTTP cache already serves it. Chunks
@@ -1016,6 +1018,55 @@ Leads:
 - When the canvas draws another level than the coarsest, as for a large
   image without a pyramid, six auto-contrast fetches per channel may queue
   ahead of its tiles. Not measured.
+
+## Failed Zarr Decode Workers Stay Failed (2026-11-26)
+
+Task O13, [#457](https://github.com/cellgeni/explorer/pull/457). Once a
+Zarr decode worker fails, because its script did not load or it stopped, or
+once one does not start, the pool starts no more until the page is
+reloaded. It refuses later requests at once, without reading a tile's chunk
+for a worker, so OME-Zarr tiles and SpatialData labels decode on the main
+thread, as the codecs already did
+([Decode Workers](../../architecture.md#decode-workers)). The label tracer
+then reads and traces each chunk on the main thread alone. `terminate()`,
+which Cell Query's measurer calls on close, is not a failure.
+
+Measured on a synthetic OME-Zarr image (2 channels of 6,144 × 6,144
+uint16, 512-pixel zlib chunks, 4 levels) with an OME-Zarr label image of
+93,636 cells, opened with `segmentation=` and then zoomed in three steps.
+The worker script answered 404, as for a tab left open over a deploy.
+Production builds of main (`dbd672c`) and the branch, alternating, three
+runs each, with GPU drawing, and the data from `scripts/range-server.mjs`
+at 300 ms a request. Times run from a step's start to its last data
+request.
+
+| Measure                | Main           | Branch         |
+| ---------------------- | -------------- | -------------- |
+| Workers started        | 197–210        | 3              |
+| Data requests          | 404            | 200            |
+| Data                   | 81.6 MB        | 40.5 MB        |
+| Load                   | 8.9–9.1 s      | 4.3–5.1 s      |
+| First zoom step        | 9.2–9.3 s      | 4.6–4.7 s      |
+| Second and third steps | 3.8–3.9 s      | 1.9–2.0 s      |
+| Main-thread long tasks | 1,548–1,783 ms | 1,472–1,495 ms |
+
+- **Each chunk was read twice.** On main, a tile's chunk was read for a
+  worker that then failed, and read again for the main-thread decode. The
+  branch's 200 requests are the 194 that working workers make, plus the
+  first chunks sent to the three workers started before the first failure
+  came back.
+- **Without a delay**, main started 92–104 workers and the branch 3, with
+  the same request counts.
+- **Working workers are unchanged.** With the script served, both builds
+  start 3 workers and make 194 requests, and at 300 ms a request both load
+  in 4.0 s (one run each).
+- **The same picture.** The screenshots match, and both builds draw 4,793
+  outlines.
+
+Lead:
+
+- The TIFF tile decode pool (`src/workers/tileDecodePool.ts`) also starts
+  a new worker for the next request after one fails. Not measured.
 
 ## Closed Open Items
 
