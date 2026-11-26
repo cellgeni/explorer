@@ -320,9 +320,6 @@ M2, requests:
     Parquet Range reads now skip it, in
     [#472](https://github.com/cellgeni/explorer/pull/472):
     [Parquet Range Reads Skip The HTTP Cache](#parquet-range-reads-skip-the-http-cache).
-  - Xenium's extent from `cells.parquet`'s footer statistics, rather than
-    DuckDB's scan of two columns, which outlines wait for (found with the
-    group above).
   - Read AnnData Zarr obs columns, and embeddings, a few at a time.
   - Read a Xenium gene's three arrays together, and read the next
     transcript tiles ahead, within the point limit
@@ -1509,12 +1506,17 @@ request to the host:
 - **Not timed:** the other readers given the same fetch (SpatialData
   shapes, imported vector segmentations, Visium HD's overview and barcode
   mappings). Their fixtures have one row group each.
-- **Found on the way:** after the overview, DuckDB reads `x_centroid` and
-  `y_centroid` of the whole file for the dataset's extent
-  (`readXeniumExtent`), one request at a time. DuckDB's reads of the file
-  took 2.4–4.3 s on the demo and 5.5–19.9 s at 300 ms a request. Cell
-  outlines wait for them, through `dataset.meta()`, though nothing reads a
-  Xenium dataset's extent. It is listed under O11.
+- **Checked on the way:** after the overview, DuckDB reads `cells.parquet`
+  again, one request at a time: 2.4–4.3 s on the demo and 5.5–19.9 s at
+  300 ms a request. That is the ROI warm-up's query for up to 5,000 cells
+  in view; on the demo the Log's "ROI warmup cells ready: 5,000 in 2.9 s"
+  matched a 2.87 s span of those reads. It is not the dataset's extent,
+  which outlines wait for through `dataset.meta()`: DuckDB answers
+  `readXeniumExtent`'s minima and maxima from the footer's statistics
+  (`EXPLAIN ANALYZE` shows no scan). Reading the extent with hyparquet
+  instead was tried, and outlines on a zoomed-in link came no sooner
+  (15.9–17.4 s against 15.0–17.3 s on the demo, 17.0–17.4 s against
+  17.0–17.1 s on the synthetic folder at 300 ms), so it is not adopted.
 
 Test: `src/data/hyparquetCells.test.ts` checks that the overview's reads
 over HTTP send their `HEAD` through the cache and their Range requests
