@@ -315,11 +315,13 @@ M2, requests:
       one fails, OME-Zarr tiles and SpatialData labels decode on the main
       thread without starting new workers, as the codecs already do.
   - A test counts worker starts.
-- [ ] **O14. OME-Zarr chunks in the IndexedDB cache.** (M) Measure a second
+- [x] **O14. OME-Zarr chunks in the IndexedDB cache.** (M) Measure a second
       load first, from a host that sends validators and from one that
       does not; skip if Chromium's HTTP cache already serves it. Chunks
       would be versioned by the store's metadata, and share the cache's
       256 MiB with TIFF tiles.
+  - Built in [#460](https://github.com/cellgeni/explorer/pull/460):
+    [OME-Zarr Shard Ranges Kept Across Loads](#ome-zarr-shard-ranges-kept-across-loads-2026-11-26).
 
 M3, main thread:
 
@@ -1017,6 +1019,62 @@ Leads:
   image without a pyramid, six auto-contrast fetches per channel may queue
   ahead of its tiles. Not measured.
 
+## OME-Zarr Shard Ranges Kept Across Loads (2026-11-26)
+
+Task O14, [#460](https://github.com/cellgeni/explorer/pull/460). A second
+load was measured first, with `scripts/range-server.mjs --validators`
+(new: ETag, Last-Modified and 304s) and without:
+
+- **Chunk files**, read with plain GETs: from a host with validators,
+  Chromium's HTTP cache served every chunk, and the second load made no
+  requests. Without validators everything was read again, but nearly all
+  real hosts send them. Left to the HTTP cache.
+- **Zipped stores** were already in the IndexedDB cache (`zarr-zip`).
+- **Sharded arrays**: their range reads, shard indexes and inner chunks,
+  skip the HTTP cache (`no-store`, since Chromium serialises and can
+  truncate parallel Range requests to one URL), so every load read them
+  again, from either host.
+
+So only shard ranges were added, under `zarr-range`
+([OME-Zarr](../../modalities/image.md#ome-zarr)). They are versioned by
+the `HEAD` zarrita already sends for each shard's size, rather than by the
+store's metadata: its size and validator name the shard's own version, as a
+zip's `HEAD` does, at no extra request. A range of a file the store has not
+sent a `HEAD` for is not cached.
+
+Measured on a synthetic OME-Zarr image (2 channels of 6,144 × 6,144
+uint16, 4 levels, file dates set to 2026-01-01), stored both as Zarr v2
+chunk files and sharded (Zarr v3, 2,048-pixel shards of 512-pixel zstd
+chunks). Production builds of main (`dbd672c`) and the branch, alternating,
+three runs each, with GPU drawing, and the data at 300 ms a request. Each
+run opens the image, zooms in three steps, then opens it again in the same
+browser context, as a new tab would. Times run to the last data request.
+
+| Sharded store, second load | Main        | Branch      |
+| -------------------------- | ----------- | ----------- |
+| With validators: requests  | 114         | 0           |
+| Data                       | 32.4 MB     | 0           |
+| Opening                    | 4.51–4.55 s | 2.96–2.97 s |
+| Zoom steps                 | 2.19–4.10 s | 0.62–0.65 s |
+| Without: requests          | 135         | 21          |
+| Data                       | 32.4 MB     | 0           |
+| Opening                    | 6.98–7.00 s | 5.36–5.41 s |
+| Zoom steps                 | 2.52–4.42 s | 0.93–0.95 s |
+
+- **Without validators**, the 21 requests are the shards' `HEAD`s and the
+  metadata.
+- **First loads are unchanged.** The builds make the same requests, and
+  their times are within 0.1 s per step, slightly slower on the branch,
+  which writes the ranges.
+- **Chunk files** (main, one run each): from the host with validators, the
+  second load's zoom steps settled in 76–96 ms rather than about 2 s;
+  without, all 93 requests (32.1 MB) were made again.
+
+Lead:
+
+- SpatialData and AnnData Zarr stores read sharded arrays the same way,
+  and are not cached. Not measured.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1194,3 +1252,10 @@ Closed by the pass's tasks:
       3.9–4.1 s rather than 6.6–6.8 s at 300 ms a request
       ([#449](https://github.com/cellgeni/explorer/pull/449))
       ([Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26)).
+- [x] OME-Zarr chunks read over HTTP were not kept in the IndexedDB cache
+      (O14, 2026-11-26). Chunk files come from Chromium's HTTP cache on a
+      second load from a host that sends validators. A sharded array's
+      range reads, which skip it, are now kept, and a second load of the
+      test image makes no requests rather than 114
+      ([#460](https://github.com/cellgeni/explorer/pull/460))
+      ([OME-Zarr Shard Ranges Kept Across Loads](#ome-zarr-shard-ranges-kept-across-loads-2026-11-26)).
