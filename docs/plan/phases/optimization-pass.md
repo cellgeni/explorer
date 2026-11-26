@@ -327,7 +327,7 @@ M2, requests:
   - Read a Xenium gene's three arrays together, and read the next
     transcript tiles ahead, within the point limit
     (`transcriptZarr.ts:208`). The gene's arrays are read together in
-    [#NNN](https://github.com/cellgeni/explorer/pull/NNN):
+    [#476](https://github.com/cellgeni/explorer/pull/476):
     [A Xenium Gene's Arrays Read Together](#a-xenium-genes-arrays-read-together).
   - Measure each with `--delay 300` on the `anndata-zarr`, `spatialdata`
     and `visium-hd` fixtures.
@@ -1580,7 +1580,7 @@ the base.
 
 ### A Xenium Gene's Arrays Read Together
 
-[#NNN](https://github.com/cellgeni/explorer/pull/NNN). Colouring by a gene
+[#476](https://github.com/cellgeni/explorer/pull/476). Colouring by a gene
 (`selectedGeneRowsFromCellFeatureMatrixZarr`, `gex.ts`) read the zipped
 matrix's feature-major arrays one after another: each array's metadata,
 then the gene's pointers, its indices and its data, then the cell IDs.
