@@ -182,16 +182,31 @@ function PythonLegend({
   readonly section: PythonLegendSection
   readonly onClear?: ((itemId: string) => void) | undefined
 }) {
+  // A loop can draw hundreds of layers: the first ones, then a count, and
+  // the shown cells always.
+  const layers = section.items.filter((item) => item.swatch.kind !== 'shown')
+  const shown = [
+    ...layers.slice(0, LEGEND_CATEGORY_LIMIT),
+    ...section.items.filter((item) => item.swatch.kind === 'shown'),
+  ]
+  const moreCount = layers.length - Math.min(layers.length, LEGEND_CATEGORY_LIMIT)
+
   return (
     <div className="viewer-legend-section">
       <p className="viewer-legend-title">{section.title}</p>
       <ul className="viewer-legend-python">
-        {section.items.map((item) => (
+        {shown.map((item) => (
           <li key={item.id}>
             <PythonLegendRow item={item} noun={section.noun} onClear={onClear} />
           </li>
         ))}
       </ul>
+      {moreCount <= 0 ? null : (
+        <p className="viewer-legend-detail">
+          +{moreCount.toLocaleString()} more {moreCount === 1 ? 'layer' : 'layers'};
+          clear() removes them all
+        </p>
+      )}
       {section.detail === undefined ? null : (
         <p className="viewer-legend-detail">{section.detail}</p>
       )}

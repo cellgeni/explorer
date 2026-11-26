@@ -1,8 +1,22 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react'
 import { Button } from '../../components/ui'
 import { addPythonHistory, readPythonHistory, stepPythonHistory } from './pythonHistory'
 import { createPythonPrompt, type PythonPrompt } from './pythonPrompt'
 import { formatPickedPoint, type PythonConsoleModel } from './pythonConsoleModel'
+import {
+  clampPromptHeight,
+  MIN_PROMPT_HEIGHT,
+  PROMPT_HEIGHT_STEP,
+  readPromptHeight,
+  writePromptHeight,
+} from './pythonPromptHeight'
 import type { PythonLogEntry } from './pythonSession'
 
 // The Python console (plan 29-D11): the output above, the prompt below, and
@@ -47,6 +61,68 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
   const logRef = useRef<HTMLDivElement>(null)
   const historyRef = useRef<HistoryState | null>(null)
   const [promptReady, setPromptReady] = useState(false)
+  const consoleRef = useRef<HTMLDivElement>(null)
+  // Null: the input grows with its text, up to 40% of the window.
+  const [promptHeight, setPromptHeight] = useState<number | null>(() =>
+    readPromptHeight(),
+  )
+  // The console's height, for the separator's range.
+  const [consoleHeight, setConsoleHeight] = useState(0)
+  useEffect(() => {
+    const element = consoleRef.current
+    if (element === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      setConsoleHeight(Math.round(entry?.contentRect.height ?? 0))
+    })
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+  const drag = useRef<{ readonly startY: number; readonly startHeight: number } | null>(
+    null,
+  )
+
+  const resizePrompt = (height: number | null) => {
+    const available = consoleRef.current?.getBoundingClientRect().height ?? 0
+    const next = height === null ? null : clampPromptHeight(height, available)
+    setPromptHeight(next)
+    writePromptHeight(next)
+  }
+  const currentPromptHeight = () =>
+    promptHost.current?.getBoundingClientRect().height ?? promptHeight ?? 0
+
+  const onSplitterPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    drag.current = { startY: event.clientY, startHeight: currentPromptHeight() }
+  }
+  const onSplitterPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const start = drag.current
+    if (start === null) return
+    // Up makes the input taller.
+    resizePrompt(start.startHeight - (event.clientY - start.startY))
+  }
+  const onSplitterPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    drag.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+  const onSplitterKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step =
+      event.key === 'ArrowUp'
+        ? PROMPT_HEIGHT_STEP
+        : event.key === 'ArrowDown'
+          ? -PROMPT_HEIGHT_STEP
+          : null
+    if (step !== null) {
+      event.preventDefault()
+      resizePrompt(currentPromptHeight() + step)
+    } else if (event.key === 'Home' || event.key === 'Enter') {
+      event.preventDefault()
+      resizePrompt(null)
+    }
+  }
 
   // Python starts the first time the window opens.
   useEffect(() => {
@@ -114,7 +190,7 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
   }
 
   return (
-    <div className="python-console">
+    <div className="python-console" ref={consoleRef}>
       <div
         ref={logRef}
         className="python-log"
@@ -139,7 +215,40 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
           </p>
         ) : null}
       </div>
-      <div className="python-prompt" ref={promptHost} hidden={unavailable} />
+      {/* Drags the input taller or shorter, for functions and loops. */}
+      <div
+        className="python-splitter"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Input height"
+        aria-valuemin={MIN_PROMPT_HEIGHT}
+        aria-valuemax={clampPromptHeight(Number.MAX_SAFE_INTEGER, consoleHeight)}
+        aria-valuenow={promptHeight ?? MIN_PROMPT_HEIGHT}
+        aria-valuetext={
+          promptHeight === null ? 'Fits the input' : `${promptHeight} pixels`
+        }
+        title="Drag, or press Up and Down, to resize the input; double-click or Home to fit it"
+        tabIndex={0}
+        hidden={unavailable}
+        onPointerDown={onSplitterPointerDown}
+        onPointerMove={onSplitterPointerMove}
+        onPointerUp={onSplitterPointerUp}
+        onPointerCancel={onSplitterPointerUp}
+        onDoubleClick={() => {
+          resizePrompt(null)
+        }}
+        onKeyDown={onSplitterKeyDown}
+      />
+      <div
+        className="python-prompt"
+        ref={promptHost}
+        hidden={unavailable}
+        style={
+          promptHeight === null
+            ? undefined
+            : { height: `${promptHeight}px`, maxHeight: 'none' }
+        }
+      />
       <div className="python-actions">
         <Button
           title="Run the input (Enter); Shift+Enter adds a line"

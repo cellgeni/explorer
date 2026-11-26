@@ -96,7 +96,8 @@ export interface PythonRoiInfo {
 export type PythonDrawCommand =
   | {
       readonly op: 'color'
-      readonly name: string
+      // Null for an unnamed call: the app names it (Result, Result 2, …).
+      readonly name: string | null
       readonly rows: Uint32Array
       readonly color: string | null
       readonly cmap: string | null
@@ -108,7 +109,7 @@ export type PythonDrawCommand =
     }
   | {
       readonly op: 'highlight'
-      readonly name: string
+      readonly name: string | null
       readonly rows: Uint32Array
       readonly color: string
     }
@@ -223,7 +224,7 @@ function parseDrawCommand(value: unknown): PythonDrawCommand | null {
   const rows = command.rows
   switch (command.op) {
     case 'color':
-      return typeof command.name === 'string' &&
+      return nullableString(command.name) &&
         rows instanceof Uint32Array &&
         nullableString(command.color) &&
         nullableString(command.cmap) &&
@@ -233,7 +234,7 @@ function parseDrawCommand(value: unknown): PythonDrawCommand | null {
         typeof command.reverse === 'boolean'
         ? {
             op: 'color',
-            name: command.name,
+            name: command.name ?? null,
             rows,
             color: command.color ?? null,
             cmap: command.cmap ?? null,
@@ -244,10 +245,10 @@ function parseDrawCommand(value: unknown): PythonDrawCommand | null {
           }
         : null
     case 'highlight':
-      return typeof command.name === 'string' &&
+      return nullableString(command.name) &&
         rows instanceof Uint32Array &&
         typeof command.color === 'string'
-        ? { op: 'highlight', name: command.name, rows, color: command.color }
+        ? { op: 'highlight', name: command.name ?? null, rows, color: command.color }
         : null
     case 'show':
       return rows == null || rows instanceof Uint32Array

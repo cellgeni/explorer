@@ -6,6 +6,7 @@ input, and completes names. The worker imports it once Python has started.
 """
 
 import sys
+import time
 
 import numpy as np
 from pyodide.code import eval_code_async
@@ -45,13 +46,20 @@ def _object_from_entries(entries):
 
 
 class PyodideBridge:
-    """The app's data, asked of the main thread (the protocol in pythonMessages.ts)."""
+    """The app's data, asked of the main thread (the protocol in pythonMessages.ts).
 
-    def __init__(self, request):
+    Stop is held off while a request is built and answered (an interrupt as
+    the reply resolves can break Pyodide's event loop), then raised as
+    KeyboardInterrupt once the reply is in.
+    """
+
+    def __init__(self, request, interrupts):
         self._request = request
+        self._interrupts = interrupts
 
     def _call(self, kind: str, **arguments):
         message = {"kind": kind, **arguments}
+        self._interrupts.pause()
         try:
             return run_sync(self._request(_js(message)))
         except JsException as error:
@@ -60,6 +68,8 @@ class PyodideBridge:
             if name in _ERRORS:
                 raise _ERRORS[name](text, int(getattr(error.js_error, "bytes", 0) or 0)) from None
             raise DataError(text) from None
+        finally:
+            self._interrupts.resume()
 
     def dataset(self) -> dict:
         info = self._call("dataset")
@@ -131,9 +141,25 @@ class PyodideBridge:
         self._call("draw", command=command)
 
 
-def setup(request) -> None:
+def _interruptible_sleep(sleep):
+    """time.sleep that Stop can end, slept by the worker (Pyodide's swallows Stop)."""
+    original = time.sleep
+
+    def interruptible(seconds: float) -> None:
+        seconds = float(seconds)
+        if seconds < 0:
+            raise ValueError("sleep length must be non-negative")
+        sleep(seconds)
+
+    interruptible.__doc__ = original.__doc__
+    return interruptible
+
+
+def setup(request, interrupts) -> None:
     """Connects ``explorer`` to the app and fills the user's namespace."""
-    explorer.connect(PyodideBridge(request))
+    if interrupts.sleep is not None:
+        time.sleep = _interruptible_sleep(interrupts.sleep)
+    explorer.connect(PyodideBridge(request, interrupts))
     exec(
         "import numpy as np\n"
         "from explorer import cells, rois, view, color, highlight, show, others, clear\n"

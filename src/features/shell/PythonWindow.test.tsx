@@ -26,6 +26,7 @@ import {
   PythonSession,
   type PythonWorkerLike,
 } from '../python/pythonSession'
+import { memoryStorage } from '../../test/memoryStorage'
 import { DEFAULT_SHELL_PANELS, type ShellPanelState } from './shellLinkModel'
 import { ShellLayout } from './ShellLayout'
 
@@ -143,6 +144,7 @@ describe('the Python window (plan 29-D11)', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('opens from the top bar left of Cell Query, and starts Python', async () => {
@@ -214,6 +216,45 @@ describe('the Python window (plan 29-D11)', () => {
     ).toBeVisible()
     expect(within(pythonWindow()).getByRole('button', { name: 'Run' })).toBeDisabled()
     expect(workers).toHaveLength(0)
+  })
+
+  it('resizes the input from the separator, by keys, drag and double-click', async () => {
+    stubWideScreen()
+    vi.stubGlobal('localStorage', memoryStorage())
+    // The console 400 px tall, the input 60 px; jsdom has no layout.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const height = this.classList.contains('python-console')
+        ? 400
+        : this.classList.contains('python-prompt')
+          ? Number.parseFloat(this.style.height) || 60
+          : 0
+      return new DOMRect(0, 0, 500, height)
+    })
+    const { Harness } = setup()
+    render(<Harness initial={{ ...DEFAULT_SHELL_PANELS, pythonOpen: true }} />)
+    await within(pythonWindow()).findByRole('textbox', { name: 'Python input' })
+    const separator = within(pythonWindow()).getByRole('separator', {
+      name: 'Input height',
+    })
+    const prompt = pythonWindow().querySelector<HTMLElement>('.python-prompt')!
+    expect(prompt.style.height).toBe('')
+
+    fireEvent.keyDown(separator, { key: 'ArrowUp' })
+    expect(prompt.style.height).toBe('84px')
+    expect(separator).toHaveAttribute('aria-valuenow', '84')
+    expect(localStorage.getItem('explorer.python.promptHeight')).toBe('84')
+
+    // Dragged up past the room the output keeps: 400 − 120.
+    fireEvent.pointerDown(separator, { button: 0, clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(separator, { clientY: 0, pointerId: 1 })
+    fireEvent.pointerUp(separator, { clientY: 0, pointerId: 1 })
+    expect(prompt.style.height).toBe('280px')
+
+    fireEvent.doubleClick(separator)
+    expect(prompt.style.height).toBe('')
+    expect(separator).toHaveAttribute('aria-valuetext', 'Fits the input')
   })
 
   it('arms Pick Point', async () => {

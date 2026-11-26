@@ -815,11 +815,14 @@ posts a typed request (`src/workers/pythonMessages.ts`) and waits for the
 reply with `run_sync`, which needs WebAssembly JSPI; replies are handled at
 once, other messages in turn. On the main thread `PythonSession` owns the
 worker, the log and Stop (a `KeyboardInterrupt` through a shared buffer
-where the page is cross-origin isolated, else a new worker), and refuses
-requests the protocol lacks. The answers (`pythonData.ts`) come from the
-app's state when Python asks: positions with y down, Cell Query's columns by
-overview row through the shared `CellColumnReader`, genes through
-`GeneRowReader`, and shapes, whose `contains` runs `roiSelectionContains`.
+where the page is cross-origin isolated, else a new worker; Python holds the
+interrupt off while it builds a request and waits on the reply, since one
+landing as a reply resolves can break Pyodide's event loop, and raises it
+once the reply is in), and refuses requests the protocol lacks. The
+answers (`pythonData.ts`) come from the app's state when Python asks:
+positions with y down, Cell Query's columns by overview row through the
+shared `CellColumnReader`, genes through `GeneRowReader`, and shapes, whose
+`contains` runs `roiSelectionContains`.
 Every array is made for the answer and transferred.
 
 Drawing calls send layers by overview row to `PythonLayerStore`

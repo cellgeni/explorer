@@ -91,9 +91,18 @@ it.
 | `others("fade")`, `others("hide")`       | Cells in no colour layer are faded or not drawn                                 |
 | `clear()`, `clear("name")`               | Removes every layer, or one                                                     |
 
-Each takes `name=`; without one the layer is called `Result`, so running an
-input again replaces its result. A colour layer and a highlight can share a
-name; `clear("name")` removes both. Colours are CSS names or hex.
+Each takes `name=`. Without one, the app names the layer: `Result`, then
+`Result 2`, `Result 3` and so on within the same input, so a loop keeps every
+mask it colours. The next input's unnamed calls replace them, so running an
+input again replaces its results; named layers stay until redrawn or
+cleared. A colour layer and a highlight can share a name; `clear("name")`
+removes both. Colours are CSS names or hex.
+
+```python
+clusters = cells["graphclust"]
+for label, hue in zip(clusters.labels[:3], ["red", "orange", "gold"]):
+    color(clusters == label, hue, name=label)   # one layer per class, kept
+```
 
 - **Colour layers draw over the colour mode**, gene expression included. A
   cell takes the colour of the last layer that holds it; a redrawn layer goes
@@ -148,4 +157,7 @@ clusters = cells["graphclust"]
 `Stop` ends the input running. On GitHub Pages it starts a new Python, and
 your variables and imports are lost. Where the page is cross-origin isolated
 (the development and preview servers), it raises `KeyboardInterrupt` and
-keeps them.
+keeps them: within a moment in Python code, `time.sleep` and NumPy calls,
+and as soon as the app answers when Python is waiting on it (a gene read,
+say). Code that does not return to Python for 1.5 s, such as one very long
+NumPy call, gets a new Python instead.

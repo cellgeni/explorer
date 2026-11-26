@@ -419,9 +419,45 @@
 
 .python-console {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
   gap: var(--space-2);
   min-height: 0;
+}
+
+/* Between the output and the input: drag it, or Up and Down, to resize the
+   input. A 12 px bar plus the gaps around it makes a 24 px target. */
+.python-splitter {
+  position: relative;
+  height: 12px;
+  margin: calc(var(--space-2) / -2) 0;
+  border-radius: var(--radius-1);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.python-splitter::before {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 40px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border-strong);
+  content: '';
+  transform: translateX(-50%);
+}
+
+.python-splitter:hover::before {
+  background: var(--text-2);
+}
+
+.python-splitter:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.python-splitter[hidden] {
+  display: none;
 }
 
 .python-log {
@@ -477,6 +513,9 @@
 }
 
 .python-prompt .cm-editor {
+  /* Fills an input dragged taller, so a click anywhere in it types there
+     and its focus ring goes round the whole box. */
+  min-height: 100%;
   background: transparent;
   color: var(--text-1);
 }
