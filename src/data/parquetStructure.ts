@@ -471,17 +471,16 @@ function statBounds(
     return [null, null]
   }
 
-  const unsigned = isUnsignedColumn(element)
-  const decimalScale = integerDecimalScale(element)
+  const decimalScale = unscaledDecimalScale(element)
   // Unsigned columns sort unsigned, which the legacy fields did not.
-  const legacy = NUMERIC_TYPES.has(element.type ?? '') && !unsigned
+  const legacy = NUMERIC_TYPES.has(element.type ?? '') && !isUnsignedColumn(element)
   const shown = (value: Statistics['min']): ParquetStatValue | null => {
     if (value === undefined || value instanceof Uint8Array) return null
     if (typeof value === 'number' && Number.isNaN(value)) return null
     if (typeof value === 'string' && !isTextColumn(element)) return null
 
-    // hyparquet reads INT32 and INT64 statistics as signed, unscaled
-    // integers; rows are converted as below, so the two agree.
+    // hyparquet reads unsigned statistics as unsigned and scales DECIMAL
+    // ones, so they agree with the rows; this scales what it leaves.
     if (
       decimalScale !== undefined &&
       (typeof value === 'number' || typeof value === 'bigint')
@@ -489,8 +488,6 @@ function statBounds(
       return Number(value) * 10 ** -decimalScale
     }
 
-    if (unsigned && typeof value === 'number' && value < 0) return value + 2 ** 32
-    if (unsigned && typeof value === 'bigint' && value < 0n) return value + 2n ** 64n
     return value
   }
 
@@ -508,20 +505,19 @@ function isUnsignedColumn(element: SchemaElement): boolean {
   )
 }
 
-// The scale of a DECIMAL stored as INT32 or INT64, whose statistics are the
-// unscaled integers.
-function integerDecimalScale(element: SchemaElement): number | undefined {
-  if (element.type !== 'INT32' && element.type !== 'INT64') {
+// The scale of a DECIMAL stored as INT32 or INT64 whose statistics hyparquet
+// leaves unscaled: it scales them for the DECIMAL converted type only, so
+// this is a column with just the DECIMAL logical type.
+function unscaledDecimalScale(element: SchemaElement): number | undefined {
+  if (
+    (element.type !== 'INT32' && element.type !== 'INT64') ||
+    element.converted_type === 'DECIMAL'
+  ) {
     return undefined
   }
 
   const logical = element.logical_type
-
-  if (logical?.type === 'DECIMAL') {
-    return logical.scale
-  }
-
-  return element.converted_type === 'DECIMAL' ? (element.scale ?? 0) : undefined
+  return logical?.type === 'DECIMAL' ? logical.scale : undefined
 }
 
 // BYTE_ARRAY columns marked as text; hyparquet decodes every BYTE_ARRAY

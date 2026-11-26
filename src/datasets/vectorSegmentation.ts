@@ -1,6 +1,5 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetRead } from 'hyparquet'
 import type { AsyncBuffer, Compressors, FileMetaData, ParquetParsers } from 'hyparquet'
-import { DEFAULT_PARSERS } from 'hyparquet/src/convert.js'
 import { retryingFetch } from '../data/fetchRetry'
 import { createGeojsonFeatureStream } from '../data/geojsonFeatureStream'
 import { forEachMaybeGzipLine, forEachMaybeGzipText } from '../data/readMaybeGzipText'
@@ -87,8 +86,7 @@ const GEOJSON_ID_PROPERTIES = ['cell_id', 'cellId', 'label', 'label_id', 'id']
 const GEOJSON_FALLBACK_ID_PROPERTIES = ['object_id', 'objectId', 'name']
 
 // Geometry stays WKB; hyparquet's GeoJSON costs an array per vertex.
-const WKB_PARSERS: ParquetParsers = {
-  ...DEFAULT_PARSERS,
+const WKB_PARSERS: Partial<ParquetParsers> = {
   geometryFromBytes: (bytes) => bytes,
   geographyFromBytes: (bytes) => bytes,
 }

@@ -127,8 +127,9 @@ describe('readParquetRows', () => {
 
     expect(rows.rowCount).toBe(3)
     expect(values(rows, 'id')).toEqual([1, 2, 3])
-    expect(values(rows, 'tags')).toEqual([['a', 'b'], [], undefined])
-    expect(values(rows, 'point')).toEqual([{ x: 1.5, y: 2.5 }, { x: 3, y: 4 }, undefined])
+    // An absent optional list or struct reads as null.
+    expect(values(rows, 'tags')).toEqual([['a', 'b'], [], null])
+    expect(values(rows, 'point')).toEqual([{ x: 1.5, y: 2.5 }, { x: 3, y: 4 }, null])
   })
 
   it('stops at the first row group, and keeps binary columns as bytes', async () => {
