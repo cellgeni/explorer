@@ -133,6 +133,39 @@ describe('dataset cache', () => {
     expect(create).toHaveBeenCalledTimes(2)
   })
 
+  it('stops opening a dataset only once every caller has cancelled', async () => {
+    const cache = new DatasetCache<FakeDataset>(2)
+    const url = 'https://example.test/cache-f/a'
+    const signals: AbortSignal[] = []
+    const create = vi.fn(
+      (signal: AbortSignal) =>
+        new Promise<FakeDataset>((resolve, reject) => {
+          signals.push(signal)
+          signal.addEventListener('abort', () => {
+            reject(new DOMException('Open aborted.', 'AbortError'))
+          })
+
+          if (signals.length > 1) {
+            resolve(new FakeDataset())
+          }
+        }),
+    )
+    const first = new AbortController()
+    const second = new AbortController()
+    const firstOpen = cache.get(url, url, create, first.signal)
+    const secondOpen = cache.get(url, url, create, second.signal)
+
+    first.abort()
+    await expect(firstOpen).rejects.toMatchObject({ name: 'AbortError' })
+    expect(signals[0]?.aborted).toBe(false)
+    second.abort()
+    await expect(secondOpen).rejects.toMatchObject({ name: 'AbortError' })
+    expect(signals[0]?.aborted).toBe(true)
+    // The next caller opens it again.
+    await expect(cache.get(url, url, create)).resolves.toBeInstanceOf(FakeDataset)
+    expect(create).toHaveBeenCalledTimes(2)
+  })
+
   it('ends the DuckDB workers of the Xenium datasets switched away from', async () => {
     const cache = new DatasetCache<XeniumDataset>(1)
     const workers = new Map<string, { terminated: boolean }>()

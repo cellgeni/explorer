@@ -27,6 +27,7 @@ import type { RoiSelectionInput } from '../data/roiSelection'
 import { readZipDirectory, readZipEntry, type ZipDirectory } from '../data/zipArchive'
 import { readZipEntryInWorker, type ZipEntryReader } from '../data/zipEntryWorker'
 import { openTiff } from '../tiff/loader'
+import { sharedLoadSlot } from '../utils/sharedLoad'
 import type { AnnDataMemoryTable } from './annDataMemory'
 import { AnnDataH5adDataset, type H5adLoadProgressReporter } from './h5adDataset'
 import {
@@ -175,7 +176,8 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
   } | null = null
   // Filled when the table is read.
   private loaded: MerscopeTable | null = null
-  private overviewPromise: Promise<MerscopeOverview> | null = null
+  // Shared by every caller, and cancelled only once they all have.
+  private readonly overviewLoad = sharedLoadSlot((signal) => this.readOverview(signal))
   private boundaryIndexPromise: Promise<BoundaryIndex> | null = null
   // Elements of the last viewport request by kept shape, reused by the next
   // so cells still in view keep the same objects.
@@ -201,7 +203,7 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
       ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
       memorySource: {
         label: 'MERSCOPE output',
-        load: async (onProgress) => {
+        load: async (onProgress, signal) => {
           const table = await readTable({
             files: {
               cellByGene: options.files.cellByGene,
@@ -209,6 +211,7 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
             },
             ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
             ...(onProgress === undefined ? {} : { onProgress }),
+            ...(signal === undefined ? {} : { signal }),
           })
           this.loaded = table
           return merscopeAnnDataTable(table)
@@ -248,10 +251,12 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
   }
 
   // Reads the tables, then reports what they hold.
-  async summary(): Promise<MerscopeSummary> {
+  async summary(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<MerscopeSummary> {
     const [cellIds, genes] = await Promise.all([
-      this.table.cellIds(),
-      this.table.genePanel(),
+      this.table.cellIds(options),
+      this.table.genePanel(options),
     ])
     const loaded = this.loaded
     const boundaries = this.files.cellBoundaries
@@ -307,8 +312,10 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     return { elements: Array.from(byShape.values()) }
   }
 
-  async overview(): Promise<readonly CellOverviewPoint[]> {
-    return (await this.overviewIndex()).points
+  async overview(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly CellOverviewPoint[]> {
+    return (await this.overviewIndex(options.signal)).points
   }
 
   async matrix(ids: readonly SpatialElementId[]): Promise<GexResult<SpatialElementId>> {
@@ -337,8 +344,10 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {
-    return this.table.annotationGroups()
+  async annotationGroups(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnnotationGroupOption[]> {
+    return this.table.annotationGroups(options)
   }
 
   async annotations(
@@ -347,8 +356,10 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     return this.table.annotations(options)
   }
 
-  async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
-    return this.table.metadataTracks()
+  async metadataTracks(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly ContinuousCellMetadataTrack[]> {
+    return this.table.metadataTracks(options)
   }
 
   async metadataTrackValues(
@@ -367,21 +378,29 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     return this.table.embeddings(options)
   }
 
-  async embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]> {
-    return this.table.embeddingOptions()
+  async embeddingOptions(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnalysisEmbeddingOption[]> {
+    return this.table.embeddingOptions(options)
   }
 
   // Genes only: Blank columns are summed into the `blank_count` track.
-  async genePanel(): Promise<readonly string[]> {
-    return this.table.genePanel()
+  async genePanel(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    return this.table.genePanel(options)
   }
 
-  async geneAliases(): Promise<ReadonlyMap<string, string>> {
-    return this.table.geneAliases()
+  async geneAliases(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ReadonlyMap<string, string>> {
+    return this.table.geneAliases(options)
   }
 
-  async cellIds(): Promise<readonly string[]> {
-    return this.table.cellIds()
+  async cellIds(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    return this.table.cellIds(options)
   }
 
   // The Plots panel reads the table, which is held in memory (plan 22-A).
@@ -563,25 +582,18 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  private overviewIndex(): Promise<MerscopeOverview> {
-    if (this.overviewPromise === null) {
-      this.overviewPromise = this.readOverview().catch((error: unknown) => {
-        this.overviewPromise = null
-        throw error
-      })
-    }
-
-    return this.overviewPromise
+  private overviewIndex(signal?: AbortSignal): Promise<MerscopeOverview> {
+    return this.overviewLoad.wait(signal)
   }
 
   // Each cell's transcript count is the metadata's `transcript_count`, or the
   // sum of its gene counts when the metadata has none (the 2022 release).
-  private async readOverview(): Promise<MerscopeOverview> {
+  private async readOverview(signal: AbortSignal): Promise<MerscopeOverview> {
     const [tablePoints, cellIds, transcriptCount, totalCounts] = await Promise.all([
-      this.table.overview(),
-      this.table.cellIds(),
-      this.table.numericObsColumn(MERSCOPE_TRANSCRIPT_COUNT_COLUMN),
-      this.table.numericObsColumn(MERSCOPE_TOTAL_COUNTS_COLUMN),
+      this.table.overview({ signal }),
+      this.table.cellIds({ signal }),
+      this.table.numericObsColumn(MERSCOPE_TRANSCRIPT_COUNT_COLUMN, { signal }),
+      this.table.numericObsColumn(MERSCOPE_TOTAL_COUNTS_COLUMN, { signal }),
     ])
     const transcriptCounts = transcriptCount ?? totalCounts
     const rowById = new Map<string, number>()

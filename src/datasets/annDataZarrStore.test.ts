@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
   ANNDATA_ZARR_FIXTURE_ORIGIN,
@@ -31,6 +31,55 @@ describe('AnnData Zarr stores', () => {
       'AnnData Zarr store opened from consolidated metadata: 27 groups and arrays',
     )
     expect(progress.at(-1)).toBe('AnnData Zarr store ready: 6 cells, 4 genes')
+  })
+
+  it('stops its first read once every load waiting on it is cancelled', async () => {
+    const host = heldFetcher(annDataZarrFixtureFetcher())
+    const dataset = new AnnDataH5adDataset({
+      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`,
+      zarr: true,
+      fetcher: host.fetch,
+    })
+    const controller = new AbortController()
+    const reads = [
+      dataset.overview({ signal: controller.signal }),
+      dataset.genePanel({ signal: controller.signal }),
+    ]
+
+    await vi.waitFor(() => {
+      expect(host.sent.length).toBeGreaterThan(0)
+    })
+    controller.abort()
+
+    for (const read of reads) {
+      await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+    }
+
+    expect(host.sent.every(({ signal }) => signal?.aborted === true)).toBe(true)
+    const sent = host.sent.length
+    host.release()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(host.sent).toHaveLength(sent)
+    // The next caller reads the store again.
+    await expect(dataset.cellIds()).resolves.toHaveLength(6)
+  })
+
+  it('keeps reading for a caller without a signal when a load is cancelled', async () => {
+    const host = heldFetcher(annDataZarrFixtureFetcher())
+    const dataset = new AnnDataH5adDataset({
+      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`,
+      zarr: true,
+      fetcher: host.fetch,
+    })
+    const controller = new AbortController()
+    const cancelled = dataset.overview({ signal: controller.signal })
+    const kept = dataset.cellIds()
+
+    controller.abort()
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+    host.release()
+    await expect(kept).resolves.toHaveLength(6)
+    expect(host.sent.some(({ signal }) => signal?.aborted === true)).toBe(false)
   })
 
   it('walks a v2 store without consolidated metadata, naming obsm from an S3 listing', async () => {
@@ -277,4 +326,51 @@ function nodePaths(
     .map((node) => node.path)
     .filter((path) => path.startsWith(prefix))
     .sort()
+}
+
+// Holds each request until `release`, after which requests pass straight
+// through. A held request fails when its signal aborts.
+function heldFetcher(fetcher: typeof fetch) {
+  const sent: { readonly url: string; readonly signal: AbortSignal | undefined }[] = []
+  let held: (() => void)[] | null = []
+  const heldFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const signal = init?.signal ?? request.signal
+    sent.push({ url: request.url, signal })
+
+    return new Promise<Response>((resolve, reject) => {
+      const send = () => {
+        if (!signal.aborted) {
+          fetcher(input, init).then(resolve, reject)
+        }
+      }
+
+      signal.addEventListener(
+        'abort',
+        () => {
+          reject(new DOMException('The request was aborted.', 'AbortError'))
+        },
+        { once: true },
+      )
+
+      if (held === null) {
+        send()
+      } else {
+        held.push(send)
+      }
+    })
+  }) as typeof fetch
+
+  return {
+    fetch: heldFetch,
+    sent,
+    release: () => {
+      const waiting = held ?? []
+      held = null
+
+      for (const send of waiting) {
+        send()
+      }
+    },
+  }
 }

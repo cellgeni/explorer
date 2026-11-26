@@ -36,6 +36,7 @@ import {
   type H5adLoadProgressReporter,
 } from './h5adDataset'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
+import { sharedLoadSlot } from '../utils/sharedLoad'
 import {
   describeMissingChunks,
   openSpatialDataStore,
@@ -251,7 +252,9 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private readonly openLabels: SpatialDataLabelsOpener
   private statePromise: Promise<SpatialDataState> | null = null
   private presetUnitsPromise: Promise<SpatialDataUnits | null> | null = null
-  private imagePromise: Promise<ImagePyramidLoader | null> | null = null
+  // Placing the image can read the table for its units, so the image is
+  // opened under the signal of the callers waiting on it (see sharedLoad).
+  private readonly imageLoad = sharedLoadSlot((signal) => this.openImageLoader(signal))
   private boundaryIndexPromise: Promise<BoundaryIndex> | null = null
   private nucleusIndexPromise: Promise<BoundaryIndex> | null = null
   private readonly labelReaders = new Map<string, Promise<SpatialDataLabelsReader>>()
@@ -304,9 +307,14 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         }))
   }
 
-  async summary(): Promise<SpatialDataSummary> {
+  async summary(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<SpatialDataSummary> {
     const { view } = await this.state()
-    const [boundaries, units] = await Promise.all([this.boundarySource(), this.units()])
+    const [boundaries, units] = await Promise.all([
+      this.boundarySource(options),
+      this.units(options),
+    ])
 
     return {
       coordinateSystem: view.coordinateSystem,
@@ -334,7 +342,9 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   }
 
   // Micrometers per coordinate-system unit. Estimating it may read the table.
-  async units(): Promise<SpatialDataUnits> {
+  async units(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<SpatialDataUnits> {
     const preset = await this.presetUnits()
 
     if (preset !== null) {
@@ -345,7 +355,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
     // Reading the table places its rows, which resolves the units.
     if (table !== null) {
-      await table.cellIds()
+      await table.cellIds(options)
     }
 
     return this.resolvedUnits ?? UNKNOWN_SPATIALDATA_UNITS
@@ -461,8 +471,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return Array.from(this.nucleusElements.byCell.values())
   }
 
-  async overview(): Promise<readonly CellOverviewPoint[]> {
-    return (await this.tableOrNull())?.overview() ?? []
+  async overview(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly CellOverviewPoint[]> {
+    return (await this.tableOrNull())?.overview(options) ?? []
   }
 
   async matrix(ids: readonly SpatialElementId[]): Promise<GexResult<SpatialElementId>> {
@@ -520,8 +532,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       : table.geneValues(genes, options)
   }
 
-  async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {
-    return (await this.tableOrNull())?.annotationGroups() ?? []
+  async annotationGroups(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnnotationGroupOption[]> {
+    return (await this.tableOrNull())?.annotationGroups(options) ?? []
   }
 
   async annotations(
@@ -530,8 +544,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return (await this.tableOrNull())?.annotations(options) ?? []
   }
 
-  async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
-    return (await this.tableOrNull())?.metadataTracks() ?? []
+  async metadataTracks(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly ContinuousCellMetadataTrack[]> {
+    return (await this.tableOrNull())?.metadataTracks(options) ?? []
   }
 
   async metadataTrackValues(
@@ -556,16 +572,22 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return (await this.tableOrNull())?.embeddings(options) ?? []
   }
 
-  async embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]> {
-    return (await this.tableOrNull())?.embeddingOptions() ?? []
+  async embeddingOptions(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnalysisEmbeddingOption[]> {
+    return (await this.tableOrNull())?.embeddingOptions(options) ?? []
   }
 
-  async genePanel(): Promise<readonly string[]> {
-    return (await this.tableOrNull())?.genePanel() ?? []
+  async genePanel(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    return (await this.tableOrNull())?.genePanel(options) ?? []
   }
 
-  async geneAliases(): Promise<ReadonlyMap<string, string>> {
-    return (await this.tableOrNull())?.geneAliases() ?? new Map()
+  async geneAliases(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ReadonlyMap<string, string>> {
+    return (await this.tableOrNull())?.geneAliases(options) ?? new Map()
   }
 
   async cells(
@@ -575,8 +597,11 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return (await this.tableOrNull())?.cells(selection, options) ?? []
   }
 
-  async image(): Promise<ImageSource | null> {
-    const loader = await this.imageLoader()
+  // Placing the image can read the table, for its units.
+  async image(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ImageSource | null> {
+    const loader = await this.imageLoader(options.signal)
     const { store, view } = await this.state()
     const image = view.image
 
@@ -584,7 +609,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       return null
     }
 
-    const { micrometersPerUnit } = await this.units()
+    const { micrometersPerUnit } = await this.units(options)
 
     return {
       kind: 'pyramid',
@@ -663,7 +688,8 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
               path: tableInfo.path,
               nodes: catalog.nodes,
               label: `SpatialData table ${tableInfo.name}`,
-              resolveCoordinates: (obs) => this.resolveTableCoordinates(view, obs),
+              resolveCoordinates: (obs, signal) =>
+                this.resolveTableCoordinates(view, obs, signal),
               describeError: (error) =>
                 this.describeTableError(store, tableInfo.path, error),
               onReady: () => this.reportMissingTableChunks(store, tableInfo.path),
@@ -753,6 +779,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private async resolveTableCoordinates(
     view: SpatialDataView,
     obs: AnnDataObsAccess,
+    signal: AbortSignal | undefined,
   ): Promise<readonly DataPoint[] | null> {
     const table = view.table
 
@@ -789,7 +816,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
               return null
             }),
         view.regionLabels.length > 0 ? obs.readObsmPoints() : Promise.resolve(null),
-        this.loadRegionShapes(view.regionShapes),
+        this.loadRegionShapes(view.regionShapes, signal),
       ])
     const labelValues =
       view.regionLabels.length > 0
@@ -1039,10 +1066,11 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   private async loadRegionShapes(
     regions: readonly SpatialDataPlacedElement[],
+    signal: AbortSignal | undefined,
   ): Promise<ReadonlyMap<string, RegionShapes>> {
     const entries = await Promise.all(
       regions.map(async (entry) => {
-        const shapes = await this.readElementShapes(entry, entry.affine)
+        const shapes = await this.readElementShapes(entry, entry.affine, signal)
         const regionShapes: RegionShapes = {
           shapes,
           lookup: new ShapeLookup(shapes.ids),
@@ -1058,6 +1086,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private async readElementShapes(
     entry: SpatialDataPlacedElement,
     affine: Affine2D,
+    signal?: AbortSignal,
   ): Promise<SpatialDataShapes> {
     this.onProgress?.(`SpatialData shapes ${entry.element.name} loading`)
     const path = `${entry.element.path}/shapes.parquet`
@@ -1075,6 +1104,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       ...(file === undefined ? {} : { file }),
       affine,
       ...(this.storeFetcher === undefined ? {} : { fetcher: this.storeFetcher }),
+      ...(signal === undefined ? {} : { signal }),
     })
     this.onProgress?.(
       `SpatialData shapes ${entry.element.name} ready: ${shapes.ids.length.toLocaleString()} geometries`,
@@ -1171,7 +1201,9 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     })
   }
 
-  private async boundarySource(): Promise<BoundarySource | null> {
+  private async boundarySource(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<BoundarySource | null> {
     const { view, table } = await this.state()
 
     if (
@@ -1182,7 +1214,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     }
 
     // Placing the table's rows records which labels and shapes they use.
-    await table.cellIds()
+    await table.cellIds(options)
 
     if (view.regionShapes.length === 0) {
       const entries = view.regionLabels.filter(
@@ -1394,33 +1426,26 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         )
   }
 
-  private imageLoader(): Promise<ImagePyramidLoader | null> {
-    if (this.imagePromise === null) {
-      this.imagePromise = this.state()
-        .then(({ store, view }) => {
-          if (view.image === undefined) {
-            return null
-          }
+  private imageLoader(signal?: AbortSignal): Promise<ImagePyramidLoader | null> {
+    return this.imageLoad.wait(signal)
+  }
 
-          const image = view.image
+  private async openImageLoader(signal: AbortSignal): Promise<ImagePyramidLoader | null> {
+    const { store, view } = await this.state()
+    const image = view.image
 
-          return this.units().then(({ micrometersPerUnit }) =>
-            this.openImage({
-              url: this.elementUrl(image.element.path),
-              location: zarr.root(store).resolve(image.element.path),
-              transform: planarTransformFromAffine(
-                scaleAffine(image.affine, micrometersPerUnit),
-              ),
-            }),
-          )
-        })
-        .catch((error: unknown) => {
-          this.imagePromise = null
-          throw error
-        })
+    if (image === undefined) {
+      return null
     }
 
-    return this.imagePromise
+    const { micrometersPerUnit } = await this.units({ signal })
+
+    return this.openImage({
+      url: this.elementUrl(image.element.path),
+      location: zarr.root(store).resolve(image.element.path),
+      transform: planarTransformFromAffine(scaleAffine(image.affine, micrometersPerUnit)),
+      signal,
+    })
   }
 
   private elementUrl(path: string): string {

@@ -85,6 +85,7 @@ export interface VisiumHdOverviewDataset {
   ): Promise<readonly string[]>
   readBinnedOverview(
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
+    options?: { readonly signal?: AbortSignal },
   ): Promise<VisiumHdBinnedOverview>
 }
 

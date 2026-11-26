@@ -3,6 +3,7 @@ import * as zarr from 'zarrita'
 import {
   consolidatedZarrStore,
   createZarrFetchStore,
+  storeWithSignal,
   ZarrChunkUnavailableError,
   zarrChunkKeys,
 } from './zarrStores'
@@ -228,3 +229,38 @@ function v2Array(dtype: string, shape: readonly number[], chunks: readonly numbe
     filters: null,
   }
 }
+
+describe('storeWithSignal', () => {
+  it("reads every key with the signal, and the read's own", async () => {
+    const signals: (AbortSignal | undefined)[] = []
+    const store: zarr.AsyncReadable = {
+      get: (_key, options) => {
+        signals.push(options?.signal)
+        return Promise.resolve(new Uint8Array([1]))
+      },
+      getRange: (_key, _range, options) => {
+        signals.push(options?.signal)
+        return Promise.resolve(new Uint8Array([2]))
+      },
+    }
+    const read = new AbortController()
+    const own = new AbortController()
+    const withSignal = storeWithSignal(store, read.signal)
+
+    await expect(withSignal.get('/a')).resolves.toEqual(new Uint8Array([1]))
+    await expect(
+      withSignal.getRange?.('/b', { offset: 0, length: 1 }, { signal: own.signal }),
+    ).resolves.toEqual(new Uint8Array([2]))
+    expect(signals[0]).toBe(read.signal)
+    own.abort()
+    expect(signals.map((signal) => signal?.aborted)).toEqual([false, true])
+    read.abort()
+    expect(signals.map((signal) => signal?.aborted)).toEqual([true, true])
+  })
+
+  it('leaves out getRange when the store has none', () => {
+    const store: zarr.AsyncReadable = { get: () => Promise.resolve(undefined) }
+
+    expect(storeWithSignal(store, new AbortController().signal).getRange).toBeUndefined()
+  })
+})

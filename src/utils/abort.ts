@@ -21,3 +21,20 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
 }
+
+// `fetcher`, sending every request with `signal` too, so cancelling a read
+// that makes many requests, such as a dataset's first read, ends them all. A
+// request's own signal still applies.
+export function fetcherWithSignal(
+  fetcher: typeof fetch,
+  signal: AbortSignal,
+): typeof fetch {
+  return (input, init) => {
+    const own = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+
+    return fetcher(input, {
+      ...init,
+      signal: own === undefined || own === null ? signal : AbortSignal.any([own, signal]),
+    })
+  }
+}

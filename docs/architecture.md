@@ -189,7 +189,9 @@ the load.
 | `image`       | `ImageOnlyDataset` (`src/datasets/imageOnlyDataset.ts`)                           | [Image sources](./modalities/image.md)     |
 
 `cachedSpatialDataset` memoizes the instance per URL and drops failed
-instances so a retry starts fresh. Instances are kept in a `DatasetCache`
+instances so a retry starts fresh. Opening one is a shared load
+([Caching](#caching)): it stops once every caller waiting on it has
+cancelled. Instances are kept in a `DatasetCache`
 (`src/datasets/datasetCache.ts`): the viewer retains the dataset it shows
 and a collection preview the one it is reading (`retainDataset`), and of the
 others the two used last are kept. Older ones are disposed (`dispose()`),
@@ -584,6 +586,24 @@ aborted only when every caller waiting on it has aborted, and each caller
 stops waiting at its own signal. Before 15.5-E the first caller's signal ran
 the load, so its cancel failed the others with an `AbortError` they took for
 their own, and their cards stayed on "Loading".
+
+A dataset's first read is one too: an AnnData table's arrays, the MERSCOPE
+and Atera overviews built from their tables, and each Visium HD bin size's
+overview (`sharedLoadSlot` keeps one load). A dataset load passes its signal
+to `getSpatialDataset` and to each read it makes before the dataset is
+ready, so Cancel, or a load that replaces it, stops them unless another part
+of the viewer still waits. The signal reaches the requests:
+
+- an H5AD's H5 file worker is ended, since its reads block;
+- an AnnData Zarr store or an H5AD reference sends each request with it
+  (`fetcherWithSignal`);
+- a table whose store other reads share, as in SpatialData, Atera and
+  Icechunk, reads each key with it (`storeWithSignal`).
+
+A finished read's signal is never aborted, so the stores and workers it
+opened serve later reads unchanged. Xenium's readers had the load's signal
+already, but not the zip directories of its matrix and analysis stores,
+which zarrita's `ZipFileStore` reads without one.
 
 ## Workers
 

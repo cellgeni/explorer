@@ -340,12 +340,6 @@ dev tool advisories are closed; see
 
 Correctness and robustness:
 
-- [ ] Cancelling a load, or opening another dataset, does not stop the old
-      dataset's reads. `getSpatialDataset` (`cachedSpatialDataset` in
-      `datasetFactory.ts`) takes no signal, and `useDatasetLifecycle.ts`
-      calls it, `overview()` and `readBinnedOverview()` without the load's
-      signal. A whole-file H5AD download, up to 300 MiB, carries on after
-      "Cancelled loading", competes with the next load, and stays cached.
 - [ ] Optional reads treat any failure as "absent", although a zip's central
       directory lists every entry, so S3's 403 for missing keys does not
       apply. A failed read of a transcript zip's density metadata leaves

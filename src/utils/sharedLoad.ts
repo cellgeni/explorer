@@ -80,3 +80,30 @@ export function waitForSharedLoad<Key, T>(
 
   return entry.wait(signal)
 }
+
+export interface SharedLoadSlot<T> {
+  // The load kept, settled or not; null before the first caller, after
+  // `clear`, and once the load failed.
+  readonly promise: Promise<T> | null
+  wait(signal: AbortSignal | undefined): Promise<T>
+  // Forgets the load kept, so the next caller starts another.
+  clear(): void
+}
+
+// One load kept for later callers, as `waitForSharedLoad` keeps one per key:
+// a dataset's first read, which every part of the viewer waits on.
+export function sharedLoadSlot<T>(
+  load: (signal: AbortSignal) => Promise<T>,
+): SharedLoadSlot<T> {
+  const cache = new Map<'load', SharedLoad<T>>()
+
+  return {
+    get promise() {
+      return cache.get('load')?.promise ?? null
+    },
+    wait: (signal) => waitForSharedLoad(cache, 'load', load, signal),
+    clear: () => {
+      cache.clear()
+    },
+  }
+}

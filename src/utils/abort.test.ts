@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { abortError, isAbortError, throwIfAborted } from './abort'
+import { abortError, fetcherWithSignal, isAbortError, throwIfAborted } from './abort'
 
 function aborted(reason?: unknown): AbortSignal {
   const controller = new AbortController()
@@ -66,5 +66,30 @@ describe('isAbortError', () => {
     expect(isAbortError('AbortError')).toBe(false)
     expect(isAbortError(null)).toBe(false)
     expect(isAbortError(undefined)).toBe(false)
+  })
+})
+
+describe('fetcherWithSignal', () => {
+  it("sends each request with the signal, and the request's own", () => {
+    const signals: (AbortSignal | null | undefined)[] = []
+    const fetcher = ((_input: RequestInfo | URL, init?: RequestInit) => {
+      signals.push(init?.signal)
+      return Promise.resolve(new Response())
+    }) as typeof fetch
+    const read = new AbortController()
+    const own = new AbortController()
+    const request = new AbortController()
+    const withSignal = fetcherWithSignal(fetcher, read.signal)
+
+    void withSignal('https://example.test/a')
+    void withSignal('https://example.test/b', { signal: own.signal })
+    void withSignal(new Request('https://example.test/c', { signal: request.signal }))
+
+    expect(signals[0]).toBe(read.signal)
+    own.abort()
+    request.abort()
+    expect(signals.map((signal) => signal?.aborted)).toEqual([false, true, true])
+    read.abort()
+    expect(signals.map((signal) => signal?.aborted)).toEqual([true, true, true])
   })
 })

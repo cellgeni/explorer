@@ -273,12 +273,14 @@ M2, requests:
   - Measure with range-server's stall option.
   - Built in [#441](https://github.com/cellgeni/explorer/pull/441):
     [Range Read Timeouts And Retries](#range-read-timeouts-and-retries-2026-11-26).
-- [ ] **O8. Cancelling a load stops its reads.** (M–L) A signal through
+- [x] **O8. Cancelling a load stops its reads.** (M–L) A signal through
       `cachedSpatialDataset`, `overview()`, `readBinnedOverview()`,
       `summary()` and `visiumSummary()`. A shared read is aborted only
       when all its callers have aborted, as `utils/sharedLoad.ts` does.
   - Measure with `--delay 300`: open one fixture, switch to another, and
     count the first one's requests after the switch.
+  - Built in [#443](https://github.com/cellgeni/explorer/pull/443):
+    [Cancelled Loads Stop Their Reads](#cancelled-loads-stop-their-reads-2026-11-26).
 - [ ] **O9. Fewer rounds when a TIFF opens.** (S–M) Read the decode tags
       together, the tile offsets with their byte counts, and the SubIFDs
       with the description; open the other channel files as soon as the
@@ -833,6 +835,59 @@ off) or the gene search (the H5AD) shows, or 20 s after an error does.
   requests on both). The wrapper itself took 0–5 ms of main-thread time on
   S2 and S6, whose large reads run in workers, and 15–20 ms on S7.
 
+## Cancelled Loads Stop Their Reads (2026-11-26)
+
+Task O8, [#443](https://github.com/cellgeni/explorer/pull/443). A dataset's
+first read is a `sharedLoad`, aborted once every caller waiting on it has
+cancelled: an AnnData table's arrays (H5AD, AnnData Zarr, Icechunk,
+references, and the tables of SpatialData, MERSCOPE, Atera and Space Ranger
+Visium), the MERSCOPE and Atera overviews, each Visium HD bin size's
+overview, and opening the dataset in `DatasetCache`. The load passes its
+signal to `getSpatialDataset` and to every read it makes before the dataset
+is ready ([Caching](../../architecture.md#caching)).
+
+The first runs left a SpatialData store's table reading after Cancel: its
+image, which opens alongside the table, waited on the table for its units
+without a signal, and kept the shared read going. The image is opened under
+the signal of the callers waiting on it too.
+
+Measured with `scripts/range-server.mjs --delay 300`: production builds of
+main (`0922724`) and the branch, alternating, three runs each. Each run
+opens a dataset from a link, presses Cancel once it has sent the requests
+shown, and opens the fixture `anndata-zarr/tiny.v3.zarr` from another
+server; the counts are the first dataset's requests sent after Cancel. The
+Load button is disabled during a load, and a link change reloads the page,
+so Cancel is how a load is stopped in place; a collection section or a view
+change replaces a pending load the same way.
+
+| Dataset (Cancel after)      | Main: requests after Cancel                 | Branch                         |
+| --------------------------- | ------------------------------------------- | ------------------------------ |
+| H5AD, 1M cells (5 requests) | 102, 197 MB, the last 34.6–34.8 s after     | None that reached the host (1) |
+| AnnData Zarr fixture (8)    | 8, the obs columns, the last 2.5 s after    | None                           |
+| SpatialData fixture (20)    | 7, table and shapes, the last 1.2 s after   | None                           |
+| MERSCOPE fixture (6)        | None                                        | None                           |
+| Xenium, 1.4M cells (20)     | 20, 27 kB: two zip directories, 3.7 s after | The same (2)                   |
+
+1. The H5 file worker is ended on Cancel. Within 0.1 s of it, 8 requests
+   for the two ranges it was reading appear and are cut at once, with no
+   bytes.
+2. Xenium's readers took the load's signal already. These are the zip
+   directories of `cell_feature_matrix.zarr.zip` and `analysis.zarr.zip`,
+   which zarrita's `ZipFileStore` reads without a signal.
+
+The second dataset was ready 0.36–0.62 s after Cancel on both builds, as it
+is served by another host. Loads that are not cancelled take the same time
+and requests on both builds within run-to-run noise, three runs each: the
+H5AD at full speed (2.8–3.2 s, 107 requests), and at 300 ms a request the
+SpatialData (5.7 s, 59), AnnData Zarr (4.4 s, 16) and MERSCOPE (2.3 s, 17)
+fixtures.
+
+Not covered: the small first reads kept for reopening (a SpatialData store's
+metadata, Atera's zip directory, gene list and cell details, an attached
+image's header), Visium HD bin-size and LOD reads and the image-only
+opening, which have no controller, and the reads of a Space Ranger MEX
+matrix in its worker.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -993,3 +1048,9 @@ Closed by the pass's tasks:
       Not covered: DuckDB's own reads, the transcript zip that
       `@zarrita/storage` reads, the Visium HD nucleus mask read by geotiff's
       `fromUrl`, and whole-file reads such as CSV and matrix files.
+- [x] Cancelling a load did not stop the old dataset's reads (O8,
+      2026-11-26). After Cancel, a 1M-cell H5AD read on for 35 s, 197 MB,
+      alongside the next load. A load's signal now reaches the dataset's
+      shared first read and its requests
+      ([#443](https://github.com/cellgeni/explorer/pull/443))
+      ([Cancelled Loads Stop Their Reads](#cancelled-loads-stop-their-reads-2026-11-26)).

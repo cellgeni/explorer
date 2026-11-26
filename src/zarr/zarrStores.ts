@@ -24,6 +24,31 @@ export class ZarrChunkUnavailableError extends Error {
   }
 }
 
+// `store`, reading every key with `signal` too, so cancelling a read of many
+// arrays, such as a table's first read, stops them all. A read's own signal
+// still applies. Once the read has finished, a signal it never aborted leaves
+// the store's later reads as they were.
+export function storeWithSignal(
+  store: zarr.Readable,
+  signal: AbortSignal,
+): zarr.AsyncReadable {
+  const withSignal = (options: zarr.GetOptions | undefined): zarr.GetOptions => ({
+    ...options,
+    signal:
+      options?.signal === undefined ? signal : AbortSignal.any([options.signal, signal]),
+  })
+
+  return {
+    get: async (key, options) => store.get(key, withSignal(options)),
+    ...(store.getRange === undefined
+      ? {}
+      : {
+          getRange: async (key, range, options) =>
+            store.getRange?.(key, range, withSignal(options)),
+        }),
+  }
+}
+
 // A request's key in the store whose root path is `rootPath`.
 function storeKey(requestUrl: string, rootPath: string): string {
   const pathname = new URL(requestUrl).pathname

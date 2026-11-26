@@ -239,7 +239,8 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
 
   readBinnedOverview(
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<VisiumHdBinnedOverview> {
-    return this.readers.readBinnedOverview(binSizeMicrometers)
+    return this.readers.readBinnedOverview(binSizeMicrometers, options)
   }
 }
