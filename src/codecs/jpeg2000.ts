@@ -159,6 +159,9 @@ function ensureDecoderModule(): Promise<OpenJpegModule> {
         // the bundler's URL is a dev-server path there.
         locateFile: (path, scriptDirectory) =>
           runsUnderNode() ? scriptDirectory + path : wasmUrl,
+        // Since 1.3.6 the decoder prints OpenJPEG's info messages, several
+        // per tile; its errors still go to printErr.
+        print: () => {},
       }),
     )
     .catch((cause: unknown) => {

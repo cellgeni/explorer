@@ -22,6 +22,8 @@ declare module '@cornerstonejs/codec-openjpeg/decodewasmjs' {
     // Emscripten's hook for finding the .wasm; scriptDirectory is the glue's
     // own directory (a file path under Node).
     readonly locateFile?: (path: string, scriptDirectory: string) => string
+    // Emscripten's stdout, console.log by default.
+    readonly print?: (text: string) => void
   }
 
   export default function createOpenJpegModule(
