@@ -325,25 +325,25 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
   - `roiSelectionContains` over every cell for a 200-vertex lasso: time;
   - packing an overlay into `packCellPointColors`: the time to the redrawn
     canvas.
-- [ ] **B. `CellColumnReader`.** (M) Move Cell Query's column reads out of
+- [x] **B. `CellColumnReader`.** (M) PR #450. Move Cell Query's column reads out of
       `useCellQueryModel` into a module, with no change in behaviour. Cell
       Query's tests pass unchanged. A refactor, so its own PR.
-- [ ] **C. Gene values by overview row.** (M) Join `GeneValuesSource` reads
+- [x] **C. Gene values by overview row.** (M) PR #451. Join `GeneValuesSource` reads
       to overview rows once per dataset, Xenium's integer pairs included,
       with the D6 budget. H5AD's `geneValues` takes an optional layer
       (`layers/<name>`, `raw/X`), with its estimate; Plots keeps `X`.
       Tests: the join against a plain lookup (fast-check), missing cells,
       the budget's three outcomes, a layer read on the H5AD fixture.
-- [ ] **D. Python worker and session.** (M) D1, D2, D4, D5. The worker, the
+- [x] **D. Python worker and session.** (M) PR #453. D1, D2, D4, D5. The worker, the
       protocol with types on both ends, `TerminalSession`, `run_sync`
       reads, self-hosted Pyodide copied by the build, progress, `Stop`,
       restart, the JSPI check. Unit tests with a fake worker; one Node test
       that loads the real Pyodide.
-- [ ] **E. The `explorer` module.** (M) `cells`, `Classes`, `rois` with
+- [x] **E. The `explorer` module.** (M) PR #452. `cells`, `Classes`, `rois` with
       `polygon` and `contains`, `view`, `cells.selected`, the drawing calls'
       argument checks, and reprs. pytest on CPython against a fake bridge;
       `contains` checked against `roiSelectionContains` on shared fixtures.
-- [ ] **F. Python window.** (L) D11, D12. `PythonWindow` on
+- [x] **F. Python window.** (L) PR #454. D11, D12. `PythonWindow` on
       `FloatingWindow`, the prompt (CodeMirror 6 with Python, loaded with
       the window), the log, history, completion, `Pick point`,
       `panel=python`, a `python` control area in `src/test/controlAreas.ts`
@@ -439,6 +439,32 @@ What changed in the plan:
   packed alpha of 0 does not hide a cell.
 - NumPy's wheel is not in the npm package. Task D's build step fetches it
   by the lock file's name and checks the SHA-256, or the repo keeps it.
+
+## M1 Notes (2026-11-26)
+
+M1 was built as a stack of PRs, each on the one before: #450 (B), #451 (C),
+#452 (E), #453 (D), #454 (F). What changed from the plan while building it:
+
+- The window is offered wherever Cell Query is. Without JSPI it opens and
+  says the console needs Chrome or Edge, rather than leaving the toggle out,
+  so the reason is visible.
+- Until G, `color`, `highlight`, `show` and `others` check their arguments
+  and then raise a `DataError` that says drawing comes next.
+- Cell Query's `CellColumnReader` is made once in `App` and shared with the
+  console, so a set or track is read once for both.
+- H5AD layers are read through a new HDF5 worker `tree` request, loaded only
+  when asked for; in a file read by range, layers are read in slices so the
+  estimate downloads nothing.
+- The worker asks Python whether an input is complete before running it and
+  posts `started`, so the console logs the input above its output and leaves
+  an incomplete one in the prompt.
+- The real-Pyodide test runs in Node, which has JSPI from 25; CI's Node 24
+  runs it with `--experimental-wasm-jspi`.
+
+On the Xenium demo (1,414,155 cells, production build, Chromium) the prompt
+was ready about 1.2 s after the window opened with Pyodide in the browser's
+cache, and the columns, a class set and a gene read gave the expected
+values.
 
 ## Order And Size
 
