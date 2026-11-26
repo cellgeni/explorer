@@ -27,6 +27,25 @@ describe('shareableState', () => {
     ).not.toHaveProperty('segmentationFormat')
   })
 
+  it("round-trips the dataset's chosen reader, only with the dataset", () => {
+    const hash = formatShareableState({
+      datasetUrl: 'https://example.test/records/7/content',
+      datasetReader: 'h5ad',
+    })
+
+    expect(hash).toContain('&reader=h5ad')
+    expect(parseShareableState(hash)).toMatchObject({
+      datasetUrl: 'https://example.test/records/7/content',
+      datasetReader: 'h5ad',
+    })
+    expect(parseShareableState('?dataset=x&reader=image')).toMatchObject({
+      datasetReader: 'image',
+    })
+    expect(
+      parseShareableState(formatShareableState({ datasetReader: 'h5ad' })),
+    ).not.toHaveProperty('datasetReader')
+  })
+
   it('round-trips dataset, genes, view, ROI, and controls', () => {
     const hash = formatShareableState({
       datasetUrl: 'https://example.test/output',

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { DatasetReader } from '../datasets/datasetReader'
 
 // The Xenium demo, which the start screen offers when the examples cannot be
 // read (plan 15.3-A). The address box starts empty.
@@ -14,13 +15,21 @@ export interface ViewerViewState {
 
 export interface ViewerStoreState {
   readonly datasetUrl: string
+  // The address field's reader menu: the reader Load Dataset opens the
+  // address with, or null to detect it.
+  readonly datasetReader: DatasetReader | null
   readonly viewState: ViewerViewState
   setDatasetUrl(datasetUrl: string): void
+  setDatasetReader(datasetReader: DatasetReader | null): void
   setViewState(viewState: ViewerViewState): void
 }
 
-export const initialViewerState: Pick<ViewerStoreState, 'datasetUrl' | 'viewState'> = {
+export const initialViewerState: Pick<
+  ViewerStoreState,
+  'datasetUrl' | 'datasetReader' | 'viewState'
+> = {
   datasetUrl: '',
+  datasetReader: null,
   viewState: {
     target: [0, 0, 0],
     zoom: 0,
@@ -33,6 +42,9 @@ export const useViewerStore = create<ViewerStoreState>((set) => ({
   ...initialViewerState,
   setDatasetUrl(datasetUrl) {
     set({ datasetUrl })
+  },
+  setDatasetReader(datasetReader) {
+    set({ datasetReader })
   },
   setViewState(viewState) {
     set({ viewState })

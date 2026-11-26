@@ -40,6 +40,8 @@ interface ShareableDatasetHashOptions {
   // `3d` while its serial sections are stacked in 3D (sectionView=).
   readonly sectionView?: string | undefined
   readonly datasetUrl: string
+  // The reader chosen for it in place of detection (reader=).
+  readonly datasetReader?: string | undefined
   // The loaded dataset's manifest defaults (15.1-L).
   readonly datasetDefaults?: ShareableState | undefined
   readonly spatialDataSelection?: {
@@ -221,6 +223,7 @@ export function useShareableUrlHash({
     customImageOpacities,
     customImageUrls,
     datasetDefaults,
+    datasetReader,
     datasetUrl,
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
@@ -363,6 +366,7 @@ export function useShareableUrlHash({
           ...(compareKey === '' ? {} : { compareUrls: compareKey.split('\n') }),
           ...(sectionView === undefined ? {} : { sectionView }),
           datasetUrl,
+          ...(datasetReader === undefined ? {} : { datasetReader }),
           annotationUrl,
           ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
           customImageUrls,
@@ -493,6 +497,7 @@ export function useShareableUrlHash({
     customImageOpacities,
     customImageUrls,
     datasetDefaults,
+    datasetReader,
     datasetUrl,
     segmentationFormat,
     segmentationUnits,

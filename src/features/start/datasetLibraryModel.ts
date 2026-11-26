@@ -1,3 +1,4 @@
+import type { DatasetReader } from '../../datasets/datasetReader'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 import {
   DEFAULT_EXAMPLES_INDEX_URL,
@@ -17,15 +18,21 @@ export interface DatasetLibraryModel {
   readonly onRetryExamples: () => void
   readonly recent: readonly RecentDataset[]
   readonly onRemoveRecent: (url: string) => void
-  // Opens the dataset in place, as Load Dataset does.
-  readonly onOpen: (url: string) => void
+  // Opens the dataset in place, as Load Dataset does, with the reader a
+  // recent dataset was opened with.
+  readonly onOpen: (url: string, reader?: DatasetReader | null) => void
 }
 
 // The address of a link that opens a dataset, on this deployment: a gallery
 // card never uses the index's viewerUrl, so self-hosted copies stay on their
 // own host.
-export function datasetLinkHref(datasetUrl: string, pathname: string): string {
-  return `${pathname}?dataset=${encodeURIComponent(datasetUrl)}`
+export function datasetLinkHref(
+  datasetUrl: string,
+  pathname: string,
+  reader: DatasetReader | null = null,
+): string {
+  const href = `${pathname}?dataset=${encodeURIComponent(datasetUrl)}`
+  return reader === null ? href : `${href}&reader=${reader}`
 }
 
 // The address that opens a collection, on this deployment. The viewer reads

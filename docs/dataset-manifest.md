@@ -18,6 +18,11 @@ Without a manifest, the viewer reads the standard file names described in
 [Host your own data](./host-your-own-data.md). A manifest only needs the
 fields that differ from those names.
 
+To open one address with a given platform's reader without writing a
+manifest, choose the reader from the cog on the address field (see
+[Choosing A Reader](./user-guide.md#choosing-a-reader)); the choice goes into
+the link but not to others who open the dataset by its address.
+
 To browse several datasets together, list them, or their manifests, in a
 [dataset collection](./dataset-collections.md).
 

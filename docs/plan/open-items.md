@@ -123,20 +123,6 @@ Added 2026-11-26:
       one public Xenium zip found, GEO GSM7780153 (XOA 1.0.1, 9.9 GB), stores
       its four `*.zarr.zip` but deflates everything else, the morphology
       TIFFs (628 MB to 5.2 GB) included, so its image cannot be read by tile.
-- [ ] A reader picker, for advanced use: a small cog icon button at the end
-      of the `Dataset or image URL` field (`OpenDatasetForm`, so on the start
-      screen and in the dataset menu) with a menu of "Detect automatically",
-      the default, and the platforms (Xenium, Atera, Visium, Visium HD,
-      MERSCOPE, H5AD, SpatialData, Image). A choice skips detection and opens
-      the address with that reader; when the files do not fit it, the error
-      is that reader's and suggests detecting again. **DECISION:** detection
-      stays the way in, and choosing a reader is discouraged: the cog has no
-      text, takes no room from the field and leaves the form as it is until
-      it is opened, and only a chosen reader is marked (on the cog and in its
-      tooltip). A host who needs a fixed reader writes a
-      [manifest](../dataset-manifest.md) `platform` instead. Not yet
-      decided: whether the choice is kept in the share link, so that a link
-      to a forced load opens the same way for others.
 
 Features:
 

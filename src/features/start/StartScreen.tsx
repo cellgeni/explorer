@@ -27,6 +27,7 @@ import {
   type ExampleSource,
 } from './examplesIndex'
 import type { RecentDataset } from './recentDatasets'
+import { parseDatasetReader, type DatasetReader } from '../../datasets/datasetReader'
 import { ReloadAppButton } from '../errors/ReloadAppButton'
 
 interface StartScreenProps {
@@ -121,12 +122,15 @@ function StartScreenError({ error }: { readonly error: StructuredLoadError }) {
 // app loaded; a middle or modified click opens the link in a new tab.
 export function DatasetLink({
   url,
+  reader = null,
   onOpen,
   className,
   children,
 }: {
   readonly url: string
-  readonly onOpen: (url: string) => void
+  // The reader a recent dataset was opened with, in place of detection.
+  readonly reader?: DatasetReader | null
+  readonly onOpen: (url: string, reader?: DatasetReader | null) => void
   readonly className?: string | undefined
   readonly children: ReactNode
 }) {
@@ -142,13 +146,17 @@ export function DatasetLink({
     }
 
     event.preventDefault()
-    onOpen(url)
+    if (reader === null) {
+      onOpen(url)
+    } else {
+      onOpen(url, reader)
+    }
   }
 
   return (
     <a
       className={className}
-      href={datasetLinkHref(url, window.location.pathname)}
+      href={datasetLinkHref(url, window.location.pathname, reader)}
       onClick={handleClick}
     >
       {children}
@@ -326,7 +334,7 @@ export function RecentDatasetList({
   onRemove,
 }: {
   readonly recent: readonly RecentDataset[]
-  readonly onOpen: (url: string) => void
+  readonly onOpen: (url: string, reader?: DatasetReader | null) => void
   readonly onRemove: (url: string) => void
 }) {
   const listRef = useRef<HTMLUListElement>(null)
@@ -376,7 +384,11 @@ export function RecentDatasetList({
                 {dataset.name}
               </span>
             ) : (
-              <DatasetLink url={dataset.url} onOpen={onOpen}>
+              <DatasetLink
+                url={dataset.url}
+                reader={parseDatasetReader(dataset.reader)}
+                onOpen={onOpen}
+              >
                 {dataset.name}
               </DatasetLink>
             )}

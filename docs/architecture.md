@@ -168,6 +168,20 @@ URL and ask for files by role with `datasetFileUrlFor(baseUrl, role)`, which
 returns the manifest's location or the standard name. See
 [Dataset manifest](./dataset-manifest.md#how-it-works).
 
+A reader chosen for the address (the cog on the address field, `reader=` in a
+link; `DetectSpatialDatasetOptions.reader`) replaces the table with that
+platform's step alone (`detectWithReader`), and reads no manifest: a manifest
+URL is refused. Folder platforms probe their files under the standard names
+(`experiment.xenium`, `experiment.spatial`, steps 6, 6b or 7). `h5ad` takes a
+Zarr group (`zarr.json` or `.zgroup`) as an AnnData Zarr store, else any file
+that answers `HEAD`; `spatialdata` takes any Zarr group; `image` takes Zarr
+metadata as OME-Zarr, else any file that answers as a TIFF. Zips and Icechunk
+repositories are still routed by what they hold, and refused when that is
+another platform. Without the platform's files the address is `unknown`, with
+that reader's probes, and the load error adds that the reader was chosen. A
+detection whose platform differs from the URL's last one drops the dataset
+instances built for that URL, so the other reader's instance is not reused.
+
 ### 2. Dataset Construction
 
 `createSpatialDataset` lazy-imports one implementation per platform so each
