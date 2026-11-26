@@ -896,7 +896,11 @@ is reloaded, rather than starting new workers that fail again, and Data access
 notes says so ("Zarr decoding", `src/zarr/zarrCodecWorkerStatus.ts`), however
 many datasets are opened after. With no `Worker` the registry is left alone.
 OME-Zarr image chunk bytes are fetched on the main thread and decoded whole in
-the Zarr decode workers, which fall back to the main thread if they fail.
+the Zarr decode workers, which fall back to the main thread if they fail. The
+pool (`src/workers/zarrDecodePool.ts`) remembers a failed worker too: it
+starts no more, and refuses later requests at once, so OME-Zarr tiles and
+SpatialData labels go straight to the main thread without reading a chunk for
+a worker first.
 Other hyparquet reads (Visium HD positions and barcode mappings, and
 `Browse File`'s footer and first rows) run on the main thread.
 

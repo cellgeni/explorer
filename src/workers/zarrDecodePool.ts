@@ -40,8 +40,8 @@ interface PendingResponse {
 }
 
 // A worker failed, rather than the request: it did not start, or it stopped.
-// Requests waiting on it get this; a chunk that does not decode gets an
-// ordinary error.
+// Requests waiting on it, and every later request to the pool, get this; a
+// chunk that does not decode gets an ordinary error.
 export class ZarrDecodeWorkerError extends Error {
   constructor(message: string) {
     super(message)
@@ -56,10 +56,16 @@ const MAX_TRACKED_CHUNKS = 2_048
 // worker that first received them, and later tiles of the same chunk are
 // routed there, so a large chunk is fetched and decoded once for all of its
 // virtual tiles.
+//
+// Once a worker fails, the pool starts no more: a worker whose script does
+// not load, as in a tab left open over a deploy, fails each time it is
+// started. Its requests are refused at once, and callers decode on the main
+// thread, as the codecs do (src/zarr/workerZarrCodecs.ts).
 export class ZarrDecodePool {
   private readonly size: number
   private readonly workerFactory: ZarrDecodeWorkerFactory
   private workers: ZarrDecodeWorkerLike[] = []
+  private failure: ZarrDecodeWorkerError | null = null
   private readonly pending = new Map<number, PendingResponse>()
   private readonly chunkWorkers = new Map<string, Promise<number>>()
   private nextRequestId = 1
@@ -68,6 +74,11 @@ export class ZarrDecodePool {
   constructor(options: ZarrDecodePoolOptions = {}) {
     this.size = Math.max(1, options.size ?? defaultWorkerPoolSize())
     this.workerFactory = options.workerFactory ?? createDefaultZarrDecodeWorker
+  }
+
+  // Whether a worker has failed, so that requests would be refused.
+  get failed(): boolean {
+    return this.failure !== null
   }
 
   async renderTile(request: {
@@ -267,6 +278,11 @@ export class ZarrDecodePool {
       return existing
     }
 
+    // The chunk's bytes are not read for a worker that will not take them.
+    if (this.failure !== null) {
+      return Promise.reject(this.failure)
+    }
+
     const workerIndex = hashString(cacheKey) % this.size
     const placement = loadBytes().then((bytes) => {
       const payload = bytes === undefined ? null : transferableCopy(bytes)
@@ -315,6 +331,10 @@ export class ZarrDecodePool {
   }
 
   private worker(index: number): ZarrDecodeWorkerLike {
+    if (this.failure !== null) {
+      throw this.failure
+    }
+
     while (this.workers.length <= index) {
       const worker = this.startWorker()
       worker.onmessage = (event) => {
@@ -327,7 +347,7 @@ export class ZarrDecodePool {
       }
       worker.onerror = (event) => {
         // A worker whose script does not load reports an empty message.
-        this.reset(
+        this.fail(
           new ZarrDecodeWorkerError(event.message || 'Zarr decode worker failed.'),
         )
       }
@@ -347,14 +367,21 @@ export class ZarrDecodePool {
     try {
       return this.workerFactory()
     } catch (cause) {
-      throw new ZarrDecodeWorkerError(
+      const error = new ZarrDecodeWorkerError(
         `Zarr decode worker did not start: ${cause instanceof Error ? cause.message : String(cause)}`,
       )
+      this.fail(error)
+      throw error
     }
   }
 
-  // Fails every request and drops all workers and chunk placements; the next
-  // request starts fresh workers.
+  private fail(error: ZarrDecodeWorkerError): void {
+    this.failure ??= error
+    this.reset(error)
+  }
+
+  // Fails every request and drops all workers and chunk placements. After
+  // terminate(), unlike a failure, the next request starts fresh workers.
   private reset(error: ZarrDecodeWorkerError): void {
     for (const { reject } of this.pending.values()) {
       reject(error)
