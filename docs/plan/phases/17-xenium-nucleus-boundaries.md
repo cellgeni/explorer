@@ -122,7 +122,11 @@ hyparquet:
 - [ ] With both outline types on and cold, the nuclei are drawn about 6 s
       after the cells on the demo, because one DuckDB instance runs both
       queries in turn. A second instance for nuclei would run them side by
-      side, at the cost of another DuckDB worker and file cache.
+      side, at the cost of another DuckDB worker and file cache. Tried in
+      the optimization pass's O12 (2026-11-26) and not adopted: the cells
+      then shared the host with the nuclei and arrived later. Both outline
+      types arrive sooner since, the nuclei about 7 s after the cells: see
+      [Xenium Outline Queries In Less Memory](optimization-pass.md#xenium-outline-queries-in-less-memory-2026-11-26).
 - [ ] On Visium HD, bins are drawn above cell and nucleus outlines and take
       the pointer, so outlines cannot be hovered or clicked where bins are
       drawn. The nucleus-to-cell link is in place for when they can.

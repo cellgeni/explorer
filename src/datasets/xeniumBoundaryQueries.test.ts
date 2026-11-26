@@ -138,10 +138,7 @@ describe('Xenium outline queries in DuckDB', () => {
   it('reads a nucleus per cell and label, numbering a cell second nucleus', async () => {
     const nuclei = await readXeniumNucleusBoundaryElements(
       connection(),
-      {
-        cells: join(folder, 'cells.parquet'),
-        nucleusBoundaries: join(folder, 'boundaries.parquet'),
-      },
+      { nucleusBoundaries: join(folder, 'boundaries.parquet') },
       box,
       { labelIds: true },
     )
@@ -187,5 +184,92 @@ describe('Xenium outline queries in DuckDB', () => {
         },
       ],
     ])
+  })
+
+  it('picks nuclei by their own vertices, without cells.parquet', async () => {
+    // For the 30 µm box, vertices are read 150 µm around it and nuclei kept
+    // within 75 µm. None of these cells is in cells.parquet. d is kept; e's
+    // vertex mean is past 75 µm; f is cut at the edge of the read, and the
+    // mean of the three vertices left (177) is past 75 µm too.
+    const file = join(folder, 'nuclei.parquet')
+    duck.query(`COPY (SELECT cell_id, CAST(vertex_x AS FLOAT) AS vertex_x,
+        CAST(vertex_y AS FLOAT) AS vertex_y, label_id FROM (VALUES
+      ('dddddddd-1', 101.0, 15.0, 1), ('dddddddd-1', 99.0, 15.0, 1), ('dddddddd-1', 100.0, 16.0, 1),
+      ('eeeeeeee-1', 107.0, 15.0, 1), ('eeeeeeee-1', 105.0, 15.0, 1), ('eeeeeeee-1', 106.0, 16.0, 1),
+      ('ffffffff-1', 176.0, 15.0, 1), ('ffffffff-1', 178.0, 15.0, 1), ('ffffffff-1', 177.0, 16.0, 1),
+      ('ffffffff-1', 184.0, 15.0, 1), ('ffffffff-1', 186.0, 16.0, 1)
+    ) AS t(cell_id, vertex_x, vertex_y, label_id)) TO '${file}'`)
+
+    const nuclei = await readXeniumNucleusBoundaryElements(
+      connection(),
+      { nucleusBoundaries: file },
+      box,
+      { labelIds: true },
+    )
+
+    expect(nuclei.map(({ id }) => id)).toEqual(['dddddddd-1'])
+  })
+
+  it('reads 5,000 outlines of 25 vertices within 64 MB', async () => {
+    // Gathered with an ordered aggregate, list(vertex_x ORDER BY
+    // file_row_number), these outlines needed 128–256 MB, about 40 KB each,
+    // and 73,000 nuclei of a 1.4M-cell folder ran out of DuckDB-WASM's
+    // 3.1 GiB.
+    const cells = join(folder, 'grid-cells.parquet')
+    const outlines = join(folder, 'grid-outlines.parquet')
+    // IDs aaaaaaaa-1 onwards: i in four base-16 letters, a to p.
+    const letter = (shift: number) => `chr(CAST(97 + (i >> ${shift}) % 16 AS INTEGER))`
+    const cellId = `'aaaa' || ${[12, 8, 4, 0].map(letter).join(' || ')} || '-1'`
+    duck.query(`COPY (SELECT ${cellId} AS cell_id,
+        (i % 100) * 10.0 AS x_centroid, (i // 100) * 10.0 AS y_centroid
+      FROM range(5000) AS t(i)) TO '${cells}'`)
+    // A zigzag of 25 vertices a cell, 0.25 µm apart in x, in file order.
+    duck.query(`COPY (SELECT ${cellId} AS cell_id,
+        CAST((i % 100) * 10 + k * 0.25 AS FLOAT) AS vertex_x,
+        CAST((i // 100) * 10 + k % 2 AS FLOAT) AS vertex_y, 1 AS label_id
+      FROM range(5000) AS t(i), range(25) AS v(k)
+      ORDER BY i, k) TO '${outlines}'`)
+    const grid = {
+      minX: micrometers(0),
+      maxX: micrometers(990),
+      minY: micrometers(0),
+      maxY: micrometers(490),
+    }
+    const limit = duck
+      .query(`SELECT current_setting('memory_limit') AS limit`)
+      .toArray()[0]?.limit as string
+
+    // RESET does not bring back DuckDB-WASM's default, so the limit read is
+    // set again.
+    duck.query(`SET memory_limit = '64MB'`)
+    try {
+      const batch = await readXeniumBoundaryElements(
+        connection(),
+        { cells, cellBoundaries: outlines },
+        grid,
+      )
+      const nuclei = await readXeniumNucleusBoundaryElements(
+        connection(),
+        { nucleusBoundaries: outlines },
+        grid,
+        { labelIds: true },
+      )
+
+      expect(batch.elements).toHaveLength(5000)
+      expect(nuclei).toHaveLength(5000)
+      expect(nuclei[4999]?.geometry).toEqual({
+        kind: 'polygon',
+        rings: [
+          points(
+            Array.from(
+              { length: 25 },
+              (_, k) => [990 + k * 0.25, 490 + (k % 2)] as const,
+            ),
+          ),
+        ],
+      })
+    } finally {
+      duck.query(`SET memory_limit = '${limit}'`)
+    }
   })
 })

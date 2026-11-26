@@ -320,8 +320,9 @@ to it.
       and `spatial_enrichment.csv` are not read
       ([Phase 14](phases/14-standard-visium.md#known-gaps)).
 - [ ] Xenium nucleus boundaries: with both outline types on and cold, the
-      nuclei are drawn about 6 s after the cells, since both queries share
-      one DuckDB instance; on Visium HD, bins take the pointer from cell and
+      nuclei are drawn about 7 s after the cells, since both queries share
+      one DuckDB instance (a second instance delayed the cells: O12,
+      2026-11-26); on Visium HD, bins take the pointer from cell and
       nucleus outlines
       ([Phase 17](phases/17-xenium-nucleus-boundaries.md#known-gaps)).
 - [ ] MERSCOPE: transcripts are not read; boundaries are not read by viewport;

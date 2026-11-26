@@ -368,10 +368,7 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
       label: datasetFileLabelFor(this.baseUrl, 'nucleusBoundaries'),
     })
     const conn = await this.conn()
-    const urls = {
-      cells: this.urlFor('cells'),
-      nucleusBoundaries: this.urlFor('nucleusBoundaries'),
-    }
+    const urls = { nucleusBoundaries: this.urlFor('nucleusBoundaries') }
 
     // Queries run while an earlier one finds the column missing still ask
     // for it, so each retries on the setting it was read with.

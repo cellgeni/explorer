@@ -307,10 +307,15 @@ M2, requests:
     (`transcriptZarr.ts:208`).
   - Measure each with `--delay 300` on the `anndata-zarr`, `spatialdata`
     and `visium-hd` fixtures.
-- [ ] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
+- [x] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
       when nucleus outlines are first shown, closed by `dispose()`.
   - It costs a worker and a WebAssembly heap: measure both (S8), and the
     time to both outline types (S4).
+  - Not adopted: tried in
+    [#458](https://github.com/cellgeni/explorer/pull/458), where the cell
+    outlines arrived 2.7–5.9 s later. The outline query changes it led to
+    are in [#463](https://github.com/cellgeni/explorer/pull/463):
+    [Xenium Outline Queries In Less Memory](#xenium-outline-queries-in-less-memory-2026-11-26).
 - [x] **O13. The Zarr decode pool remembers a failed worker.** (S) After
       one fails, OME-Zarr tiles and SpatialData labels decode on the main
       thread without starting new workers, as the codecs already do.
@@ -1125,6 +1130,66 @@ Lead:
 
 - SpatialData and AnnData Zarr stores read sharded arrays the same way,
   and are not cached. Not measured.
+
+## Xenium Outline Queries In Less Memory (2026-11-26)
+
+Task O12, [#463](https://github.com/cellgeni/explorer/pull/463). A DuckDB
+client of their own for nucleus outlines was tried in
+[#458](https://github.com/cellgeni/explorer/pull/458) and not adopted: the
+cell and nucleus downloads then share the host, so the cell outlines, on by
+default, arrive later. Remeasuring it led to two changes to the outline
+queries, which help with one client
+([Viewport Cell Boundaries](../../modalities/xenium.md#viewport-cell-boundaries),
+[Nucleus Boundaries](../../modalities/xenium.md#nucleus-boundaries)):
+
+- **Nuclei picked by their own vertices.** A nucleus is kept when the mean
+  of its vertices is within the box ± 75 µm, the margin the cells' centroids
+  get, so the nucleus query reads no `cells.parquet`. Vertices are read at
+  least 75 µm beyond that, so no nucleus kept is cut short.
+- **Vertex lists without an ordered aggregate.** Both queries gathered each
+  outline's vertices with `list(vertex_x ORDER BY file_row_number)`, which
+  took about 40 KB of DuckDB's memory an outline of 25 vertices: 128–256 MB
+  for 5,000 outlines, where `{r, x, y}` structs sorted with `list_sort`,
+  which give the same lists, need 16 MB. DuckDB-WASM has 3.1 GiB. Picking
+  nuclei by their vertices groups about 73,000 at the demo's outline step,
+  and with the ordered aggregate that query ran out of memory. On main, the
+  demo's cell outlines run out at a `Boundary limit` of 100,000 (72,942
+  cells); with the change they load in 10.8 s.
+
+Measured on the demo (S9) with production builds of main (`946008c`), main
+with the query changes, and main with the query changes and #458's second
+client, alternating, three runs each, with GPU drawing. Each run opens the
+dataset with `cellBounds=1&nucleusBounds=1` and zooms to the fourth step,
+where outlines first show (66,835 cells). Times are the app's Log lines, from
+the request to the outlines being ready. The bucket was slower than for the
+first O12 runs, so the builds are compared with each other.
+
+| Ready            | Main        | Query changes | Query changes, second client |
+| ---------------- | ----------- | ------------- | ---------------------------- |
+| Cell outlines    | 13.2–14.5 s | 10.9–12.5 s   | 14.5–16.8 s                  |
+| Nucleus outlines | 23.1–25.3 s | 17.8–19.9 s   | 12.8–15.1 s                  |
+
+- **The query changes.** Cell outlines are ready 1.5–2.8 s sooner than on
+  main, paired run for run, and nucleus outlines 4.1–6.7 s sooner. Both
+  queries read about the same bytes as before.
+- **`cells.parquet` was not what delayed the cells.** On the 1.4M-cell
+  folder at 300 ms a request, the second client read the `cells.parquet`
+  ranges the cell query was reading, and Chromium's HTTP cache let one
+  request per URL through at a time. On the demo, every build read 6
+  `cells.parquet` ranges at the outline step; the cell queries of earlier
+  steps had read the rest.
+- **Shared host.** With the second client, the cells' 48–50 MB and the
+  nuclei's 40 MB download together, so the cells arrive 2.7–5.9 s later
+  than with one client, and 0.7–3.1 s later than on main. The nuclei arrive
+  2.7–6.2 s sooner than with one client.
+- **DuckDB alone.** In Node, with DuckDB-WASM 1.5.1 on the 1.4M-cell
+  folder's local files and a box of 57,000 cells, the old nucleus query took
+  3.0 s and the new one 1.0 s.
+
+Tests: `src/datasets/xeniumBoundaryQueries.test.ts` runs both queries in
+DuckDB on 5,000 outlines of 25 vertices under a 64 MB memory limit, which
+the ordered aggregate runs out of on main, and picks nuclei that have no
+row in `cells.parquet`.
 
 ## Closed Open Items
 
