@@ -134,7 +134,9 @@ describe('Zarr cell feature matrix cache', () => {
     let rounds = 0
 
     while (!done) {
-      for (let quiet = 0, seen = -1; quiet < 8 && !done; ) {
+      let quiet = 0
+      let seen = -1
+      while (quiet < 8 && !done) {
         await new Promise((resolve) => setTimeout(resolve, 0))
         quiet = waiting.length === seen ? quiet + 1 : 0
         seen = waiting.length
