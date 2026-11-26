@@ -15,7 +15,7 @@ permissions:
 jobs:
   check:
     name: Format, lint, typecheck, unit tests, build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -53,7 +53,7 @@ jobs:
   # Pyodide runs Python 3.14, so the tests do too.
   python:
     name: Python package tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -67,7 +67,7 @@ jobs:
   # (CI #94, #97, #98), while `npm test` above passes.
   coverage:
     name: Unit test coverage (not required)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     steps:
@@ -87,9 +87,9 @@ jobs:
 
   e2e-smoke:
     name: E2E smoke (Chromium, offline)
-    # Pinned: ubuntu-latest is now 26.04, where Playwright 1.60 cannot install
-    # Chromium (1.61 and later can). Every workflow uses the same image.
-    runs-on: ubuntu-24.04
+    # Pinned rather than ubuntu-latest, so a new runner image cannot break the
+    # Playwright install unannounced. Every workflow uses the same image.
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
