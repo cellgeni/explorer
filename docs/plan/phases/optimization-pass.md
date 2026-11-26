@@ -261,7 +261,7 @@ M1, interaction:
 
 M2, requests:
 
-- [ ] **O7. One fetch with a timeout and retries.** (M) A wrapper in
+- [x] **O7. One fetch with a timeout and retries.** (M) A wrapper in
       `src/data/` for every range read listed above, replacing the four
       timeouts. Each attempt ends after a time with no bytes, headers or
       body; network errors, timeouts, 408, 429 and 5xx are tried again with
@@ -271,6 +271,8 @@ M2, requests:
       ([Answered Questions](#answered-questions)).
   - Tests with a fake fetch that hangs, fails, or stalls mid-body.
   - Measure with range-server's stall option.
+  - Built in [#441](https://github.com/cellgeni/explorer/pull/441):
+    [Range Read Timeouts And Retries](#range-read-timeouts-and-retries-2026-11-26).
 - [ ] **O8. Cancelling a load stops its reads.** (M–L) A signal through
       `cachedSpatialDataset`, `overview()`, `readBinnedOverview()`,
       `summary()` and `visiumSummary()`. A shared read is aborted only
@@ -785,13 +787,14 @@ draw at the full view (M3, Metal, 2× pixel ratio, 1400 × 900, timed with a
 
 ## Range Read Timeouts And Retries (2026-11-26)
 
-Task O7. Range reads go through `fetchWithRetry` (`src/data/fetchRetry.ts`;
-[HTTP Requirements In Code](../../architecture.md#http-requirements-in-code)).
-An attempt ends when it has waited 30 s for bytes and its host has sent no
-bytes to any of the page's requests in that time; timeouts, failed fetches,
-408, 429 and 5xx are tried again, three attempts in all; a body that stops
-part way resumes. The H5 worker's synchronous reads follow the same rules,
-with a timeout of 30 s plus the time their bytes take at 256 kB/s.
+Task O7, [#441](https://github.com/cellgeni/explorer/pull/441). Range reads
+go through `fetchWithRetry` (`src/data/fetchRetry.ts`; [HTTP Requirements In
+Code](../../architecture.md#http-requirements-in-code)). An attempt ends
+when it has waited 30 s for bytes and its host has sent no bytes to any of
+the page's requests in that time; timeouts, failed fetches, 408, 429 and 5xx
+are tried again, three attempts in all; a body that stops part way resumes.
+The H5 worker's synchronous reads follow the same rules, with a timeout of
+30 s plus the time their bytes take at 256 kB/s.
 
 A first version timed each request on its own. It would have cut and
 retried healthy reads waiting in Chromium's queue, which sends at most six
@@ -985,6 +988,7 @@ Closed by the pass's tasks:
       range requests that took 55–90 s while the requests sent with them
       finished in under a second, and the load waited for them. They now go
       through `fetchWithRetry`
+      ([#441](https://github.com/cellgeni/explorer/pull/441))
       ([Range Read Timeouts And Retries](#range-read-timeouts-and-retries-2026-11-26)).
       Not covered: DuckDB's own reads, the transcript zip that
       `@zarrita/storage` reads, the Visium HD nucleus mask read by geotiff's
