@@ -2662,14 +2662,17 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await expect(page.getByRole('checkbox', { name: 'Gene-only calls' })).toBeDisabled()
 
   // Density follows Min QV: QV 30 bins UMOD's rows from transcripts.zarr.zip,
-  // or, over the rows one view reads (whole-slide UMOD is), says so.
+  // or, over the rows one view reads (whole-slide UMOD is), says so. The
+  // field applies a typed value on Enter or blur.
   const minQv = transcriptsPanel.getByRole('spinbutton', { name: 'Min QV' })
   await minQv.fill('30')
+  await minQv.press('Enter')
   await expect(transcriptsPanel).toContainText(
     /at QV 30\+ from transcripts\.zarr\.zip|Min QV 30 needs [0-9,]+ transcript rows here/,
     { timeout: ATERA_LOAD_TIMEOUT_MS },
   )
   await minQv.fill('20')
+  await minQv.press('Enter')
 
   await transcriptsPanel.getByLabel('Feature filter').selectOption('all')
   await expect(transcriptsPanel).toContainText('Set Feature filter to Selected genes', {
