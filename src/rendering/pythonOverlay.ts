@@ -19,6 +19,8 @@ export type PythonLayerLegend =
 export interface PythonColorLayer {
   readonly kind: 'color'
   readonly name: string
+  // Named by the app (Result, Result 2, …) for a call without name=.
+  readonly unnamed?: boolean
   // Sorted, unique overview rows.
   readonly rows: Uint32Array
   // RGB for each entry of rows.
@@ -29,6 +31,7 @@ export interface PythonColorLayer {
 export interface PythonHighlightLayer {
   readonly kind: 'highlight'
   readonly name: string
+  readonly unnamed?: boolean
   readonly rows: Uint32Array
   readonly color: readonly [number, number, number]
 }

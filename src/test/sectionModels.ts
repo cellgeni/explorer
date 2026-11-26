@@ -202,6 +202,8 @@ export function testDatasetInfoModel(
     open: {
       datasetUrl: '',
       onDatasetUrlChange: vi.fn(),
+      datasetReader: null,
+      onDatasetReaderChange: vi.fn(),
       shouldLoadMorphology: true,
       onShouldLoadMorphologyChange: vi.fn(),
       morphologyLabel: 'Morphology image',

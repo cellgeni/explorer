@@ -48,6 +48,16 @@ describe('dataset detection errors', () => {
     ).toBe('server-error')
   })
 
+  it('names the one file a chosen reader looked for when it is missing', () => {
+    expect(
+      datasetDetectionError([probe('experiment.spatial', { status: 404 })]).message,
+    ).toBe('experiment.spatial was not found at this address.')
+    expect(
+      datasetDetectionError([probe('a', { status: 404 }), probe('b', { status: 403 })])
+        .message,
+    ).toBe('None of the 2 expected files were found at this address.')
+  })
+
   it('says refused for other client errors, which are not a CORS block (15.5-B)', () => {
     const error = datasetDetectionError([
       probe('experiment.xenium', { status: 429 }),

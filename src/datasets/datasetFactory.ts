@@ -21,6 +21,7 @@ import { registerZipFolder, zipFolderFor, zipFolderRoot } from '../data/zipFolde
 import {
   DatasetAddressError,
   DatasetDetectionError,
+  DatasetReaderError,
   PROBE_HIDDEN_ERROR,
   PROBE_NOT_LISTED,
   datasetDetectionError,
@@ -69,6 +70,7 @@ import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import { ATERA_EXPERIMENT_FILE, ATERA_FILE_DEFAULTS } from './ateraFormat'
 import { visiumHdRequiredBinPaths } from './visiumHdStrategy'
 import { DatasetCache, retainDataset } from './datasetCache'
+import { DATASET_READER_NAMES, type DatasetReader } from './datasetReader'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
@@ -202,6 +204,9 @@ export interface DatasetProbeResult {
 export interface DetectSpatialDatasetOptions {
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
+  // The reader chosen for the address, in place of detection
+  // (detectWithReader).
+  readonly reader?: DatasetReader
 }
 
 export interface CreateSpatialDatasetOptions extends DetectSpatialDatasetOptions {
@@ -369,6 +374,13 @@ export async function detectSpatialDataset(
       normalizedBaseUrl,
       detection.platform === 'unknown' ? undefined : detection.manifest,
     )
+    const previous = datasetDetections.get(normalizedBaseUrl)
+
+    // The same address opened with another reader: instances the other one
+    // built are not reused.
+    if (previous !== undefined && previous.platform !== detection.platform) {
+      spatialDatasetCache.delete((key) => key.startsWith(`${normalizedBaseUrl}\n`))
+    }
 
     if (detection.platform === 'unknown') {
       datasetDetections.delete(normalizedBaseUrl)
@@ -411,6 +423,10 @@ async function detectSpatialDatasetLayout(
 
   if (section !== null) {
     return detectAnnDataSection(normalizedBaseUrl, section, options)
+  }
+
+  if (options.reader !== undefined) {
+    return detectWithReader(normalizedBaseUrl, options.reader, options, checked)
   }
 
   if (isDatasetManifestUrl(normalizedBaseUrl)) {
@@ -642,6 +658,158 @@ async function detectSpatialDatasetLayout(
     baseUrl: normalizedBaseUrl,
     checked,
   }
+}
+
+// A reader chosen for the address (the reader menu on the address field, or
+// `reader=` in a link) in place of detection. Only that platform's files are
+// looked for, under their standard names, and no dataset manifest is read, so
+// a folder whose manifest or files route it elsewhere opens as chosen, and a
+// file whose name hides its format opens as the chosen kind. When the files
+// are not there the address is unknown, as an undetected one is, with the
+// probes this reader made. A zip or Icechunk repository is still routed by
+// what it holds, and refused when that is another platform.
+async function detectWithReader(
+  url: string,
+  reader: DatasetReader,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const unknown: SpatialDatasetDetection = { platform: 'unknown', baseUrl: url, checked }
+  const name = DATASET_READER_NAMES[reader]
+
+  if (isDatasetManifestUrl(url)) {
+    throw new DatasetReaderError(
+      `${url} is a dataset manifest, which names its own platform, so the ${name} reader does not open it. Choose Detect automatically in the reader menu.`,
+    )
+  }
+
+  if (isIcechunkUrl(url) || isZarrZipUrl(url)) {
+    if (reader === 'xenium' && isZarrZipUrl(url)) {
+      throw new UnsupportedZipError(
+        `The Xenium reader cannot open a zip (${url}): only Atera runs are read from one. Unzip the run and host its folder.`,
+      )
+    }
+
+    const detection = isIcechunkUrl(url)
+      ? await detectIcechunkRepository(url, options, checked)
+      : await detectZarrZip(url, options, checked)
+
+    if (detection.platform !== 'unknown' && detection.platform !== reader) {
+      throw new DatasetReaderError(
+        `The ${name} reader cannot open ${url}: it holds ${detection.platform === 'image' ? 'an image' : `${DATASET_READER_NAMES[detection.platform]} data`}. Choose that reader, or Detect automatically.`,
+      )
+    }
+
+    return detection
+  }
+
+  if (reader === 'h5ad' || reader === 'spatialdata' || reader === 'image') {
+    return detectFileWithReader(url, reader, options, checked)
+  }
+
+  await registerFolderListing(url, options)
+
+  if (reader === 'xenium' || reader === 'atera') {
+    const probe = await probeDatasetPath(
+      url,
+      reader === 'xenium' ? 'experiment.xenium' : ATERA_EXPERIMENT_FILE,
+      options,
+    )
+    checked.push(probe)
+    return probe.ok ? { platform: reader, baseUrl: url, checked } : unknown
+  }
+
+  if (reader === 'visium') {
+    const files = await probeVisiumOutputs(url, options, checked)
+    return files === null ? unknown : { platform: 'visium', baseUrl: url, files, checked }
+  }
+
+  if (reader === 'merscope') {
+    const { files, probes } = await probeMerscopeOutputs(url, options)
+    checked.push(...probes)
+    return files === null
+      ? unknown
+      : { platform: 'merscope', baseUrl: url, files, checked }
+  }
+
+  const bins = await probeVisiumHdBins(url, options, checked)
+  const segmentedOutputs = await probeVisiumHdSegmentedOutputs(url, options, checked)
+
+  return bins.length === 0
+    ? unknown
+    : visiumHdDetection(url, bins, segmentedOutputs, undefined, checked)
+}
+
+// The readers of one file or store. A Zarr group (`zarr.json` or `.zgroup`)
+// opens as AnnData Zarr or a SpatialData store, and one with OME-Zarr
+// metadata (`zarr.json` or `.zattrs`) as an image, whatever its root
+// attributes say; anything else that answers opens as an .h5ad file or a
+// TIFF image.
+async function detectFileWithReader(
+  url: string,
+  reader: 'h5ad' | 'spatialdata' | 'image',
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const unknown: SpatialDatasetDetection = { platform: 'unknown', baseUrl: url, checked }
+  const storeUrl = normalizeBaseUrl(omeZarrImageRootUrl(url))
+  const zarrMetadata = async (
+    paths: readonly string[],
+  ): Promise<DatasetProbeResult | undefined> => {
+    const probes = await Promise.all(
+      paths.map((path) => probeDatasetPath(storeUrl, path, options)),
+    )
+    checked.push(...probes)
+    return probes.find((probe) => probe.ok)
+  }
+  const zarrGroup = () => zarrMetadata(['zarr.json', '.zgroup'])
+  const file = async (): Promise<boolean> => {
+    const probe = await probeDirectDatasetUrl(url, imagePathLabel(url), options)
+    checked.push(probe)
+    return probe.ok
+  }
+
+  if (reader === 'spatialdata') {
+    return (await zarrGroup()) === undefined
+      ? unknown
+      : { platform: 'spatialdata', baseUrl: url, spatialDataUrl: storeUrl, checked }
+  }
+
+  if (reader === 'h5ad') {
+    if (!isH5adUrl(url) && (await zarrGroup()) !== undefined) {
+      return { platform: 'h5ad', baseUrl: url, h5adUrl: url, source: 'zarr', checked }
+    }
+
+    return (await file())
+      ? { platform: 'h5ad', baseUrl: url, h5adUrl: url, checked }
+      : unknown
+  }
+
+  if (!isTiffOrNdpiUrl(url)) {
+    const group = await zarrMetadata(['zarr.json', '.zattrs'])
+
+    if (group !== undefined) {
+      // An OME-Zarr image is opened by a URL that names Zarr (openImagePyramid),
+      // so a store whose name does not is opened by its metadata document.
+      return {
+        platform: 'image',
+        baseUrl: url,
+        imageUrl: isOmeZarrImageUrl(url) ? url : joinUrl(storeUrl, group.path),
+        imageKind: 'ome-zarr',
+        checked,
+      }
+    }
+  }
+
+  return (await file())
+    ? {
+        platform: 'image',
+        baseUrl: url,
+        imageUrl: url,
+        imageKind: tiffImageKind(url),
+        checked,
+      }
+    : unknown
 }
 
 // Routes an Icechunk repository by what its root group holds. Throws when the

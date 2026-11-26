@@ -5,6 +5,7 @@ import {
   type Platform,
   type SpatialElement,
 } from '../../datasets/spatialDataset'
+import { DATASET_READER_NAMES } from '../../datasets/datasetReader'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type {
   CellBoundaryDatum,
@@ -46,16 +47,8 @@ export type AppPlatformKind =
   | 'image'
 
 // The platform as the top bar's summary and the info drawer name it.
-export const PLATFORM_NAMES: Readonly<Record<AppPlatformKind, string>> = {
-  xenium: 'Xenium',
-  atera: 'Atera',
-  visium: 'Visium',
-  'visium-hd': 'Visium HD',
-  merscope: 'MERSCOPE',
-  h5ad: 'H5AD',
-  spatialdata: 'SpatialData',
-  image: 'Image',
-}
+export const PLATFORM_NAMES: Readonly<Record<AppPlatformKind, string>> =
+  DATASET_READER_NAMES
 
 export interface AppPlatformLabels {
   readonly embeddingElementPlural: 'cells' | 'bins' | 'spots'

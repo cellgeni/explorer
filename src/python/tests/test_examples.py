@@ -31,7 +31,7 @@ color(near, "green", by=d, reverse=True)
 
     (command,) = bridge.draws
     assert command["op"] == "color"
-    assert command["name"] == "Result"
+    assert command["name"] is None
     assert command["rows"].tolist() == rows.tolist()
     assert command["rows"].dtype == np.uint32
     assert command["color"] == "#008000"

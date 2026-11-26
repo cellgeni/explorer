@@ -15,6 +15,7 @@ import {
 } from './components/ViewerCore'
 import type { LegendCategoryVisibilityChange } from './components/ViewerLegend'
 import { spatialDataSelectionFor } from './datasets/datasetFactory'
+import { parseDatasetReader, type DatasetReader } from './datasets/datasetReader'
 import type { SpatialDataSelection } from './datasets/spatialDataDataset'
 import {
   spatialDataControlLoading,
@@ -86,6 +87,8 @@ import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQu
 import { useCellQueryModel } from './features/query/useCellQueryModel'
 import { CellColumnReader } from './features/query/cellColumnReader'
 import { pythonLegendSection } from './features/python/pythonLegend'
+import type { StackPythonSource } from './features/collection/stackPythonLayers'
+import { composePythonOverlay } from './rendering/pythonOverlay'
 import { usePythonConsole } from './features/python/usePythonConsole'
 import { openPlotsSource } from './features/plots/usePlotsWorkflow'
 import {
@@ -548,6 +551,7 @@ export function App({ dependencies }: AppProps = {}) {
   } | null>(null)
 
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
+  const datasetReader = useViewerStore((state) => state.datasetReader)
   // Screenshots of the spatial view (plan 27), one at a time.
   const [screenshotRunner] = useState(() => new ScreenshotRunner())
   const screenshotState = useSyncExternalStore(
@@ -555,6 +559,7 @@ export function App({ dependencies }: AppProps = {}) {
     screenshotRunner.getState,
   )
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
+  const setDatasetReader = useViewerStore((state) => state.setDatasetReader)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
   const {
     annotations: {
@@ -1085,14 +1090,6 @@ export function App({ dependencies }: AppProps = {}) {
   }, [dismissUndo, loadedDatasetUrl])
   const recentDatasets = useRecentDatasets()
   const { add: addRecentDataset } = recentDatasets
-  useEffect(() => {
-    if (loadedDatasetUrl === null || loadedDatasetName === null) return
-    addRecentDataset({
-      url: loadedDatasetUrl,
-      name: loadedDatasetName,
-      platform: platformAdapter.kind,
-    })
-  }, [addRecentDataset, loadedDatasetName, loadedDatasetUrl, platformAdapter.kind])
   const isVisiumHdDataset = isVisiumHdPlatform(platformAdapter)
   const platformFeatureLoadEnabled = platformAdapter.featureLoadEnabled(loadState)
   const geneExpressionScaleDatasetUrl =
@@ -3924,7 +3921,7 @@ export function App({ dependencies }: AppProps = {}) {
     platformAdapter.kind,
   ])
 
-  const { cancelDatasetLoad, handleDatasetSubmit } = useDatasetLifecycle({
+  const datasetLifecycle = useDatasetLifecycle({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -4029,6 +4026,7 @@ export function App({ dependencies }: AppProps = {}) {
       setCustomMorphologyLayers,
       setCustomImageLayerOpacities,
       setDatasetUrl,
+      setDatasetReader,
       setDatasetPlatform,
       setDatasetWarmupState,
       setDiagnosticsState,
@@ -4084,6 +4082,24 @@ export function App({ dependencies }: AppProps = {}) {
       setAteraImageState,
     },
   })
+  const { cancelDatasetLoad, handleDatasetSubmit, openDatasetReader } = datasetLifecycle
+  // Each dataset that opens goes first in Recent, with the reader it was
+  // opened with.
+  useEffect(() => {
+    if (loadedDatasetUrl === null || loadedDatasetName === null) return
+    addRecentDataset({
+      url: loadedDatasetUrl,
+      name: loadedDatasetName,
+      platform: platformAdapter.kind,
+      ...(openDatasetReader === null ? {} : { reader: openDatasetReader }),
+    })
+  }, [
+    addRecentDataset,
+    loadedDatasetName,
+    loadedDatasetUrl,
+    openDatasetReader,
+    platformAdapter.kind,
+  ])
   // Cancel in the loading list (15.3-D). ViewerCore gets one stable
   // callback, so deck.gl never sees a new prop; it calls the latest
   // handlers, and only for a task still in the list.
@@ -4394,8 +4410,12 @@ export function App({ dependencies }: AppProps = {}) {
             sectionView: linkSectionView,
           }),
       // The loaded dataset, not the address box: until a load finishes the
-      // link keeps the dataset it was opened with (15.1-L).
+      // link keeps the dataset it was opened with (15.1-L), and its reader.
       datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
+      datasetReader:
+        loadedDatasetUrl === null
+          ? (parseDatasetReader(initialShareableState.datasetReader) ?? undefined)
+          : (openDatasetReader ?? undefined),
       // A value equal to the manifest's default is left out; one the user set
       // back to the app default is kept, so the manifest does not replace it.
       datasetDefaults: datasetManifestDefaults,
@@ -4628,6 +4648,7 @@ export function App({ dependencies }: AppProps = {}) {
           }
         : null,
     datasetUrl,
+    datasetReader,
     debugLog,
     debugMode,
     diagnosticsState,
@@ -4646,6 +4667,7 @@ export function App({ dependencies }: AppProps = {}) {
     performanceBudget,
     setBoundaryCellLimit,
     setDatasetUrl,
+    setDatasetReader,
     setDebugLog,
     setShouldLoadMorphology,
     shareUrl: currentShareUrl,
@@ -4658,11 +4680,12 @@ export function App({ dependencies }: AppProps = {}) {
     ateraImageState,
     handleAteraImageChange,
   })
-  // An example or recent dataset opens in place, like Load Dataset.
+  // An example or recent dataset opens in place, like Load Dataset, a recent
+  // one with the reader it was opened with.
   const handleOpenDataset = useCallback(
-    (url: string) => {
+    (url: string, reader: DatasetReader | null = null) => {
       setDatasetUrl(url)
-      void startDatasetLoadRef.current?.(url, shouldLoadMorphology)
+      void startDatasetLoadRef.current?.(url, shouldLoadMorphology, undefined, reader)
     },
     [setDatasetUrl, shouldLoadMorphology],
   )
@@ -5439,6 +5462,31 @@ export function App({ dependencies }: AppProps = {}) {
     view: pythonView,
     selectedCellId: selectedCell?.id ?? null,
   })
+  // Python's layers in the 3D cell view, matched to its cells by ID.
+  const pythonRowById = useMemo(
+    () =>
+      lazyIdLookup(
+        overviewCells,
+        (cell) => cell.id,
+        (_, index) => index,
+      ),
+    [overviewCells],
+  )
+  const cellViewPython = useMemo((): StackPythonSource | null => {
+    const composed = composePythonOverlay(pythonConsole.overlay, overviewCells.length)
+    if (
+      composed.colors === null &&
+      composed.hidden === null &&
+      composed.highlights.length === 0
+    ) {
+      return null
+    }
+    return {
+      composed,
+      names: [...new Set(pythonConsole.overlay.layers.map((layer) => layer.name))],
+      rowOf: (cellId) => pythonRowById.get(cellId),
+    }
+  }, [overviewCells.length, pythonConsole.overlay, pythonRowById])
   // Python's layers head the legend: they colour over the rest (29-D8).
   const canvasLegendSections = useMemo(() => {
     const plural = platformAdapter.labels.embeddingElementPlural
@@ -5783,6 +5831,7 @@ export function App({ dependencies }: AppProps = {}) {
               coloring={sectionColoring}
               cellPointScale={cellPointScale}
               hoverTooltips={showHoverTooltips}
+              python={cellViewPython}
               onClose={() => {
                 setCellViewOpen(false)
               }}

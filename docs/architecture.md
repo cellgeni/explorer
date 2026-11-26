@@ -168,6 +168,20 @@ URL and ask for files by role with `datasetFileUrlFor(baseUrl, role)`, which
 returns the manifest's location or the standard name. See
 [Dataset manifest](./dataset-manifest.md#how-it-works).
 
+A reader chosen for the address (the cog on the address field, `reader=` in a
+link; `DetectSpatialDatasetOptions.reader`) replaces the table with that
+platform's step alone (`detectWithReader`), and reads no manifest: a manifest
+URL is refused. Folder platforms probe their files under the standard names
+(`experiment.xenium`, `experiment.spatial`, steps 6, 6b or 7). `h5ad` takes a
+Zarr group (`zarr.json` or `.zgroup`) as an AnnData Zarr store, else any file
+that answers `HEAD`; `spatialdata` takes any Zarr group; `image` takes Zarr
+metadata as OME-Zarr, else any file that answers as a TIFF. Zips and Icechunk
+repositories are still routed by what they hold, and refused when that is
+another platform. Without the platform's files the address is `unknown`, with
+that reader's probes, and the load error adds that the reader was chosen. A
+detection whose platform differs from the URL's last one drops the dataset
+instances built for that URL, so the other reader's instance is not reused.
+
 ### 2. Dataset Construction
 
 `createSpatialDataset` lazy-imports one implementation per platform so each
@@ -802,11 +816,14 @@ posts a typed request (`src/workers/pythonMessages.ts`) and waits for the
 reply with `run_sync`, which needs WebAssembly JSPI; replies are handled at
 once, other messages in turn. On the main thread `PythonSession` owns the
 worker, the log and Stop (a `KeyboardInterrupt` through a shared buffer
-where the page is cross-origin isolated, else a new worker), and refuses
-requests the protocol lacks. The answers (`pythonData.ts`) come from the
-app's state when Python asks: positions with y down, Cell Query's columns by
-overview row through the shared `CellColumnReader`, genes through
-`GeneRowReader`, and shapes, whose `contains` runs `roiSelectionContains`.
+where the page is cross-origin isolated, else a new worker; Python holds the
+interrupt off while it builds a request and waits on the reply, since one
+landing as a reply resolves can break Pyodide's event loop, and raises it
+once the reply is in), and refuses requests the protocol lacks. The
+answers (`pythonData.ts`) come from the app's state when Python asks:
+positions with y down, Cell Query's columns by overview row through the
+shared `CellColumnReader`, genes through `GeneRowReader`, and shapes, whose
+`contains` runs `roiSelectionContains`.
 Every array is made for the answer and transferred.
 
 Drawing calls send layers by overview row to `PythonLayerStore`
@@ -897,7 +914,11 @@ is reloaded, rather than starting new workers that fail again, and Data access
 notes says so ("Zarr decoding", `src/zarr/zarrCodecWorkerStatus.ts`), however
 many datasets are opened after. With no `Worker` the registry is left alone.
 OME-Zarr image chunk bytes are fetched on the main thread and decoded whole in
-the Zarr decode workers, which fall back to the main thread if they fail.
+the Zarr decode workers, which fall back to the main thread if they fail. The
+pool (`src/workers/zarrDecodePool.ts`) remembers a failed worker too: it
+starts no more, and refuses later requests at once, so OME-Zarr tiles and
+SpatialData labels go straight to the main thread without reading a chunk for
+a worker first.
 Other hyparquet reads (Visium HD positions and barcode mappings, and
 `Browse File`'s footer and first rows) run on the main thread.
 

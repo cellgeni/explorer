@@ -101,6 +101,27 @@ describe('recent datasets', () => {
     expect(readRecentDatasets(storage)).toEqual([{ ...dataset(1), platform: 'xenium' }])
   })
 
+  it('keeps the reader a dataset was opened with, and moves it up when it changes', () => {
+    const storage = memoryStorage()
+    const { result } = renderHook(() => useRecentDatasets(storage))
+
+    act(() => {
+      result.current.add({ ...dataset(1), platform: 'h5ad', reader: 'h5ad' })
+      result.current.add({ ...dataset(1), platform: 'h5ad' })
+    })
+    expect(readRecentDatasets(storage)).toEqual([{ ...dataset(1), platform: 'h5ad' }])
+
+    act(() => {
+      result.current.add({ ...dataset(1), platform: 'h5ad', reader: 'h5ad' })
+    })
+    expect(readRecentDatasets(storage)).toEqual([
+      { ...dataset(1), platform: 'h5ad', reader: 'h5ad' },
+    ])
+    // A stored reader that is not a string is not an entry.
+    storage.setItem(RECENT_DATASETS_KEY, JSON.stringify([{ ...dataset(2), reader: 7 }]))
+    expect(readRecentDatasets(storage)).toEqual([])
+  })
+
   it('keeps no signature or token from an address (EXP-026)', () => {
     const storage = memoryStorage()
     const { result } = renderHook(() => useRecentDatasets(storage))

@@ -587,7 +587,8 @@ transform.
   `min(3, hardwareConcurrency − 1)` workers). Each chunk is routed to one
   worker, which keeps it for all of its virtual tiles. If a worker fails, the
   tile is decoded on the main thread with `zarr.get`, through a 256 MiB
-  decoded-chunk cache. Store errors (for example a `403` chunk) are not retried.
+  decoded-chunk cache, and so is every later tile: the pool starts no more
+  workers until the page is reloaded. Store errors (for example a `403` chunk) are not retried.
   A chunk that fails to decode in a worker stays there with its error until it
   is placed again, so its tiles get that error without the chunk being loaded
   again.

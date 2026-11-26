@@ -87,6 +87,15 @@ export class UnsupportedZipError extends Error {
   }
 }
 
+// An address the reader chosen for it cannot open, such as a zip that holds
+// another platform's data.
+export class DatasetReaderError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'DatasetReaderError'
+  }
+}
+
 const LISTED_FILE_LIMIT = 5
 
 export function classifyDatasetDetection(
@@ -142,7 +151,9 @@ function detectionMessage(
 
   switch (kind) {
     case 'not-found':
-      return `None of the ${checked.length.toLocaleString()} expected files were found at this address.`
+      return checked.length === 1
+        ? `${checked[0]?.path ?? 'The expected file'} was not found at this address.`
+        : `None of the ${checked.length.toLocaleString()} expected files were found at this address.`
     case 'access-denied':
       return 'The host asked for credentials, which the browser cannot send here.'
     case 'blocked':

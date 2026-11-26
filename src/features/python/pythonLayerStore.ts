@@ -19,6 +19,11 @@ import {
 // `flush` publishes it once an input has run, so an input that draws
 // several layers redraws the canvas once, and one that draws nothing does
 // not redraw it at all.
+//
+// A call without name= makes Result, then Result 2, Result 3 and so on in
+// the same input, so a loop keeps every mask; the next input's first
+// unnamed call of that kind replaces them, so running an input again
+// replaces its results.
 
 interface Draft {
   readonly cellCount: number
@@ -38,6 +43,8 @@ export class PythonLayerStore {
   readonly #listeners = new Set<() => void>()
   #snapshot: PythonOverlay = EMPTY_PYTHON_OVERLAY
   #draft: Draft | null = null
+  // The kinds this input has made unnamed layers of.
+  readonly #unnamedThisInput = new Set<PythonLayer['kind']>()
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener)
@@ -62,16 +69,28 @@ export class PythonLayerStore {
       case 'color':
       case 'highlight': {
         checkRows(command.rows, cellCount)
-        const layer =
-          command.op === 'color' ? colorLayer(command) : highlightLayer(command)
+        let layers = draft.layers
+        let name = command.name
+        if (name === null) {
+          if (!this.#unnamedThisInput.has(command.op)) {
+            this.#unnamedThisInput.add(command.op)
+            layers = layers.filter(
+              (each) => !(each.kind === command.op && each.unnamed === true),
+            )
+          }
+          name = freeName(layers, command.op)
+        }
+        const layer = {
+          ...(command.op === 'color'
+            ? colorLayer(command, name)
+            : highlightLayer(command, name)),
+          ...(command.name === null ? { unnamed: true } : {}),
+        }
         const id = pythonLayerItemId(layer)
         this.#draft = {
           ...draft,
           // A redrawn layer goes on top (later over earlier).
-          layers: [
-            ...draft.layers.filter((each) => pythonLayerItemId(each) !== id),
-            layer,
-          ],
+          layers: [...layers.filter((each) => pythonLayerItemId(each) !== id), layer],
         }
         return
       }
@@ -95,8 +114,9 @@ export class PythonLayerStore {
     }
   }
 
-  // Publishes the draft, if any draw call changed it.
+  // Publishes the draft, if any draw call changed it. An input has ended.
   flush(): void {
+    this.#unnamedThisInput.clear()
     const draft = this.#draft
     if (draft === null) return
     this.#draft = null
@@ -118,6 +138,7 @@ export class PythonLayerStore {
   // Another dataset: its rows are other cells.
   reset(): void {
     this.#draft = null
+    this.#unnamedThisInput.clear()
     if (this.#snapshot !== EMPTY_PYTHON_OVERLAY) this.#publish(EMPTY_PYTHON_OVERLAY)
   }
 
@@ -141,6 +162,19 @@ export class PythonLayerStore {
   }
 }
 
+// Result, else the first of Result 2, Result 3, … no layer of the kind has.
+function freeName(layers: readonly PythonLayer[], kind: PythonLayer['kind']): string {
+  const taken = new Set(
+    layers.filter((layer) => layer.kind === kind).map((layer) => layer.name),
+  )
+  if (!taken.has(UNNAMED)) return UNNAMED
+  let number = 2
+  while (taken.has(`${UNNAMED} ${number.toString()}`)) number += 1
+  return `${UNNAMED} ${number.toString()}`
+}
+
+const UNNAMED = 'Result'
+
 function checkRows(rows: Uint32Array, cellCount: number): void {
   for (const row of rows) {
     if (row >= cellCount) {
@@ -157,8 +191,11 @@ function hexColor(hex: string): PythonRgb {
   return rgb
 }
 
-function colorLayer(command: Extract<PythonDrawCommand, { op: 'color' }>): PythonLayer {
-  const { name, rows, values } = command
+function colorLayer(
+  command: Extract<PythonDrawCommand, { op: 'color' }>,
+  name: string,
+): PythonLayer {
+  const { rows, values } = command
 
   if (values === null) {
     if (command.color === null) throw new Error('A colour layer needs a colour.')
@@ -203,10 +240,11 @@ function colorLayer(command: Extract<PythonDrawCommand, { op: 'color' }>): Pytho
 
 function highlightLayer(
   command: Extract<PythonDrawCommand, { op: 'highlight' }>,
+  name: string,
 ): PythonLayer {
   return {
     kind: 'highlight',
-    name: command.name,
+    name,
     rows: command.rows,
     color: hexColor(command.color),
   }

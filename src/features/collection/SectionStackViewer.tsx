@@ -35,6 +35,7 @@ import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewSt
 import type { LinkedSectionsColoring } from './LinkedSections'
 import { sectionOverlay } from './linkedSectionLayers'
 import { useFocusHandOff } from './useFocusHandOff'
+import { stackPythonLayers, type StackPythonSource } from './stackPythonLayers'
 import {
   SECTION_STACK_VIEW,
   sectionStackLayers,
@@ -70,6 +71,9 @@ interface SectionStackViewerProps {
   readonly cellPointScale: number
   // Settings › Hover tooltips.
   readonly hoverTooltips: boolean
+  // The Python console's layers, for the open dataset's cells (mode
+  // 'cells'); null or left out when it has drawn none.
+  readonly python?: StackPythonSource | null
   readonly onClose: () => void
 }
 
@@ -92,6 +96,7 @@ export function SectionStackViewer({
   coloring,
   cellPointScale,
   hoverTooltips,
+  python = null,
   onClose,
 }: SectionStackViewerProps) {
   const containerRef = useRef<HTMLElement>(null)
@@ -126,7 +131,11 @@ export function SectionStackViewer({
     annotations === null
       ? NO_CLASS_COLORS
       : (store?.classColors(annotations.colors) ?? annotations.colors)
-  const colored = annotations !== null || metadata !== null || genes.length > 0
+  // Python's layers take over while they colour or hide cells.
+  const pythonColors = python !== null && python.composed.colors !== null
+  const pythonDrawn = python !== null && (pythonColors || python.composed.hidden !== null)
+  const colored =
+    pythonColors || annotations !== null || metadata !== null || genes.length > 0
   const percentile = geneScalePercentile(scaleRange)
   const sharedScale = typeof scaleRange.max === 'number'
   const cellsMode = mode === 'cells'
@@ -173,9 +182,10 @@ export function SectionStackViewer({
           classes: preview.classes,
           ...sectionColoring,
           modelMatrix: sectionModelMatrix(frame, section.z, depthScale),
+          python: python === null ? null : stackPythonLayers(python, preview.cells),
         }
       }),
-    [colorings, depthScale, frame, previews, sections],
+    [colorings, depthScale, frame, previews, python, sections],
   )
   const stack = useMemo(
     () =>
@@ -351,18 +361,30 @@ export function SectionStackViewer({
         {colored ? (
           <Switch
             title={
-              annotations !== null
-                ? 'Show the cells outside the shown classes faintly, as an outline of the tissue'
-                : metadata !== null
-                  ? `Show the cells without a value of ${metadata.label} faintly, as an outline of the tissue`
-                  : 'Show the cells that do not score for the genes faintly, as an outline of the tissue'
+              pythonColors
+                ? "Show the cells in none of Python's colour layers faintly, as an outline of the tissue"
+                : annotations !== null
+                  ? 'Show the cells outside the shown classes faintly, as an outline of the tissue'
+                  : metadata !== null
+                    ? `Show the cells without a value of ${metadata.label} faintly, as an outline of the tissue`
+                    : 'Show the cells that do not score for the genes faintly, as an outline of the tissue'
             }
             label="Other cells"
             checked={showContext}
             onChange={setShowContext}
           />
         ) : null}
-        {genes.length > 0 ? (
+        {python === null || python.names.length === 0 ? null : (
+          <p
+            className="section-stack-summary"
+            title={`Drawn from the Python console: ${python.names.join(', ')}${
+              python.composed.hidden === null ? '' : '; hidden cells are left out'
+            }`}
+          >
+            Python: {pythonLayerNames(python.names)}
+          </p>
+        )}
+        {genes.length > 0 && !pythonDrawn ? (
           <div
             className="section-stack-scale"
             title={
@@ -391,7 +413,7 @@ export function SectionStackViewer({
             </span>
           </div>
         ) : null}
-        {metadata === null ? null : (
+        {metadata === null || pythonDrawn ? null : (
           <div
             className="section-stack-scale"
             title={
@@ -487,6 +509,12 @@ function ownTop(scores: PreviewScores, percentile: number): number {
   const top = geneScoreSpread(scores.scores, percentile).top
   byPercentile.set(percentile, top)
   return top
+}
+
+// Up to three names, then how many more.
+function pythonLayerNames(names: readonly string[]): string {
+  const shown = names.slice(0, 3).join(', ')
+  return names.length > 3 ? `${shown} +${(names.length - 3).toLocaleString()}` : shown
 }
 
 function formatDepth(z: number): string {
