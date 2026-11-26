@@ -2073,7 +2073,8 @@ function fetchInRounds(fetcher: typeof fetch) {
     let rounds = 0
 
     while (!done) {
-      for (let seen = -1; !done && (waiting.length === 0 || waiting.length !== seen); ) {
+      let seen = -1
+      while (!done && (waiting.length === 0 || waiting.length !== seen)) {
         seen = waiting.length
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
