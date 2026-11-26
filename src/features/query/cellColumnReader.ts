@@ -116,6 +116,14 @@ export function cellColumnNeeds(
   }
 }
 
+// Until `setLoaders`: reads fail, and nothing is logged.
+const NO_LOADERS: CellColumnLoaders = {
+  loadSetAnnotations: () => Promise.reject(new Error('The dataset is not open yet.')),
+  loadMetadataTrackValues: () =>
+    Promise.reject(new Error('The dataset is not open yet.')),
+  appendDebugEvent: () => undefined,
+}
+
 const LOADING = { status: 'loading' } as const
 const EMPTY_CLASSES: readonly CellQueryClassOption[] = []
 
@@ -126,7 +134,7 @@ export class CellColumnReader {
   readonly #listeners = new Set<() => void>()
   #snapshot: CellColumnLoads = { url: null, sets: new Map(), tracks: new Map() }
 
-  constructor(loaders: CellColumnLoaders) {
+  constructor(loaders: CellColumnLoaders = NO_LOADERS) {
     this.#loaders = loaders
     const changed = () => {
       this.#changed()

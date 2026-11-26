@@ -411,6 +411,97 @@
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
+/* The Python console (29-D11): the output, which takes the rest, then the
+   prompt and its actions. */
+.shell-python-body {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.python-console {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.python-log {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-1);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: var(--font-caption);
+}
+
+.python-log-entry {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.python-log-input {
+  color: var(--text-2);
+}
+
+.python-log-stderr,
+.python-log-error {
+  color: var(--danger);
+}
+
+.python-log-info,
+.python-log-hint {
+  margin: 0;
+  color: var(--text-3);
+  font-family: inherit;
+}
+
+.python-log-message {
+  margin: 0;
+  color: var(--text-1);
+}
+
+.python-prompt {
+  max-height: 40%;
+  min-height: 2.5em;
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-2);
+  background: var(--surface-0);
+  font-size: var(--font-caption);
+}
+
+.python-prompt[hidden] {
+  display: none;
+}
+
+.python-prompt .cm-editor {
+  background: transparent;
+  color: var(--text-1);
+}
+
+.python-prompt .cm-editor.cm-focused {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+}
+
+.python-prompt .cm-content {
+  caret-color: var(--text-1);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.python-prompt .cm-placeholder {
+  color: var(--text-3);
+}
+
+.python-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
 /* In a short window, as at 400% zoom, a window's plot, table or embedding
    keeps some height rather than shrink to nothing, and the body scrolls. */
 @media (max-height: 599.98px) {

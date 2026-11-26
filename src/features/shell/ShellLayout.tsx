@@ -20,11 +20,13 @@ import type { TranscriptsSectionModel } from '../sections/transcriptsSectionMode
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
 import type { PlotsModel } from '../plots/usePlotsModel'
 import type { CellQueryModel } from '../query/useCellQueryModel'
+import type { PythonConsoleModel } from '../python/pythonConsoleModel'
 import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { EmbeddingWindow } from './EmbeddingWindow'
 import {
   EMBEDDING_WINDOW_SIZE,
   PLOTS_WINDOW_SIZE,
+  PYTHON_WINDOW_SIZE,
   narrowShownWindow,
   plotsWindowRightOffset,
   QUERY_WINDOW_SIZE,
@@ -34,6 +36,7 @@ import {
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
 import { PlotsWindow } from './PlotsWindow'
+import { PythonWindow } from './PythonWindow'
 import { QueryWindow } from './QueryWindow'
 import type { LayerPanelModel, LayerReveal } from './layerPanelModel'
 import type { ShellPanelState } from './shellLinkModel'
@@ -62,8 +65,10 @@ interface ShellLayoutProps {
   readonly plots?: PlotsModel | null
   // Null where the cells cannot be queried (images, Visium HD).
   readonly query?: CellQueryModel | null
-  // Open sections, the info drawer and the Embedding, Plots and Cell Query
-  // windows, which the link keeps (15.2-H, 22-D8, 23-D9).
+  // Null where the cells cannot be read from Python (as Cell Query).
+  readonly python?: PythonConsoleModel | null
+  // Open sections, the info drawer and the Embedding, Plots, Cell Query and
+  // Python windows, which the link keeps (15.2-H, 22-D8, 23-D9, 29-D11).
   readonly panels: ShellPanelState
   readonly onPanelsChange: (panels: ShellPanelState) => void
   // The open collection's datasets, under the canvas.
@@ -114,6 +119,7 @@ export function ShellLayout({
   embedding,
   plots = null,
   query = null,
+  python = null,
   panels,
   onPanelsChange,
   collection,
@@ -121,7 +127,7 @@ export function ShellLayout({
   storeStructure,
   children,
 }: ShellLayoutProps) {
-  const { infoOpen, embeddingOpen, plotsOpen, queryOpen } = panels
+  const { infoOpen, embeddingOpen, plotsOpen, queryOpen, pythonOpen } = panels
   const narrow = useNarrowScreen()
   // The drawers, cards, windows and layer sheet overlap where the canvas is
   // small. The one last opened, pressed or focused is drawn over the others
@@ -142,6 +148,7 @@ export function ShellLayout({
     embeddingOpen: false,
     plotsOpen: false,
     queryOpen: false,
+    pythonOpen: false,
   }
   const [embeddingWidth, setEmbeddingWidth] = useState(EMBEDDING_WINDOW_SIZE.width)
   const handleEmbeddingSizeChange = useCallback((size: { readonly width: number }) => {
@@ -155,6 +162,10 @@ export function ShellLayout({
   const handleQuerySizeChange = useCallback((size: { readonly width: number }) => {
     setQueryWidth(size.width)
   }, [])
+  const [pythonWidth, setPythonWidth] = useState(PYTHON_WINDOW_SIZE.width)
+  const handlePythonSizeChange = useCallback((size: { readonly width: number }) => {
+    setPythonWidth(size.width)
+  }, [])
   // The window last clicked or focused is drawn over the others, which
   // overlap once moved.
   const [frontWindow, setFrontWindow] = useState<PanelToggle['panel'] | null>(null)
@@ -166,6 +177,7 @@ export function ShellLayout({
           embedding: embedding !== null && embeddingOpen,
           plots: plots !== null && plotsOpen,
           query: query !== null && queryOpen,
+          python: python !== null && pythonOpen,
         },
         frontWindow,
       )
@@ -173,11 +185,21 @@ export function ShellLayout({
   const embeddingVisible = narrow ? narrowWindow === 'embedding' : embeddingOpen
   const plotsVisible = narrow ? narrowWindow === 'plots' : plotsOpen
   const queryVisible = narrow ? narrowWindow === 'query' : queryOpen
+  const pythonVisible = narrow ? narrowWindow === 'python' : pythonOpen
   const embeddingShown = embedding !== null && embeddingVisible
   const plotsShown = plots !== null && plotsVisible
   const plotsRightOffset = plotsWindowRightOffset(embeddingShown, embeddingWidth, narrow)
   const queryRightOffset = queryWindowRightOffset(
     [...(embeddingShown ? [embeddingWidth] : []), ...(plotsShown ? [plotsWidth] : [])],
+    narrow,
+  )
+  const queryShown = query !== null && queryVisible
+  const pythonRightOffset = queryWindowRightOffset(
+    [
+      ...(embeddingShown ? [embeddingWidth] : []),
+      ...(plotsShown ? [plotsWidth] : []),
+      ...(queryShown ? [queryWidth] : []),
+    ],
     narrow,
   )
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -246,6 +268,19 @@ export function ShellLayout({
   // to keep its size.
   const [queryMounted, setQueryMounted] = useState(queryOpen)
   if (queryOpen && !queryMounted) setQueryMounted(true)
+  const setPythonOpen = (open: boolean) => {
+    if (open && !pythonOpen) windowOpened('python')
+    onPanelsChange({
+      ...panels,
+      ...(open && narrow ? narrowClosed : {}),
+      ...(open && !pythonOpen ? drawerClosedFor(pythonRightOffset, pythonWidth) : {}),
+      pythonOpen: open,
+    })
+  }
+  // As Cell Query: mounted the first time it opens, then kept, so Python's
+  // log and prompt stay while it is closed.
+  const [pythonMounted, setPythonMounted] = useState(pythonOpen)
+  if (pythonOpen && !pythonMounted) setPythonMounted(true)
   useCanvasCornerSizes(canvasRef, narrow)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   // On narrow screens the panel is a bottom sheet that starts as a 56 px
@@ -304,6 +339,13 @@ export function ShellLayout({
   }
   if (query !== null) {
     panelToggles.push({ panel: 'query', open: queryVisible, onOpenChange: setQueryOpen })
+  }
+  if (python !== null) {
+    panelToggles.push({
+      panel: 'python',
+      open: pythonVisible,
+      onOpenChange: setPythonOpen,
+    })
   }
 
   // The same element whatever the width, so the sections keep their state.
@@ -423,6 +465,22 @@ export function ShellLayout({
                   setFrontWindow('query')
                 }}
                 onSizeChange={handleQuerySizeChange}
+              />
+            )}
+            {python === null || !pythonMounted ? null : (
+              <PythonWindow
+                python={python}
+                fullWidth={narrow}
+                rightOffset={pythonRightOffset}
+                open={pythonVisible}
+                onClose={() => {
+                  setPythonOpen(false)
+                }}
+                front={frontWindow === 'python'}
+                onActivate={() => {
+                  setFrontWindow('python')
+                }}
+                onSizeChange={handlePythonSizeChange}
               />
             )}
           </div>

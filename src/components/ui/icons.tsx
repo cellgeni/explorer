@@ -125,6 +125,14 @@ export function QueryIcon() {
   )
 }
 
+export function PythonIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 3h11v10h-11zM5 6.5l2 1.75L5 10M8.5 10.5H11" />
+    </svg>
+  )
+}
+
 export function PanelsIcon() {
   return (
     <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">

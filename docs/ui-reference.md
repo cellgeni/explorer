@@ -222,20 +222,20 @@ shown sections first (`setLinked`).
 
 ## Top Bar
 
-| Item           | What it does                                                                                                                                                                                    |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Explorer`     | The app name                                                                                                                                                                                    |
-| Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the [open-dataset form](#open-another-dataset), Recent and Examples ([start screen](#start-screen)) |
-| Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region                                                                           |
-| `Dataset info` | ⓘ: opens the [info drawer](#info-drawer). A badge counts load issues, and the name says so: "Dataset info (2 issues)"                                                                           |
-| Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; the active one is pressed. A tool that cannot be used says why                                                    |
-| Measure ▾      | While measuring: `Measure unit` (µm or px, starting at the mouse coordinate unit) and `Clear Measurement`                                                                                       |
-| Magic Lens ▾   | `Radius` (10–500 µm, step 10; 80 µm) and `Summarise View`, which scans the whole view into the Magic Lens card                                                                                  |
-| Panels         | `Embedding`, `Plots` and `Query` open and close the [Embedding](#embedding-panel), [Plots](#plots-panel) and [Cell Query](#cell-query-panel) panels; an open one is pressed. See below          |
-| `Screenshot`   | A camera: saves the spatial view as a PNG at 1×, 2×, 4× or 8× its size; see [Screenshot](#screenshot)                                                                                           |
-| `Share`        | Copies the link (the address, which holds the view) and says "Link copied"                                                                                                                      |
-| `Help`         | `?` opens and closes it. Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read, and links to the guides on GitHub (`HELP_LINKS`)  |
-| `Settings`     | See [Settings](#settings)                                                                                                                                                                       |
+| Item           | What it does                                                                                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Explorer`     | The app name                                                                                                                                                                                                   |
+| Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the [open-dataset form](#open-another-dataset), Recent and Examples ([start screen](#start-screen))                |
+| Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region                                                                                          |
+| `Dataset info` | ⓘ: opens the [info drawer](#info-drawer). A badge counts load issues, and the name says so: "Dataset info (2 issues)"                                                                                          |
+| Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; the active one is pressed. A tool that cannot be used says why                                                                   |
+| Measure ▾      | While measuring: `Measure unit` (µm or px, starting at the mouse coordinate unit) and `Clear Measurement`                                                                                                      |
+| Magic Lens ▾   | `Radius` (10–500 µm, step 10; 80 µm) and `Summarise View`, which scans the whole view into the Magic Lens card                                                                                                 |
+| Panels         | `Embedding`, `Plots`, `Query` and `Python` open and close the [Embedding](#embedding-panel), [Plots](#plots-panel), [Cell Query](#cell-query-panel) and [Python](#python-panel) panels; an open one is pressed |
+| `Screenshot`   | A camera: saves the spatial view as a PNG at 1×, 2×, 4× or 8× its size; see [Screenshot](#screenshot)                                                                                                          |
+| `Share`        | Copies the link (the address, which holds the view) and says "Link copied"                                                                                                                                     |
+| `Help`         | `?` opens and closes it. Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read, and links to the guides on GitHub (`HELP_LINKS`)                 |
+| `Settings`     | See [Settings](#settings)                                                                                                                                                                                      |
 
 **Panels** (the `Panels` group, `PanelToggles` in `TopBar.tsx`): the
 windows' toggles sit at the right of the bar, above where the windows open.
@@ -1269,6 +1269,45 @@ How pictures work ([plan 23-D10 to 23-D12](plan/phases/23-cell-query.md#product-
   all, and read nothing outside their field; the canvas and minimap keep
   their own.
 
+## Python Panel
+
+The Python panel is a console that reads the open dataset's cells as NumPy
+arrays ([plan 29](plan/phases/29-python-terminal.md), [Python
+API](python-api.md); `src/features/python/`,
+`src/features/shell/PythonWindow.tsx`). It opens from `Python` in the top bar
+and closes with `Close the Python console` or Esc. It sits at the top right of
+the canvas, 560 × 420 px at first, to the left of the Embedding, Plots and
+Cell Query panels when they are open; its grip resizes it from 360 × 260 px.
+It is offered where Cell Query is. Its status line gives the Python version,
+or what start-up is doing.
+
+Python (Pyodide, with NumPy only) starts the first time the panel opens, from
+the app's own `pyodide/` folder: about 9 MB the first time, then from the
+browser's cache. It runs in a worker and stays for the tab. The console
+needs WebAssembly JSPI, so Python can wait for the data it asks for; Chrome
+and Edge have it. In a browser without it the panel says the console needs
+Chrome or Edge and runs nothing.
+
+| Control      | Notes                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Output       | Inputs (`>>>`, `...`), what they print, the last expression's value and tracebacks, newest at the bottom. A polite live region that keeps the last 2,000 entries; a mask prints its count ("mask: 81,394 of 1,414,155 cells")                                                                                                                                                                      |
+| Python input | CodeMirror with Python highlighting. `Enter` runs an input that is complete and adds a line to one that is not; `Shift+Enter` always adds a line; `Up` on the first line and `Down` on the last walk the history (200 inputs, kept across visits); `Tab` completes names, attributes, column labels inside `cells["…"]` and gene names inside `cells.gene("…")`, or indents at the start of a line |
+| `Run`        | Runs the input, as `Enter` does                                                                                                                                                                                                                                                                                                                                                                    |
+| `Stop`       | Stops the input running. Where the page is cross-origin isolated (development and preview servers) it raises `KeyboardInterrupt` and keeps the variables; elsewhere, as on GitHub Pages, it starts a new Python and the output says the variables were lost                                                                                                                                        |
+| `Pick Point` | Arms one click on the canvas, which writes that point's `(x, y)` in µm into the input at the cursor; the canvas says so at its top. Pressed while armed; press again to cancel                                                                                                                                                                                                                     |
+| `Clear`      | Clears the output; the variables stay                                                                                                                                                                                                                                                                                                                                                              |
+| `Try Again`  | After start-up failed, starts Python again                                                                                                                                                                                                                                                                                                                                                         |
+
+- Columns, genes and positions are read the first time code uses them,
+  through the readers Cell Query and Plots use, and kept in Python until the
+  dataset or its cells change. Gene reads keep Plots' budget: above 32 MiB
+  `cells.gene` raises `ReadTooLarge` until called with `allow_large=True`, and
+  above 256 MiB it refuses.
+- `color`, `highlight`, `show` and `others` check their arguments but do not
+  draw yet: they raise an error saying drawing comes in the console's next
+  version (plan 29, M2).
+- Nothing about Python is in the link but `panel=python`.
+
 ## Canvas
 
 Whatever covers the 2D view takes it out of the Tab order and out of reach
@@ -1896,8 +1935,8 @@ stylesheet's narrow rules use too) the shell folds up:
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
   layer sheet's handle, and the zoom buttons, scale bar, legend and toasts
-  rise above them. The Embedding, Plots and Cell Query panels take the
-  canvas's width, one at a time: opening one closes the others and the
+  rise above them. The Embedding, Plots, Cell Query and Python panels take
+  the canvas's width, one at a time: opening one closes the others and the
   Dataset info drawer. Opening a window or a card folds the layer sheet. Where a link
   or a wider screen left several open, the one in front shows (else the first
   in the top bar's order), its button alone pressed; the others show again
@@ -1911,8 +1950,8 @@ tools' options) opens under its button but stays 8 px inside the window
 run off a side moves back onto the screen, and one taller than the room below
 the bar scrolls inside itself. Where that scrolling would hide its start, as
 Help's in a landscape phone, the popover itself takes focus and opens at the
-top; Tab goes on to its first control. The Embedding, Plots and Cell Query
-panels scroll their body when the window is too short for it, and in a
+top; Tab goes on to its first control. The Embedding, Plots, Cell Query and
+Python panels scroll their body when the window is too short for it, and in a
 window under 600 px high, as at 200% to 400% zoom, keep 120 px (160 px for
 the embedding) for their plot or table. The store structure drawer scrolls
 when the header, the tree's least height and the details do not fit.
@@ -1936,6 +1975,8 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 | Selection card                                 | Cells                   | Cells                                       | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
 | Plots panel                                    | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
 | Cell Query panel                               | ✓                       | ✓                                           | Spots         | —                 | ✓                | ✓                | ✓                | —                |
+| Python panel                                   | ✓                       | ✓                                           | Spots         | —                 | ✓                | ✓                | ✓                | —                |
+| Python `cells.gene(…, layer=)`                 | —                       | —                                           | —             | —                 | —                | ✓                | ✓ (with a table) | —                |
 | Bin size control                               | —                       | —                                           | —             | ✓                 | —                | —                | —                | —                |
 | SpatialData view options                       | —                       | —                                           | —             | —                 | —                | —                | ✓                | —                |
 | Visium image, library, and off-tissue controls | —                       | —                                           | ✓             | —                 | —                | —                | —                | —                |
@@ -2002,7 +2043,7 @@ anchor, reloads nothing: the address the page wrote is put back.
 | `view`                                                                                                    | Target x, y, z, zoom, for the dataset the link names, when it first opens. A dataset opened after it, or the same one loaded again, starts fitted to its extent                                                                                                                                                                                                                        |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens`                                                 |
-| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `segmentation`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open, even after others were opened and closed; only what the dataset has; `panel=info` is the drawer with every section closed                         |
+| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `segmentation`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots`, `query` and `python`, comma-separated. Left out while only the default section is open, even after others were opened and closed; only what the dataset has; `panel=info` is the drawer with every section closed               |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                                                                       |
 | `plot`                                                                                                    | The Plots panel's plot: `violin` or `heatmap`; left out for the dot plot                                                                                                                                                                                                                                                                                                               |
 | `query`                                                                                                   | Cell Query's conditions, `;`-separated: column, operator and values joined by `\|`; class IDs joined by `,`, or the bounds. `%`, `;`, `\|`, `,` in a part are `%25`, `%3B`, `%7C`, `%2C`. Image columns are `image:{mean or above}:{level}:[z{plane}:][t{threshold}:][r{radius}:]{channel}`, such as `image:above:2:t2188:Channel:0\|at-least\|40`, and are measured as the link opens |
