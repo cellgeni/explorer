@@ -598,7 +598,9 @@ The `Visium dataset` panel, in the info drawer's View options, shows the
 library, how many spots are shown, and the scale. Spots off the tissue are
 hidden at first (CELLxGENE files keep every array spot); tick
 `Show off-tissue spots` in Spots › Appearance to include them. A file with
-several sections has a `Library` select in the panel. Both reload the spots
+several sections has a `Library` select in the panel; its spots are matched
+to a library by an obs column named `library_id`, `library` or `sample`, or
+any label column whose values are all library names (`spaceranger_id`, say). Both reload the spots
 without downloading the file again, and keep your genes and colouring. The
 scale is fitted from the spot grid (spots are 100 µm apart), so distances and
 the scale bar are in micrometres even though Space Ranger only records pixels.
@@ -647,7 +649,8 @@ returns to the plane. See
 [3D Cell View](./ui-reference.md#3d-cell-view).
 
 A table that holds several sections, its rows tagged by an obs column such
-as `section`, `sample` or `library_id`, can be opened a section at a time:
+as `section`, `sample` or `library_id`, or a Visium table holding several
+libraries, can be opened a section at a time:
 the Cells section's `Open N Sections` link, or `collection=` with the
 table's URL, lists one dataset per section in the collection bar, to step
 through, show side by side, or stack in 3D when each section has a depth

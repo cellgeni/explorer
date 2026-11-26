@@ -137,15 +137,15 @@ microscope image (it is a Space Ranger input, not an output).
 
 On top of the [H5AD layout](./h5ad.md#hdf5-layout-read):
 
-| Path                                                                      | What is read                                                    |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `obsm/spatial` (or `X_spatial`)                                           | Spot centres in full-resolution pixels (integer or float)       |
-| `obs/array_row`, `obs/array_col`                                          | Array indices for the lattice fit (optional)                    |
-| `obs/in_tissue`                                                           | Spots with 0 are hidden (optional)                              |
-| `obs/library_id` (or `library`, `sample`)                                 | Which library each row belongs to (only with several libraries) |
-| `uns/spatial/<library>/scalefactors/*`                                    | Scalar datasets with the Space Ranger scale factor names        |
-| `uns/spatial/<library>/images/{hires,lowres}`                             | `(height, width)` or `(height, width, 3 or 4)` arrays           |
-| `uns/spatial/<library>/metadata/{chemistry_description,software_version}` | Shown in the info drawer's View options                         |
+| Path                                                                                                                | What is read                                                    |
+| ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `obsm/spatial` (or `X_spatial`)                                                                                     | Spot centres in full-resolution pixels (integer or float)       |
+| `obs/array_row`, `obs/array_col`                                                                                    | Array indices for the lattice fit (optional)                    |
+| `obs/in_tissue`                                                                                                     | Spots with 0 are hidden (optional)                              |
+| `obs/library_id` (or `library`, `sample`, or any label column holding only library names, such as `spaceranger_id`) | Which library each row belongs to (only with several libraries) |
+| `uns/spatial/<library>/scalefactors/*`                                                                              | Scalar datasets with the Space Ranger scale factor names        |
+| `uns/spatial/<library>/images/{hires,lowres}`                                                                       | `(height, width)` or `(height, width, 3 or 4)` arrays           |
+| `uns/spatial/<library>/metadata/{chemistry_description,software_version}`                                           | Shown in the info drawer's View options                         |
 
 ## Units And Coordinates
 
@@ -185,11 +185,14 @@ again:
   them.
 - **Library.** With several libraries in `uns/spatial` (concatenated
   samples), the default is the first library that an obs library column
-  (`library_id`, `library`, or `sample`) names; the `Library` select in the
+  (`library_id`, `library`, or `sample`, else a label column whose values are
+  all library names, such as `spaceranger_id`) names; the `Library` select in the
   info drawer's View options picks another. Rows of other libraries are
   hidden, and the library's own scale factors, units, and images are used.
   Without such a column every row is placed with the chosen library's scale
-  factors.
+  factors. With one, `collection=` on the file (or the Cells section's
+  `Open N Sections` link) lists one dataset per library; see
+  [Sections Of One Table](../dataset-collections.md#sections-of-one-table).
 
 Either change goes through the normal load (`handleVisiumViewChange` in
 `useVisiumControlsWorkflow`), which re-places spots, refits the view, and

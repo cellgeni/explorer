@@ -71,6 +71,26 @@ describe('loadDatasetCollection', () => {
     ])
   })
 
+  it("splits a Visium table by its library column, whatever it's named", async () => {
+    const sections = [
+      { value: 'lib-A', cellCount: 3 },
+      { value: 'lib-B', cellCount: 2 },
+    ]
+    const openDataset = vi.fn(async () => ({
+      sectionColumns: async () => [
+        { column: 'spaceranger_id', sectionCount: 2, library: true },
+      ],
+      sections: async () => sections,
+    }))
+    const collection = await loadDatasetCollection(FILE, { openDataset })
+
+    expect(collection.name).toBe('aligned.h5ad by spaceranger_id')
+    expect(collection.datasets.map((entry) => entry.url)).toEqual([
+      `${FILE}#obs.spaceranger_id=lib-A`,
+      `${FILE}#obs.spaceranger_id=lib-B`,
+    ])
+  })
+
   it('asks for a column when none is named like a section', async () => {
     const { openDataset } = table(['niche', 'cell_cluster'], [])
 

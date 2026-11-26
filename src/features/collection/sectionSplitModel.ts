@@ -13,7 +13,7 @@ import { collectionLinkHref } from '../start/datasetLibraryModel'
 // `sample`, `library_id`; see SECTION_COLUMN_NAMES), from the columns the
 // table lists as splitting it (`sectionColumns()`), whether labels or whole
 // numbers. Offered for a table opened whole, outside a collection; a Visium
-// table's sections are its libraries.
+// table's sections are its libraries, by its library column.
 export interface SectionSplitLink {
   readonly href: string
   readonly column: string
@@ -35,7 +35,7 @@ export function sectionSplitLink({
 }): SectionSplitLink | null {
   if (
     datasetUrl === null ||
-    platform !== 'h5ad' ||
+    (platform !== 'h5ad' && platform !== 'visium') ||
     inCollection ||
     parseAnnDataSectionUrl(datasetUrl) !== null
   ) {
@@ -43,8 +43,8 @@ export function sectionSplitLink({
   }
 
   const split = sectionColumns.find(
-    ({ column, sectionCount }) =>
-      isSectionColumnName(column) &&
+    ({ column, sectionCount, library }) =>
+      (library === true || (platform === 'h5ad' && isSectionColumnName(column))) &&
       sectionCount >= 2 &&
       sectionCount <= MAX_COLLECTION_DATASETS,
   )

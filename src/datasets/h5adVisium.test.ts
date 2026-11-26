@@ -6,8 +6,9 @@ const MICROMETERS_PER_PIXEL = 0.8
 
 interface VisiumH5adOptions {
   // Second library whose spots share the pixel space; rows name their
-  // library in obs `library_id`.
+  // library in obs `library_id`, or `libraryColumn`.
   readonly secondLibrary?: boolean
+  readonly libraryColumn?: string
   readonly arrayCoordinates?: boolean
   readonly coordinateKey?: string
   // obs `in_tissue`, with the first six spots off the tissue.
@@ -45,7 +46,7 @@ async function createVisiumH5ad(options: VisiumH5adOptions = {}): Promise<Uint8A
   const columns = [
     ...(options.inTissue === true ? ['in_tissue'] : []),
     ...(options.arrayCoordinates === false ? [] : ['array_row', 'array_col']),
-    ...(options.secondLibrary === true ? ['library_id'] : []),
+    ...(options.secondLibrary === true ? [options.libraryColumn ?? 'library_id'] : []),
   ]
   obs.create_attribute('_index', '_index')
   obs.create_attribute('column-order', columns)
@@ -73,7 +74,7 @@ async function createVisiumH5ad(options: VisiumH5adOptions = {}): Promise<Uint8A
   }
 
   if (options.secondLibrary === true) {
-    const library = obs.create_group('library_id')
+    const library = obs.create_group(options.libraryColumn ?? 'library_id')
     library.create_attribute('encoding-type', 'categorical')
     library.create_dataset({ name: 'categories', data: ['lib-A', 'lib-B'] })
     library.create_dataset({
@@ -288,6 +289,54 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     })
     expect(cells).toHaveLength(24)
     expect(await dataset.cellIds()).toHaveLength(36)
+  })
+
+  it('finds the library column by its values when it is named otherwise', async () => {
+    const dataset = datasetFor(
+      await createVisiumH5ad({ secondLibrary: true, libraryColumn: 'spaceranger_id' }),
+    )
+
+    expect(await dataset.overview()).toHaveLength(24)
+    await expect(dataset.sectionColumns()).resolves.toEqual([
+      { column: 'spaceranger_id', sectionCount: 2, library: true },
+    ])
+    await expect(dataset.sections('spaceranger_id')).resolves.toEqual([
+      { value: 'lib-A', cellCount: 24 },
+      { value: 'lib-B', cellCount: 12 },
+    ])
+    await expect(dataset.sections('array_row')).rejects.toThrow(
+      'splits into its libraries, by obs column "spaceranger_id"',
+    )
+  })
+
+  it('opens one library as a section, on its own image and scale', async () => {
+    const file = datasetFor(
+      await createVisiumH5ad({ secondLibrary: true, libraryColumn: 'spaceranger_id' }),
+    )
+    const section = new AnnDataH5adDataset({
+      url: file.url,
+      section: {
+        column: 'spaceranger_id',
+        value: 'lib-B',
+        holdFile: () => ({ dataset: Promise.resolve(file), release: () => undefined }),
+      },
+    })
+
+    await expect(section.visiumSummary()).resolves.toMatchObject({
+      libraryId: 'lib-B',
+      libraryIds: ['lib-B'],
+      spotCount: 12,
+    })
+    expect(await section.overview()).toHaveLength(12)
+    await expect(section.cellIds()).resolves.toEqual(
+      Array.from({ length: 12 }, (_value, index) => `spot-${(24 + index).toString()}`),
+    )
+  })
+
+  it('has no sections without a column naming each row’s library', async () => {
+    const dataset = datasetFor(await createVisiumH5ad())
+
+    await expect(dataset.sectionColumns()).resolves.toEqual([])
   })
 
   it('hides spots off the tissue but fits the scale on the whole array', async () => {
