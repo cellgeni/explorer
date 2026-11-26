@@ -143,9 +143,11 @@ see Known Gaps.
       file at a time. Zenodo's CORS-enabled `/api/records/…/content` URLs do
       not end in a name the app detects, so the files above open only through
       a manifest or a mirror.
-- [ ] A pyramidal OME-TIFF opens in about 24 rounds of sequential range
+- [x] A pyramidal OME-TIFF opens in about 24 rounds of sequential range
       requests (IFD, SubIFDs, tag arrays) before its first tile: 11 s at 300
-      ms per request for the Xenium file above.
+      ms per request for the Xenium file above. Closed by the optimization
+      pass's O9 (2026-11-26): see
+      [TIFF Opens In Fewer Rounds](optimization-pass.md#tiff-opens-in-fewer-rounds-2026-11-26).
 
 ## Closed Open Items
 

@@ -281,12 +281,14 @@ M2, requests:
     count the first one's requests after the switch.
   - Built in [#443](https://github.com/cellgeni/explorer/pull/443):
     [Cancelled Loads Stop Their Reads](#cancelled-loads-stop-their-reads-2026-11-26).
-- [ ] **O9. Fewer rounds when a TIFF opens.** (S–M) Read the decode tags
+- [x] **O9. Fewer rounds when a TIFF opens.** (S–M) Read the decode tags
       together, the tile offsets with their byte counts, and the SubIFDs
       with the description; open the other channel files as soon as the
       OME-XML names them.
   - A test counts reads on a SubIFD fixture.
   - Measure S7.
+  - Built in [#446](https://github.com/cellgeni/explorer/pull/446):
+    [TIFF Opens In Fewer Rounds](#tiff-opens-in-fewer-rounds-2026-11-26).
 - [ ] **O10. QPTIFF auto-contrast reads its tiles together.** (S) Fetch 4–6
       tiles at a time, passing `upcoming` so that neighbours share a
       request, and sample them in order, since each tile's first sample
@@ -888,6 +890,70 @@ image's header), Visium HD bin-size and LOD reads and the image-only
 opening, which have no controller, and the reads of a Space Ranger MEX
 matrix in its worker.
 
+## TIFF Opens In Fewer Rounds (2026-11-26)
+
+Task O9, [#446](https://github.com/cellgeni/explorer/pull/446). geotiff
+reads a TIFF's header, each IFD, and each tag value its IFD's read leaves
+out with a request of its own, and on main a pyramidal OME-TIFF made most
+of them one after another. Now
+([HTTP Requirements In Code](../../architecture.md#http-requirements-in-code)):
+
+- `openRemoteTiff` reads on from the header's read to 64 KiB, and from a
+  later shorter read to 16 KiB, and answers reads inside those from memory.
+  tifffile and Bio-Formats write an IFD's tag values right after it, so the
+  header's read takes in the first IFD with its tile offsets, byte counts and
+  SubIFD list (54 kB of them in the Xenium demo's focus images), and a
+  SubIFD's read its own (14 kB for their level 1).
+- Reads of one file sent together skip Chromium's HTTP cache, which lets one
+  request at a time use a URL's entry. On main a file's five SubIFDs, read
+  together, came back 300 ms apart.
+- An OME-TIFF's `.zchunkstore` lookups go out with its header read, Xenium's
+  `morphology_focus/` folder included, rather than after its description.
+- IFD 0's SubIFDs are read with its description, which Xenium writes at the
+  end of the file, unless a sidecar found by those lookups gives the tiles.
+- The decode tags are read together, and each level's tile offsets with
+  their byte counts.
+- The other files of a multi-file OME-TIFF open as soon as the first file's
+  OME-XML names them, rather than once it has opened (up to the four files
+  kept open).
+
+`openRounds.test.ts` counts the round trips with a fake host that answers
+the requests sent so far together: 2 rather than main's 4 for a SubIFD
+pyramid, 2 rather than 5 with the description at the end, 1 rather than 3
+with a sidecar, and 3 rather than 12–14 for a three-file OME-TIFF.
+
+Measured as S7 with `scripts/range-server.mjs --delay 300`: production
+builds of main (`cb953f68`) and the branch, alternating, three runs each, GPU
+drawing, until the image's status line shows; then on the hosted Xenium demo
+(its four focus files, 2.5–3.1 GB each, with a `.zchunkstore` at the dataset
+root), at 10–100 ms a request from the Sanger network.
+
+| Image                               | Main                                 | Branch                              |
+| ----------------------------------- | ------------------------------------ | ----------------------------------- |
+| S7, four-channel OME-TIFF, 300 ms   | 7.08–7.14 s, 52 requests, 5.5 MB     | 2.51–2.54 s, 40 requests, 6.0 MB    |
+| S7, reads before the first tile (1) | 43 in 13 rounds; first tile at 6.6 s | 31 in 4 rounds; first tile at 2.3 s |
+| Xenium demo focus image, hosted     | 1.02–1.54 s, 30 requests, 1.6 MB     | 0.57–0.58 s, 26 requests, 1.9 MB    |
+
+1. One run each, timed from the first request to the data host. On the
+   branch the 31 reads queue in Chromium, which sends six at a time over
+   HTTP/1.1, so the four rounds take seven waits of 300 ms.
+
+Main-thread time did not grow: 744–842 ms on main against 623–690 ms on the
+branch for S7, and 574–900 ms against 550–600 ms on the demo. The reads
+ahead add 0.5 MB on S7 and 0.3 MB on the demo; a first version read ahead
+64 KiB from every short read and added 1.5 MB on S7.
+
+Leads, not changed here:
+
+- The demo's sidecar is turned into each channel's tile index on the main
+  thread (`indexArrayChunks`, 120 ms). The branch's reads now finish before
+  it, so the first tile waits for it.
+- On both builds, each channel's smallest-level tiles are requested twice at
+  once after the image opens, and four tile reads are cancelled and sent
+  again 60 ms later. Their callers are not traced yet.
+- A file opened ahead of its channel's loader keeps reading after Cancel:
+  the header, and the description when it is not in the header's read.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1054,3 +1120,8 @@ Closed by the pass's tasks:
       shared first read and its requests
       ([#443](https://github.com/cellgeni/explorer/pull/443))
       ([Cancelled Loads Stop Their Reads](#cancelled-loads-stop-their-reads-2026-11-26)).
+- [x] A pyramidal OME-TIFF opened in about 24 rounds of sequential range
+      requests (O9, 2026-11-26, part of the SVS item). S7 opens in 2.5 s
+      rather than 7.1 s at 300 ms a request
+      ([#446](https://github.com/cellgeni/explorer/pull/446))
+      ([TIFF Opens In Fewer Rounds](#tiff-opens-in-fewer-rounds-2026-11-26)).
