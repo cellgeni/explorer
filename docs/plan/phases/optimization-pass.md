@@ -321,7 +321,7 @@ M2, requests:
     [#472](https://github.com/cellgeni/explorer/pull/472):
     [Parquet Range Reads Skip The HTTP Cache](#parquet-range-reads-skip-the-http-cache).
   - Read AnnData Zarr obs columns, and embeddings, a few at a time. Built
-    in [#NNN](https://github.com/cellgeni/explorer/pull/NNN):
+    in [#475](https://github.com/cellgeni/explorer/pull/475):
     [AnnData Zarr Arrays Read Together](#anndata-zarr-arrays-read-together).
     No embeddings are read one after another.
   - Read a Xenium gene's three arrays together, and read the next
@@ -1528,7 +1528,7 @@ fetch.
 
 ### AnnData Zarr Arrays Read Together
 
-[#NNN](https://github.com/cellgeni/explorer/pull/NNN). Opening an AnnData
+[#475](https://github.com/cellgeni/explorer/pull/475). Opening an AnnData
 table read its arrays one after another (`readH5adCacheFromGroup`,
 `h5adDataset.ts`):
 
