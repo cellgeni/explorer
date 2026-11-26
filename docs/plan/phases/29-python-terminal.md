@@ -227,7 +227,9 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
   answer with Pyodide's `run_sync`, which needs WebAssembly JSPI. The
   window checks for JSPI (`WebAssembly.Suspending`), not the browser's
   name, and without it says the console needs Chrome or Edge. Columns are
-  kept per dataset and dropped when the dataset changes.
+  kept per dataset and dropped when the dataset changes. Chrome and Edge
+  are what is supported and tested; a browser that has JSPI is let in. The
+  spike found `run_sync` working in WebKit 26.4 too.
 - **D6. Gene reads keep the Plots budget, and take `layer=`.** Up to
   32 MiB a read goes ahead. Up to 256 MiB, `cells.gene` raises
   `ReadTooLarge` with the size and the call to make:
@@ -243,7 +245,10 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
   fade today, `cellStyling.ts:43`), the default, or `hide`. With no colour
   layer, `others()` changes nothing. Hidden cells, by `others("hide")` or
   `show`, are not drawn, picked or hovered. Boundaries take the same
-  colours through `cellColor`.
+  colours through `cellColor`. A packed alpha of 0 does not hide a cell:
+  `cellPointLayerColors` (`cellPointStyle.ts:183`) sets every fill's alpha
+  from the layer's opacity and only checks for faded cells, so hiding needs
+  a flag of its own there.
 - **D8. Layers by name, later over earlier.** A cell takes the colour of
   the last colour layer that holds it. An unnamed call replaces `Result`.
   Layers live in the app, not in Python: a restart keeps them, and
@@ -308,8 +313,9 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
 
 ## Tasks
 
-- [ ] **A. Spike.** (M) A throwaway worker in a production build, on the
-      Xenium demo (1,414,155 cells):
+- [x] **A. Spike.** (M) Done 2026-11-26; see
+      [Spike Results](#spike-results-2026-11-26). A throwaway worker in a
+      production build, on the Xenium demo (1,414,155 cells):
   - the first load's bytes and time with NumPy, cold and from the HTTP
     cache, from a host without COOP and COEP;
   - `run_sync` with JSPI in a worker, in Chrome and Edge: a Python call
@@ -358,6 +364,82 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
       stays `{}`. A nightly `@live` test on the Xenium demo records the time
       to the first prompt and to the first coloured canvas.
 
+## Spike Results (2026-11-26)
+
+Task A. A throwaway page and worker, not committed, ran Pyodide 314.0.8
+(Python 3.14.2) with NumPy 2.4.6, loaded from the page's own host by
+`indexURL`. Synthetic columns of 1,414,155 cells over the Xenium demo's
+extent (10.9 × 18.8 mm) stood in for the demo's own, since only their size
+matters here. Headless Chromium on the Mac's GPU (Apple M3), Google Chrome
+and WebKit 26.4 from Playwright, served without COOP and COEP.
+
+**First load.** The files are the npm package's `pyodide.asm.wasm`
+(9.6 MB), `python_stdlib.zip` (2.5 MB), `pyodide.asm.mjs` (1.3 MB),
+`pyodide.mjs` and `pyodide-lock.json`, and NumPy's wheel (3.0 MB), fetched
+once from Pyodide's release by the name in the lock file and checked
+against its SHA-256. That is 16.5 MB, or 9.3 MB gzipped. GitHub Pages
+gzips `.wasm`: the deployed DuckDB and OpenJPEG `.wasm` files come with
+`content-encoding: gzip`. A server sending gzip and `max-age=600`, as Pages
+does, gave in Chrome:
+
+| Network            | Cold (to `import numpy` done) | From the HTTP cache |
+| ------------------ | ----------------------------- | ------------------- |
+| Local, no throttle | 1.4–1.8 s                     | 1.3 s               |
+| 100 Mbps, 40 ms    | 2.3 s                         | 1.4 s               |
+| 40 Mbps, 40 ms     | 3.4 s                         | 1.3 s               |
+| 10 Mbps, 40 ms     | 9.1 s                         | 1.3 s               |
+
+- From the cache, about 0.9 s goes to starting Pyodide (compiling the
+  `.wasm` and unpacking the standard library), 0.15 s to loading NumPy and
+  0.23 s to `import numpy`. The heap starts at 45 MB.
+
+**`run_sync` with JSPI.** It works in a module worker in Chromium, Chrome
+and WebKit 26.4, from code run with `runPythonAsync`; no `callPromising`
+is needed. `can_run_sync()` is true at the top level and inside functions
+called from a loop, so a name known only at run time blocks as a literal
+one does.
+
+**Columns into NumPy.** The worker asks, the main thread answers with a
+transferred typed array, and Python copies it into a NumPy array with
+`JsBuffer.assign_to` (one copy):
+
+| Column                 | Round trip | Copy into NumPy |
+| ---------------------- | ---------- | --------------- |
+| x, `Float64Array`      | 3.1–3.8 ms | 1.5–2.4 ms      |
+| y, `Float64Array`      | 3.1 ms     | 2.2–2.5 ms      |
+| a gene, `Float32Array` | 0.9–2.5 ms | 0.2–0.5 ms      |
+
+- The first request, written as in [the API](#the-two-requests-written-in-it)
+  (`hypot`, two comparisons, `&`), took 30–35 ms in NumPy.
+- After x, y, four gene reads, the distances, the masks and the ROI mask,
+  the heap was 113 MB.
+
+**ROI test.** A copy of `roiSelectionContains` over every cell for a
+200-vertex star lasso about 4 mm across, on the main thread: 83–90 ms,
+81,394 cells inside. Python had the mask 84–90 ms after asking.
+
+**Layers back to the app.** A mask (1.4 MB) and a `float32` value per cell
+(5.7 MB) copied out of the heap with `to_js(memoryview(…)).slice()` and
+transferred: 3.7 ms.
+
+**Overlay and redraw.** In Node, on 1.4 million cells,
+`packCellPointColors` took 7–8 ms, an overlay pass over its result (a flag
+and an RGBA per row, the other cells faded) 4–6 ms, and
+`cellPointLayerColors` 9 ms. On the Xenium demo itself (production build,
+GPU WebGL, 1280 × 800), switching `Transcript count` to `Cell area` was
+one main-thread task of 290–340 ms, and back 94 ms. Packing is a small
+part of that; the rest is the existing React and deck.gl update. A layer
+should cost about a colour mode switch, once per input run (D8).
+
+What changed in the plan:
+
+- **D5** lets in any browser with JSPI, as WebKit 26.4 had it; Chrome and
+  Edge stay the supported pair. Firefox was not tried.
+- **D7** notes that hiding needs a flag in `cellPointLayerColors`, since a
+  packed alpha of 0 does not hide a cell.
+- NumPy's wheel is not in the npm package. Task D's build step fetches it
+  by the lock file's name and checks the SHA-256, or the repo keeps it.
+
 ## Order And Size
 
 | Milestone             | Contents      | Size     |
@@ -402,8 +484,8 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
 | Risk                                    | Effect                                                | Mitigation                                                                  |
 | --------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
 | Pyodide's first load is large           | Seconds before the first prompt on a slow link        | Loaded only when the window opens, with progress; cached by the browser; A  |
-| `run_sync` misbehaves in a worker       | Data on demand (D5) does not work                     | Checked first in A; else names read before the run, from the syntax tree    |
-| Firefox and Safari users                | No console                                            | The window says so (D5); revisit when they ship JSPI                        |
+| `run_sync` misbehaves in a worker       | Data on demand (D5) does not work                     | A: works in a module worker in Chromium, Chrome and WebKit 26.4             |
+| Browsers without JSPI                   | No console                                            | The window says so (D5); any browser with JSPI is let in                    |
 | No `SharedArrayBuffer` on GitHub Pages  | `Stop` loses the variables                            | D2 says so in the log; layers stay                                          |
 | A gene read is large                    | Minutes of reading, or a refused read                 | D6, the Plots budget, with the size in the error                            |
 | Columns copied into Python use memory   | A tab with many genes on 1.4 M cells grows by 100s MB | float32 genes; columns per dataset, dropped on a dataset change             |
