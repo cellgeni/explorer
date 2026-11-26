@@ -58,16 +58,10 @@ export async function loadZchunkStorePyramidOptions(
   tiffUrl: string,
   options: LoadZchunkStoreOptions = {},
 ): Promise<ZchunkStorePyramidOptions | null> {
-  // Derived locations the dataset folder's listing rules out are not
-  // requested; a sidecar the manifest names always is.
-  const candidates =
-    options.zchunkStoreUrl === undefined
-      ? zchunkStoreCandidateUrls(tiffUrl, {
-          multiFile: options.multiFile === true,
-        }).filter((url) => !isListedAsMissing(url))
-      : [options.zchunkStoreUrl]
   // All candidates are requested at once; the first in order that exists wins.
-  const lookups = candidates.map((url) => cachedSidecarJson(url, options.fetcher))
+  const lookups = zchunkStoreLookupUrls(tiffUrl, options).map((url) =>
+    cachedSidecarJson(url, options.fetcher),
+  )
 
   for (const lookup of lookups) {
     const json = await abortable(lookup, options.signal)
@@ -78,6 +72,55 @@ export async function loadZchunkStorePyramidOptions(
   }
 
   return null
+}
+
+// Starts the lookups loadZchunkStorePyramidOptions makes, so that they run
+// while the TIFF's header is read rather than after it.
+export function prefetchZchunkStores(
+  tiffUrl: string,
+  options: Pick<LoadZchunkStoreOptions, 'zchunkStoreUrl' | 'multiFile'> = {},
+): void {
+  const multiFile = options.multiFile ?? isXeniumFocusFile(tiffUrl)
+
+  for (const url of zchunkStoreLookupUrls(tiffUrl, { ...options, multiFile })) {
+    void cachedSidecarJson(url, undefined)
+  }
+}
+
+// Whether a sidecar exists at one of the locations prefetchZchunkStores
+// looks up, from the same requests.
+export async function hasPrefetchedZchunkStore(
+  tiffUrl: string,
+  options: Pick<LoadZchunkStoreOptions, 'zchunkStoreUrl'> = {},
+): Promise<boolean> {
+  const found = await Promise.all(
+    zchunkStoreLookupUrls(tiffUrl, {
+      ...options,
+      multiFile: isXeniumFocusFile(tiffUrl),
+    }).map((url) => cachedSidecarJson(url, undefined)),
+  )
+
+  return found.some((json) => json !== null)
+}
+
+// Xenium stores each channel of its focus image in a file of its own in
+// morphology_focus/, so that folder's sidecar is looked up before the
+// OME-XML says the file is one of several.
+function isXeniumFocusFile(tiffUrl: string): boolean {
+  return new URL(tiffUrl).pathname.includes('/morphology_focus/')
+}
+
+// Derived locations the dataset folder's listing rules out are not
+// requested; a sidecar the manifest names always is.
+function zchunkStoreLookupUrls(
+  tiffUrl: string,
+  options: Pick<LoadZchunkStoreOptions, 'zchunkStoreUrl' | 'multiFile'>,
+): readonly string[] {
+  return options.zchunkStoreUrl === undefined
+    ? zchunkStoreCandidateUrls(tiffUrl, {
+        multiFile: options.multiFile === true,
+      }).filter((url) => !isListedAsMissing(url))
+    : [options.zchunkStoreUrl]
 }
 
 export function zchunkStoreCandidateUrls(

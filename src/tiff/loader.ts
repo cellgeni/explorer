@@ -13,7 +13,11 @@ import {
 } from '../data/persistentByteRangeCache'
 import { imagePixels, micrometers, tilesForBboxOnAxes } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
-import { loadZchunkStorePyramidOptions } from './zchunkStore'
+import {
+  hasPrefetchedZchunkStore,
+  loadZchunkStorePyramidOptions,
+  prefetchZchunkStores,
+} from './zchunkStore'
 import { openRemoteTiff, remoteTiffVersion } from './remoteTiff'
 import { assertSquareOmePixels, parseOmeTiffMetadata } from './omeMetadata'
 import {
@@ -276,6 +280,13 @@ export async function openTiff(
     return openNdpi(url, selection, signal, onFallback, options)
   }
 
+  // An OME-TIFF's sidecar lookups go out with its header read rather than
+  // after its description. Other TIFFs are looked up only once they turn out
+  // not to be QPTIFF, SVS or NDPI files, which never have one.
+  if (isOmeTiffUrl(selection.sourceUrl) || options.zchunkStoreUrl !== undefined) {
+    prefetchZchunkStores(selection.sourceUrl, { zchunkStoreUrl: options.zchunkStoreUrl })
+  }
+
   const file = openTiffFile(selection.sourceUrl)
 
   try {
@@ -303,6 +314,22 @@ async function openTiffImage(
 ): Promise<TiffPyramidLoader> {
   const metadataImage = await tiff.getImage(0)
   const metadataDirectory = metadataImage.getFileDirectory()
+  // IFD 0's SubIFDs, its pyramid levels in an OME-TIFF, are read with its
+  // description, which Xenium writes at the end of the file. Not when a
+  // sidecar gives their tiles instead.
+  const metadataLevels =
+    (selection.ifdIndex ?? 0) === 0
+      ? readSubIfdDirectories(
+          tiff,
+          metadataDirectory,
+          options.bytes === undefined
+            ? hasPrefetchedZchunkStore(selection.sourceUrl, {
+                zchunkStoreUrl: options.zchunkStoreUrl,
+              })
+            : Promise.resolve(false),
+        )
+      : undefined
+  void metadataLevels?.catch(() => undefined)
   const description = await readOptionalStringTag(metadataDirectory, 'ImageDescription')
 
   // A QPTIFF or SVS saved under a plain TIFF name.
@@ -338,6 +365,13 @@ async function openTiffImage(
   }
 
   const omeMetadata = parseOmeTiffMetadata(description)
+  if (options.bytes === undefined) {
+    openOtherChannelFiles(
+      selection.sourceUrl,
+      omeMetadata.channels,
+      options.zchunkStoreUrl,
+    )
+  }
   // A pixel size given with the image is square by definition.
   if (options.micrometersPerPixel === undefined) {
     assertSquareOmePixels(description)
@@ -424,10 +458,11 @@ async function openTiffImage(
   const levelMeta = new Map<number, TiffLevelMeta>()
   const stripLevels = new Map<number, TiffStripLevel>()
   const retiledLevels = new Map<number, TiffRetiledLevel>()
-  const subIfds = await readNumberArrayTag(firstDirectory, 'SubIFDs')
   const levelDirectories = [
     firstDirectory,
-    ...(await Promise.all(subIfds.map((offset) => parseFileDirectoryAt(tiff, offset)))),
+    ...((await metadataLevels) ??
+      (await readSubIfdDirectories(tiff, firstDirectory, Promise.resolve(false))) ??
+      []),
   ]
   const levelStripTags = await Promise.all(levelDirectories.map(readStripTags))
   // Tiled levels keep their tiles; stripped levels are cut into tiles of
@@ -1905,6 +1940,70 @@ function isMultiFileOmeTiff(url: string, channels: readonly TiffChannelInfo[]): 
   )
 }
 
+// The IFDs of a directory's SubIFDs, read together; undefined when `skip`
+// says not to read them.
+async function readSubIfdDirectories(
+  tiff: GeoTIFF,
+  directory: ImageFileDirectory,
+  skip: Promise<boolean>,
+): Promise<readonly ImageFileDirectory[] | undefined> {
+  const offsets = await readNumberArrayTag(directory, 'SubIFDs')
+
+  if (offsets.length === 0) {
+    return []
+  }
+
+  if (await skip) {
+    return undefined
+  }
+
+  return Promise.all(offsets.map((offset) => parseFileDirectoryAt(tiff, offset)))
+}
+
+function isOmeTiffUrl(url: string): boolean {
+  return /\.ome\.tiff?$/i.test(new URL(url).pathname)
+}
+
+// The other files of a multi-file OME-TIFF are opened as soon as this one's
+// OME-XML names them, so that their channels' loaders find them read. Not
+// when there are more than the open-file limit, which would close files that
+// are still opening.
+function openOtherChannelFiles(
+  sourceUrl: string,
+  channels: readonly TiffChannelInfo[],
+  zchunkStoreUrl: string | undefined,
+): void {
+  const fileName = decodedFileName(sourceUrl)
+  const otherUrls = [
+    ...new Set(
+      channels.flatMap((channel) =>
+        channel.fileName === undefined || channel.fileName === fileName
+          ? []
+          : [new URL(channel.fileName, sourceUrl).toString()],
+      ),
+    ),
+  ]
+
+  if (otherUrls.length === 0 || otherUrls.length >= OPEN_TIFF_FILE_LIMIT) {
+    return
+  }
+
+  for (const url of otherUrls) {
+    if (openTiffFiles.has(url)) {
+      continue
+    }
+
+    prefetchZchunkStores(url, { zchunkStoreUrl, multiFile: true })
+    const file = openTiffFile(url)
+    // A failed read is not kept for the channel's own open to meet.
+    file
+      .then((tiff) => tiff.getImage(0))
+      .catch(() => {
+        forgetTiffFile(url, file)
+      })
+  }
+}
+
 function channelIndexForUrl(url: string, channels: readonly TiffChannelInfo[]): number {
   const fileName = decodedFileName(url)
 
@@ -2013,20 +2112,27 @@ async function readTileDecodeMetadata(
   tiff: GeoTIFF,
   directory: ImageFileDirectory,
 ): Promise<TiffTileDecodeMetadata> {
-  const compression = await readOptionalNumberTag(directory, 'Compression')
-  const bitsPerSample = await readNumberArrayTag(directory, 'BitsPerSample')
-  const samplesPerPixel = await readOptionalNumberTag(directory, 'SamplesPerPixel')
-  const predictor = await readOptionalNumberTag(directory, 'Predictor')
-  const planarConfiguration = await readOptionalNumberTag(
-    directory,
-    'PlanarConfiguration',
-  )
-  const photometric = await readOptionalNumberTag(directory, 'PhotometricInterpretation')
-  const jpegTables = await readOptionalByteArrayTag(directory, 'JPEGTables')
-  // Only label images use it, so an odd value never stops an image opening.
-  const [sampleFormat] = await readNumberArrayTag(directory, 'SampleFormat').catch(
-    () => [],
-  )
+  // Read together: each value stored outside the IFD is a request of its own.
+  const [
+    compression,
+    bitsPerSample,
+    samplesPerPixel,
+    predictor,
+    planarConfiguration,
+    photometric,
+    jpegTables,
+    [sampleFormat],
+  ] = await Promise.all([
+    readOptionalNumberTag(directory, 'Compression'),
+    readNumberArrayTag(directory, 'BitsPerSample'),
+    readOptionalNumberTag(directory, 'SamplesPerPixel'),
+    readOptionalNumberTag(directory, 'Predictor'),
+    readOptionalNumberTag(directory, 'PlanarConfiguration'),
+    readOptionalNumberTag(directory, 'PhotometricInterpretation'),
+    readOptionalByteArrayTag(directory, 'JPEGTables'),
+    // Only label images use it, so an odd value never stops an image opening.
+    readNumberArrayTag(directory, 'SampleFormat').catch((): readonly number[] => []),
+  ])
 
   return {
     // TIFF's default: a file without the tag is uncompressed.
@@ -3116,8 +3222,10 @@ interface IndexLevelOptions {
 }
 
 async function indexLevel(options: IndexLevelOptions): Promise<void> {
-  const offsets = await readNumberArrayTag(options.directory, 'TileOffsets')
-  const byteCounts = await readNumberArrayTag(options.directory, 'TileByteCounts')
+  const [offsets, byteCounts] = await Promise.all([
+    readNumberArrayTag(options.directory, 'TileOffsets'),
+    readNumberArrayTag(options.directory, 'TileByteCounts'),
+  ])
   const nCols = Math.ceil(options.width / options.tileWidth)
   const nRows = Math.ceil(options.height / options.tileHeight)
   const tileCount = nCols * nRows

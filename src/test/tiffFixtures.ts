@@ -215,28 +215,249 @@ export function stubRangeFetch(url: string, file: Uint8Array) {
       return new Response(null, { status: 404 })
     }
 
-    const range = new Headers(init?.headers).get('Range')
-    const match = range?.match(/^bytes=(\d+)-(\d+)$/)
-
-    if (match === null || match === undefined) {
-      return new Response(file.slice(), { status: 200 })
-    }
-
-    const start = Number(match[1])
-    const end = Math.min(Number(match[2]), file.byteLength - 1)
-
-    if (start >= file.byteLength) {
-      return new Response(null, { status: 416 })
-    }
-
-    return new Response(file.slice(start, end + 1), {
-      status: 206,
-      headers: {
-        'Content-Range': `bytes ${start}-${end}/${file.byteLength}`,
-      },
-    })
+    return rangeResponse(file, init)
   })
 
   vi.stubGlobal('fetch', fetcher)
   return fetcher
+}
+
+export interface TestTiffPyramidImage {
+  readonly width: number
+  readonly height: number
+  readonly tile: number
+  readonly description?: string
+  // Every 16-bit sample of tile N holds value(N).
+  readonly value: (tileIndex: number) => number
+  // Pyramid levels, stored as this image's SubIFDs.
+  readonly subIfds?: readonly TestTiffPyramidImage[]
+}
+
+// A little-endian classic TIFF laid out as tifffile writes one: each IFD,
+// then its tag values, then its uncompressed 16-bit tiles, with an image's
+// SubIFDs after its tiles. `ifdOffsets` lists the main chain's IFDs.
+// `descriptionsAtEnd` stores the descriptions after everything else, as
+// Xenium's focus images do.
+export function buildIfdFirstTiff(
+  images: readonly TestTiffPyramidImage[],
+  { descriptionsAtEnd = false } = {},
+): TestTiffFile {
+  const bytes: number[] = [0x49, 0x49, 42, 0, 0, 0, 0, 0]
+  const ifdOffsets: number[] = []
+
+  const append = (data: readonly number[]): number => {
+    if (bytes.length % 2 === 1) {
+      bytes.push(0)
+    }
+
+    const offset = bytes.length
+
+    for (const byte of data) {
+      bytes.push(byte)
+    }
+
+    return offset
+  }
+  const patch = (offset: number, data: readonly number[]) => {
+    data.forEach((byte, index) => {
+      bytes[offset + index] = byte
+    })
+  }
+  // Descriptions written last: where to patch in each one's offset.
+  const deferred: { readonly entryOffset: number; readonly values: readonly number[] }[] =
+    []
+
+  // Writes the image and returns its IFD's offset.
+  const writeImage = (image: TestTiffPyramidImage, subfileType: number): number => {
+    const nCols = Math.ceil(image.width / image.tile)
+    const tileCount = nCols * Math.ceil(image.height / image.tile)
+    const tileByteCount = image.tile * image.tile * 2
+    const subIfdCount = image.subIfds?.length ?? 0
+    // [tag, type, count, values]; tile offsets and SubIFDs are patched in.
+    const entries: (readonly [number, number, number, readonly number[]])[] = [
+      [254, LONG, 1, u32(subfileType)],
+      [256, LONG, 1, u32(image.width)],
+      [257, LONG, 1, u32(image.height)],
+      [258, SHORT, 1, u16(16)],
+      [259, SHORT, 1, u16(1)],
+      [262, SHORT, 1, u16(1)],
+      ...(image.description === undefined
+        ? []
+        : [
+            [
+              270,
+              ASCII,
+              new TextEncoder().encode(image.description).length + 1,
+              [...new TextEncoder().encode(image.description), 0],
+            ] as const,
+          ]),
+      [277, SHORT, 1, u16(1)],
+      [284, SHORT, 1, u16(1)],
+      [322, LONG, 1, u32(image.tile)],
+      [323, LONG, 1, u32(image.tile)],
+      [324, LONG, tileCount, Array.from({ length: tileCount * 4 }, () => 0)],
+      [
+        325,
+        LONG,
+        tileCount,
+        Array.from({ length: tileCount }, () => u32(tileByteCount)).flat(),
+      ],
+      ...(subIfdCount === 0
+        ? []
+        : [
+            [
+              330,
+              LONG,
+              subIfdCount,
+              Array.from({ length: subIfdCount * 4 }, () => 0),
+            ] as const,
+          ]),
+    ]
+    const ifdOffset = append(Array.from({ length: 2 + entries.length * 12 + 4 }, () => 0))
+    const valueOffsets = new Map<number, number>()
+
+    patch(ifdOffset, u16(entries.length))
+    entries.forEach(([tag, type, count, values], index) => {
+      const entryOffset = ifdOffset + 2 + index * 12
+
+      if (tag === 270 && descriptionsAtEnd) {
+        patch(entryOffset, [...u16(tag), ...u16(type), ...u32(count)])
+        deferred.push({ entryOffset, values })
+        return
+      }
+
+      const valueOffset = values.length <= 4 ? entryOffset + 8 : append(values)
+
+      patch(entryOffset, [...u16(tag), ...u16(type), ...u32(count)])
+      patch(
+        entryOffset + 8,
+        values.length <= 4 ? [...values, 0, 0, 0, 0].slice(0, 4) : u32(valueOffset),
+      )
+      valueOffsets.set(tag, valueOffset)
+    })
+
+    const tileOffsets = Array.from({ length: tileCount }, (_, tileIndex) =>
+      append(
+        Array.from({ length: image.tile * image.tile }, () =>
+          u16(image.value(tileIndex)),
+        ).flat(),
+      ),
+    )
+    patch(valueOffsets.get(324) ?? 0, tileOffsets.flatMap(u32))
+
+    const subIfdOffsets = (image.subIfds ?? []).map((level) => writeImage(level, 1))
+    if (subIfdCount > 0) {
+      patch(valueOffsets.get(330) ?? 0, subIfdOffsets.flatMap(u32))
+    }
+
+    return ifdOffset
+  }
+
+  let nextIfdPointer = 4
+
+  for (const image of images) {
+    const ifdOffset = writeImage(image, 0)
+    const entryCount = (bytes[ifdOffset] ?? 0) + ((bytes[ifdOffset + 1] ?? 0) << 8)
+
+    patch(nextIfdPointer, u32(ifdOffset))
+    ifdOffsets.push(ifdOffset)
+    nextIfdPointer = ifdOffset + 2 + entryCount * 12
+  }
+
+  for (const { entryOffset, values } of deferred) {
+    patch(entryOffset + 8, u32(append(values)))
+  }
+
+  return { bytes: Uint8Array.from(bytes), ifdOffsets }
+}
+
+// Serves `files` by URL as stubRangeFetch does, but holds every request
+// until `roundsUntil` answers the ones sent so far together, as one round
+// trip, and so counts the round trips an action takes.
+export function stubRangeFetchInRounds(files: Readonly<Record<string, Uint8Array>>) {
+  const waiting: (() => void)[] = []
+  const fetcher = vi.fn(
+    (input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((resolve) => {
+        const url = input instanceof Request ? input.url : String(input)
+        const file = files[url]
+
+        waiting.push(() => {
+          resolve(
+            file === undefined
+              ? new Response(null, { status: 404 })
+              : rangeResponse(file, init),
+          )
+        })
+      }),
+  )
+
+  vi.stubGlobal('fetch', fetcher)
+
+  // Requests sent in reply to an answer go out within a few turns of the
+  // event loop; a round ends once none has been sent for several turns.
+  const settle = async (isDone: () => boolean) => {
+    let quietTurns = 0
+    let seen = waiting.length
+
+    while (quietTurns < 8 && !isDone()) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      quietTurns = waiting.length === seen ? quietTurns + 1 : 0
+      seen = waiting.length
+    }
+  }
+
+  async function roundsUntil(action: Promise<unknown>): Promise<number> {
+    let done = false
+    const finished = action.then(
+      () => {
+        done = true
+      },
+      () => {
+        done = true
+      },
+    )
+    let rounds = 0
+
+    for (;;) {
+      await settle(() => done)
+
+      if (done) {
+        await finished
+        return rounds
+      }
+
+      if (waiting.length === 0) {
+        throw new Error('The action is waiting without a request in flight.')
+      }
+
+      rounds += 1
+      waiting.splice(0).forEach((answer) => {
+        answer()
+      })
+    }
+  }
+
+  return { fetcher, roundsUntil }
+}
+
+function rangeResponse(file: Uint8Array, init: RequestInit | undefined): Response {
+  const range = new Headers(init?.headers).get('Range')
+  const match = range?.match(/^bytes=(\d+)-(\d+)$/)
+
+  if (match === null || match === undefined) {
+    return new Response(file.slice(), { status: 200 })
+  }
+
+  const start = Number(match[1])
+  const end = Math.min(Number(match[2]), file.byteLength - 1)
+
+  if (start >= file.byteLength) {
+    return new Response(null, { status: 416 })
+  }
+
+  return new Response(file.slice(start, end + 1), {
+    status: 206,
+    headers: { 'Content-Range': `bytes ${start}-${end}/${file.byteLength}` },
+  })
 }
