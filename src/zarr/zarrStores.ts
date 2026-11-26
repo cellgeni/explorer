@@ -1,5 +1,7 @@
 import * as zarr from 'zarrita'
 import { fetchWithRetry } from '../data/fetchRetry'
+import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
+import { ZarrRangeCache } from './zarrRangeCache'
 
 export type ConsolidatedZarrStore = Required<zarr.AsyncReadable> & {
   contents(): { path: string; kind: 'array' | 'group' }[]
@@ -77,48 +79,70 @@ const CONSOLIDATED_METADATA_KEYS = [
 // surface as ZarrChunkUnavailableError.
 export function createZarrFetchStore(
   url: string,
-  options: { readonly fetcher?: typeof fetch } = {},
+  options: {
+    readonly fetcher?: typeof fetch
+    // Keeps range reads (sharded chunks and shard indexes) across loads.
+    readonly rangeCache?: PersistentByteRangeCache | null
+  } = {},
 ): zarr.FetchStore {
   const fetcher = options.fetcher
   const rootPath = new URL(url).pathname.replace(/\/+$/, '')
+  const rangeCache =
+    options.rangeCache === undefined || options.rangeCache === null
+      ? null
+      : new ZarrRangeCache(options.rangeCache)
+
+  const send = async (request: Request): Promise<Response> => {
+    // Range reads (sharded chunks and shard indexes) skip Chromium's HTTP
+    // cache, as TIFF tiles do. Two Range requests for the same bytes of a
+    // file at once, such as the 2D and 3D views reading one chunk, can get
+    // a truncated body from it, and Range requests to one file otherwise
+    // wait for each other.
+    const range = request.headers.get('Range')
+    const sent = range === null ? request : new Request(request, { cache: 'no-store' })
+    const response = await fetchWithRetry(
+      sent,
+      undefined,
+      fetcher === undefined ? {} : { fetcher },
+    )
+
+    // zarrita takes a 200 as the range asked for, so a host that ignores
+    // Range would hand it a whole shard as its index or one inner chunk.
+    if (range !== null && response.status === 200) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new Error(
+        `Zarr chunk ${storeKey(request.url, rootPath).replace(/^\/+/, '')} cannot be range-read. Expected HTTP 206 for Range: ${range}, received HTTP 200. Configure the host to honor byte-range GET requests for ${url}.`,
+      )
+    }
+
+    if (response.status !== 403) {
+      return response
+    }
+
+    if (isZarrMetadataKey(new URL(request.url).pathname)) {
+      return new Response(null, { status: 404, statusText: 'Not Found' })
+    }
+
+    throw new ZarrChunkUnavailableError(
+      storeKey(request.url, rootPath),
+      403,
+      'The object is missing or not publicly readable.',
+    )
+  }
 
   return new NameSafeFetchStore(url, {
     async fetch(request: Request) {
-      // Range reads (sharded chunks and shard indexes) skip Chromium's HTTP
-      // cache, as TIFF tiles do. Two Range requests for the same bytes of a
-      // file at once, such as the 2D and 3D views reading one chunk, can get
-      // a truncated body from it, and Range requests to one file otherwise
-      // wait for each other.
-      const range = request.headers.get('Range')
-      const sent = range === null ? request : new Request(request, { cache: 'no-store' })
-      const response = await fetchWithRetry(
-        sent,
-        undefined,
-        fetcher === undefined ? {} : { fetcher },
-      )
-
-      // zarrita takes a 200 as the range asked for, so a host that ignores
-      // Range would hand it a whole shard as its index or one inner chunk.
-      if (range !== null && response.status === 200) {
-        await response.body?.cancel().catch(() => undefined)
-        throw new Error(
-          `Zarr chunk ${storeKey(request.url, rootPath).replace(/^\/+/, '')} cannot be range-read. Expected HTTP 206 for Range: ${range}, received HTTP 200. Configure the host to honor byte-range GET requests for ${url}.`,
-        )
+      if (rangeCache === null) {
+        return send(request)
       }
 
-      if (response.status !== 403) {
+      if (request.method === 'HEAD') {
+        const response = await send(request)
+        rangeCache.noteHead(request.url, response)
         return response
       }
 
-      if (isZarrMetadataKey(new URL(request.url).pathname)) {
-        return new Response(null, { status: 404, statusText: 'Not Found' })
-      }
-
-      throw new ZarrChunkUnavailableError(
-        storeKey(request.url, rootPath),
-        403,
-        'The object is missing or not publicly readable.',
-      )
+      return rangeCache.fetchRange(request, send)
     },
   })
 }

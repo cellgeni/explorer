@@ -141,6 +141,11 @@ Other options, for testing how the viewer copes with a host that misbehaves:
 | `--stall <share>[:<ms>]`      | Hold this share of range requests for `<ms>` (default 90,000) before answering       |
 | `--stall-body <share>[:<ms>]` | Send the headers and half the body of this share of range requests, then wait `<ms>` |
 | `--seed <n>`                  | Seed the choice of failed and stalled requests (default 1), so a run can be repeated |
+| `--validators`                | Send `ETag` and `Last-Modified`, and answer a request that matches them with 304     |
+
+Without `--validators`, responses carry no validators, so Chromium's HTTP
+cache cannot reuse them: a second load reads everything again, which few real
+hosts cause.
 
 Only `GET` requests with a `Range` header fail or stall. `HEAD` probes and
 whole-file reads are always answered. A stalled request still completes, as

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import * as zarr from 'zarrita'
 import {
+  byteRangeCacheRecordId,
+  type PersistentByteRangeCache,
+} from '../data/persistentByteRangeCache'
+import {
   consolidatedZarrStore,
   createZarrFetchStore,
   storeWithSignal,
@@ -130,6 +134,85 @@ describe('Zarr stores', () => {
       [null, 'default'],
       ['bytes=8-11', 'no-store'],
     ])
+  })
+
+  it("keeps a shard's ranges across loads, versioned by the shard's HEAD (O14)", async () => {
+    const shard = Uint8Array.from({ length: 64 }, (_, index) => index)
+    const host = { etag: '"a"' }
+    const sent: string[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const request = input as Request
+      const range = request.headers.get('Range')
+      sent.push(`${request.method} ${range ?? ''}`.trim())
+      const headers = { ETag: host.etag, 'Content-Length': String(shard.length) }
+
+      if (request.method === 'HEAD') {
+        return new Response(null, { headers })
+      }
+
+      const [start, last] = (range ?? '').replace('bytes=', '').split('-').map(Number)
+      return new Response(shard.slice(start, (last ?? 0) + 1), { status: 206, headers })
+    }) as unknown as typeof fetch
+    const records = new Map<string, ArrayBuffer>()
+    const rangeCache: PersistentByteRangeCache = {
+      read: async (key) => records.get(byteRangeCacheRecordId(key)) ?? null,
+      write: async (key, bytes) => {
+        records.set(byteRangeCacheRecordId(key), new Uint8Array(bytes).slice().buffer)
+      },
+    }
+    // Each load opens the store again, as a new page would.
+    const load = async () => {
+      const store = createZarrFetchStore('https://example.test/data/store.zarr/', {
+        fetcher,
+        rangeCache,
+      })
+      const index = await store.getRange('/0/c/0/0', { suffixLength: 16 })
+      const chunk = await store.getRange('/0/c/0/0', { offset: 8, length: 4 })
+      await vi.waitFor(() => expect(records.size).toBeGreaterThanOrEqual(2))
+      return [Array.from(index ?? []), Array.from(chunk ?? [])]
+    }
+
+    const first = await load()
+    expect(sent.splice(0)).toEqual(['HEAD', 'GET bytes=48-63', 'GET bytes=8-11'])
+    expect(first).toEqual([Array.from(shard.slice(48)), [8, 9, 10, 11]])
+
+    // Only the HEAD is sent again.
+    await expect(load()).resolves.toEqual(first)
+    expect(sent.splice(0)).toEqual(['HEAD'])
+
+    // A shard written again at the same URL is read again.
+    host.etag = '"b"'
+    await expect(load()).resolves.toEqual(first)
+    expect(sent.splice(0)).toEqual(['HEAD', 'GET bytes=48-63', 'GET bytes=8-11'])
+  })
+
+  it('passes a range reply that is not 206 through, and caches no range without a HEAD', async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const request = input as Request
+
+      if (request.method === 'HEAD') {
+        return new Response(null, { headers: { 'Content-Length': '64' } })
+      }
+
+      // The shard went between its HEAD and its range.
+      return request.url.endsWith('/gone')
+        ? new Response(null, { status: 404 })
+        : new Response(new Uint8Array(4), { status: 206 })
+    }) as unknown as typeof fetch
+    const write = vi.fn(async () => {})
+    const store = createZarrFetchStore('https://example.test/data/store.zarr/', {
+      fetcher,
+      rangeCache: { read: async () => null, write },
+    })
+
+    await expect(store.getRange('/0/c/gone', { suffixLength: 16 })).resolves.toBe(
+      undefined,
+    )
+    await store.getRange('/0/c/0/0', { offset: 8, length: 4 })
+    await store.getRange('/0/c/0/0', { offset: 8, length: 4 })
+
+    expect(fetcher).toHaveBeenCalledTimes(4)
+    expect(write).not.toHaveBeenCalled()
   })
 
   it('reads a chunk again after a 503 or a body that breaks off (O7)', async () => {
