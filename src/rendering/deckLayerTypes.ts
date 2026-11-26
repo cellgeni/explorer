@@ -1,3 +1,4 @@
+import type { PythonHighlightRings } from './pythonHighlightLayer'
 import type { CellPointGeometry } from './cellPointStyle'
 import type { GridCellPacking } from './gridCellRenderer'
 import type { BinaryAttribute, Color, Position } from '@deck.gl/core'
@@ -169,6 +170,8 @@ export interface OverviewLayerOptions {
   // False leaves out the cell, boundary, gene expression and grid layers, so
   // hidden cells cannot be hovered or picked (15.2-C). Defaults to true.
   readonly cellsVisible?: boolean
+  // The Python console's highlights, ringed above the cells (plan 29-D10).
+  readonly pythonHighlights?: readonly PythonHighlightRings[]
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly cellBoundaryFillEnabled?: boolean

@@ -40,7 +40,11 @@ class FakeWorker implements PythonWorkerLike {
 
 function setup(
   data: PythonDataProvider = { answer: async () => ({ value: null }) },
-  options: { supported?: boolean; crossOriginIsolated?: boolean } = {},
+  options: {
+    supported?: boolean
+    crossOriginIsolated?: boolean
+    onRunEnd?: () => void
+  } = {},
 ) {
   const workers: FakeWorker[] = []
   const session = new PythonSession({
@@ -210,6 +214,37 @@ describe('PythonSession', () => {
     // The old worker's late messages are ignored.
     workers[0]!.emit({ type: 'ready', pythonVersion: 'old' })
     expect(session.getSnapshot().status).toBe('loading')
+  })
+
+  it('says when each input ends, finished or stopped, for the canvas to draw', async () => {
+    const onRunEnd = vi.fn()
+    const { session, workers } = setup(undefined, { onRunEnd })
+    session.start()
+    const worker = workers[0]!
+    worker.emit({ type: 'ready', pythonVersion: '3.14.2' })
+
+    const first = session.run('color(cells.x > 0, "green")')
+    await flush()
+    expect(onRunEnd).not.toHaveBeenCalled()
+    worker.emit({
+      type: 'done',
+      id: worker.last('run')!.id,
+      status: 'ok',
+      display: null,
+      error: null,
+    })
+    await first
+    expect(onRunEnd).toHaveBeenCalledTimes(1)
+
+    const second = session.run('while True: pass')
+    await flush()
+    session.stop()
+    await second
+    expect(onRunEnd).toHaveBeenCalledTimes(2)
+
+    // A restart with no input running ends none.
+    session.restart()
+    expect(onRunEnd).toHaveBeenCalledTimes(2)
   })
 
   it('interrupts where the page is isolated, and restarts if Python does not stop', async () => {

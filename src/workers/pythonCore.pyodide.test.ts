@@ -18,6 +18,8 @@ import {
   type PythonDataContext,
 } from '../features/python/pythonData'
 import { pythonDataError } from '../features/python/pythonSession'
+import { PythonLayerStore } from '../features/python/pythonLayerStore'
+import { composePythonOverlay } from '../rendering/pythonOverlay'
 import { createPythonCore, type PythonCore } from './pythonCore'
 import {
   parsePythonDataRequest,
@@ -292,6 +294,17 @@ describe.skipIf(!jspi)('the Python worker with Pyodide', () => {
     expect(green?.op === 'color' && Array.from(green.rows)).toEqual([1, 2, 4, 5, 7])
     expect(orange?.op === 'color' && Array.from(orange.rows)).toEqual([0, 1, 3, 4])
     expect(hide).toEqual({ op: 'others', mode: 'hide' })
+
+    // As the canvas draws them: the ROI picks over the ramp, the rest hidden.
+    const store = new PythonLayerStore()
+    for (const draw of harness.draws) store.apply(draw, 9)
+    store.flush()
+    const composed = composePythonOverlay(store.getSnapshot(), 9)
+    const drawnRows = [...Array(9).keys()].filter((row) => composed.hidden?.[row] === 0)
+    expect(drawnRows).toEqual([0, 1, 2, 3, 4, 5, 7])
+    // Orange (#ffa500) wins where both layers hold a cell.
+    expect(Array.from(composed.colors?.slice(4, 8) ?? [])).toEqual([255, 165, 0, 255])
+    expect(Array.from(composed.colors?.slice(8, 11) ?? [])).not.toEqual([255, 165, 0])
   })
 
   it('shows errors as Python raises them, with the app’s message', async () => {

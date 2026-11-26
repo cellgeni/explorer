@@ -85,6 +85,7 @@ import type { CellQueryImageChannel } from './features/query/cellQueryImage'
 import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQueryModel'
 import { useCellQueryModel } from './features/query/useCellQueryModel'
 import { CellColumnReader } from './features/query/cellColumnReader'
+import { pythonLegendSection } from './features/python/pythonLegend'
 import { usePythonConsole } from './features/python/usePythonConsole'
 import { openPlotsSource } from './features/plots/usePlotsWorkflow'
 import {
@@ -5438,6 +5439,23 @@ export function App({ dependencies }: AppProps = {}) {
     view: pythonView,
     selectedCellId: selectedCell?.id ?? null,
   })
+  // Python's layers head the legend: they colour over the rest (29-D8).
+  const canvasLegendSections = useMemo(() => {
+    const plural = platformAdapter.labels.embeddingElementPlural
+    const section = layerVisibility.cells
+      ? pythonLegendSection(pythonConsole.overlay, overviewCells.length, {
+          singular: plural.replace(/s$/, ''),
+          plural,
+        })
+      : null
+    return section === null ? legendSections : [section, ...legendSections]
+  }, [
+    layerVisibility.cells,
+    legendSections,
+    overviewCells.length,
+    platformAdapter.labels.embeddingElementPlural,
+    pythonConsole.overlay,
+  ])
 
   // The cards (plan 15.2-D): Selection, Cell, Transcript and
   // Magic Lens.
@@ -5669,13 +5687,15 @@ export function App({ dependencies }: AppProps = {}) {
               cellMetadataTrack={activeCellMetadataTrack}
               loadingTasks={loadingTasks}
               onCancelLoadingTask={handleCancelLoadingTask}
-              legendSections={legendSections}
+              legendSections={canvasLegendSections}
               legend={showLegend}
               showZoomLevel={debugMode}
               selectionHighlight={selectionHighlight}
               onClearSelection={handleClearSelection}
               onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
               onLegendShowMore={handleLegendShowMore}
+              pythonOverlay={pythonConsole.overlay}
+              onLegendPythonClear={pythonConsole.clearLegendItem}
               coordinateUnit={coordinateUnit}
               measurementEnabled={measurementEnabled}
               measurementUnit={measurementUnit}

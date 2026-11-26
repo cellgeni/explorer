@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type { Annotation } from '../../data/annotation'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { GeneValuesSource } from '../../data/geneValues'
@@ -6,6 +13,7 @@ import { GeneRowReader } from '../../data/geneValuesByRow'
 import { lazyIdLookup } from '../../data/lazyIdLookup'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
+import type { PythonOverlay } from '../../rendering/pythonOverlay'
 import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
 import { plotSetOptions, type PlotDatasetSet } from '../plots/plotsPanelModel'
 import { CellImageMeasurements } from '../query/cellImageMeasurements'
@@ -19,6 +27,7 @@ import {
   type PythonDataContext,
   type PythonGeneReader,
 } from './pythonData'
+import { PythonLayerStore } from './pythonLayerStore'
 import { PythonSession, pythonSupported } from './pythonSession'
 
 // The Python console's wiring in the app (plan 29): one session for the
@@ -54,6 +63,10 @@ export interface PythonConsoleWiring {
   readonly onPointPick:
     | ((point: { readonly x: number; readonly y: number }) => void)
     | undefined
+  // The layers Python drew, for the canvas and the legend.
+  readonly overlay: PythonOverlay
+  // The legend's clear button.
+  readonly clearLegendItem: (itemId: string) => void
 }
 
 const NO_IMAGE_MEASUREMENTS = new CellImageMeasurements().getSnapshot()
@@ -102,9 +115,11 @@ interface HeldGenes {
 class PythonContextSource {
   #input: PythonConsoleInput
   #genes: HeldGenes | null = null
+  readonly #layers: PythonLayerStore
 
-  constructor(input: PythonConsoleInput) {
+  constructor(input: PythonConsoleInput, layers: PythonLayerStore) {
     this.#input = input
+    this.#layers = layers
   }
 
   update(input: PythonConsoleInput): void {
@@ -112,7 +127,14 @@ class PythonContextSource {
   }
 
   context(): PythonDataContext {
-    return pythonContext(this.#input, () => this.#geneReader())
+    const { cells } = this.#input
+    return pythonContext(
+      this.#input,
+      () => this.#geneReader(),
+      (command) => {
+        this.#layers.apply(command, cells.length)
+      },
+    )
   }
 
   #geneReader(): Promise<PythonGeneReader | null> {
@@ -149,7 +171,9 @@ class PythonContextSource {
 }
 
 export function usePythonConsole(input: PythonConsoleInput): PythonConsoleWiring {
-  const [source] = useState(() => new PythonContextSource(input))
+  const [layers] = useState(() => new PythonLayerStore())
+  const overlay = useSyncExternalStore(layers.subscribe, layers.getSnapshot)
+  const [source] = useState(() => new PythonContextSource(input, layers))
   useEffect(() => {
     source.update(input)
   })
@@ -168,6 +192,9 @@ export function usePythonConsole(input: PythonConsoleInput): PythonConsoleWiring
         data: createPythonDataProvider(() => source.context()),
         supported: pythonSupported(),
         crossOriginIsolated: globalThis.crossOriginIsolated === true,
+        onRunEnd: () => {
+          layers.flush()
+        },
       }),
   )
   useEffect(
@@ -177,14 +204,16 @@ export function usePythonConsole(input: PythonConsoleInput): PythonConsoleWiring
     [session],
   )
 
-  // Another dataset, or other cells: Python's cached columns go.
+  // Another dataset, or other cells: Python's cached columns go, and so do
+  // the layers drawn on the old rows.
   const shownRows = useRef({ url: input.datasetUrl, cells: input.cells })
   useEffect(() => {
     const shown = shownRows.current
     if (shown.url === input.datasetUrl && shown.cells === input.cells) return
     shownRows.current = { url: input.datasetUrl, cells: input.cells }
     session.datasetChanged()
-  }, [input.cells, input.datasetUrl, session])
+    layers.reset()
+  }, [input.cells, input.datasetUrl, layers, session])
 
   const [picking, setPicking] = useState(false)
   const [pickedPoint, setPickedPoint] = useState<PythonPickedPoint | null>(null)
@@ -201,12 +230,25 @@ export function usePythonConsole(input: PythonConsoleInput): PythonConsoleWiring
     [input.available, pickedPoint, picking, session],
   )
 
-  return { model, onPointPick: picking && input.available ? onPointPick : undefined }
+  const clearLegendItem = useCallback(
+    (itemId: string) => {
+      layers.clearItem(itemId)
+    },
+    [layers],
+  )
+
+  return {
+    model,
+    onPointPick: picking && input.available ? onPointPick : undefined,
+    overlay,
+    clearLegendItem,
+  }
 }
 
 function pythonContext(
   input: PythonConsoleInput,
   genes: () => Promise<PythonGeneReader | null>,
+  draw: PythonDataContext['draw'],
 ): PythonDataContext {
   const { cells, datasetUrl } = input
   const cellColumns = cachedCellColumns(cells)
@@ -249,10 +291,6 @@ function pythonContext(
     features: input.features,
     view: input.view(),
     selectedCellId: input.selectedCellId,
-    draw: () => {
-      throw new Error(
-        'Drawing on the canvas comes in the next version of the console: color, highlight, show and others check their arguments but draw nothing yet.',
-      )
-    },
+    draw,
   }
 }

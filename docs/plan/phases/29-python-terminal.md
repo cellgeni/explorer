@@ -349,7 +349,7 @@ selection}` (`selectionListModel.ts:9`), named `ROI 1`, `ROI 2` and so on,
       `panel=python`, a `python` control area in `src/test/controlAreas.ts`
       and `tests/e2e/controls.ts`. Gate as Cell Query is gated (plan 23-D1),
       and on JSPI (D5).
-- [ ] **G. Layers on the canvas.** (L) D7, D8, D10. `PythonLayerStore`;
+- [x] **G. Layers on the canvas.** (L) PR #456. D7, D8, D10. `PythonLayerStore`;
       the overlay in `packCellPointColors` and the boundary styler; hidden
       cells left out of drawing, picking and hover; the ring layer;
       single-hue ramps and named colour maps; the legend section; screenshots
@@ -465,6 +465,45 @@ On the Xenium demo (1,414,155 cells, production build, Chromium) the prompt
 was ready about 1.2 s after the window opened with Pyodide in the browser's
 cache, and the columns, a class set and a gene read gave the expected
 values.
+
+## M2 Notes (2026-11-26)
+
+M2 (task G) is PR #456. What changed from the plan while building it:
+
+- The store is `PythonLayerStore` in `src/features/python/`; the overlay's
+  composition is in `src/rendering/pythonOverlay.ts`, so the canvas reads it
+  without importing the console. `PythonSession` calls `onRunEnd` when an
+  input ends, finished, failed or stopped, and the store publishes its draft
+  then.
+- Layers are keyed by kind and name, so an unnamed `color` and an unnamed
+  `highlight` in one input are both `Result` and both stay; `clear("name")`
+  removes both. A redrawn layer goes on top.
+- `clear()` starts over: no layers, no `show`, `others("fade")`.
+- Hidden cells take the GPU filter value outlined cells take, so they are
+  neither drawn nor picked; outlines of hidden cells are transparent, and
+  the pick handlers and `Enter` skip hidden cells, outlines and nuclei.
+  Nuclei of hidden cells are still drawn.
+- Python's colour layers suppress the gene expression overlay points, which
+  would otherwise draw over them; with `show` alone, only hidden cells lose
+  theirs.
+- Single-hue ramps start at the colour mixed 85% toward white; NaN draws as
+  the ramp's low end whatever `reverse` says. Colour maps are matplotlib's at
+  17 stops.
+- The legend's Python section comes first, and prints in screenshots as a
+  list plus a scale per ramp.
+- The App-level test of the plan is a hook test (`usePythonConsole.test.tsx`)
+  with a fake worker: a draw reaches the overlay once its input ends, and an
+  input that draws nothing leaves the overlay's identity unchanged.
+  `ViewerCore.test.tsx` checks that such an overlay does not render DeckGL.
+- Visium HD bins (grid cells) and the 3D cell view do not take the layers.
+
+On the Xenium demo (1,414,155 cells, production build, Chromium with GPU),
+colouring Cluster 3 (118,549 cells) took 2.2 s from `Enter` to the end of
+the input, most of it reading the class column; SNAP25 within 2 mm of the
+view's centre as a reversed green ramp (19,178 cells), a ring on 1,171 of
+them and `others("hide")` in one input took 0.8 s with the gene read;
+`show(...)` and `clear()` took about 160 ms each, redraw included. The
+legend listed each layer with its count, ramp range and clear buttons.
 
 ## Order And Size
 

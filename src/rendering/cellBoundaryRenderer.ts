@@ -270,7 +270,12 @@ export interface CellBoundaryStyleSource {
   // Gene expression by element ID: an outline with a matching ID takes its
   // colour, fill on or off.
   readonly expressionByElementId?: ReadonlyMap<string, OverviewCellDatum>
+  // Before both: a colour that wins over them, or 'hidden' for an outline
+  // not drawn (the Python console's layers, plan 29-D7).
+  readonly cellOverride?: (cellId: string) => Color | 'hidden' | undefined
 }
+
+const HIDDEN_BOUNDARY_COLOR: Color = [0, 0, 0, 0]
 
 // Colours by outline, read by ID for the outlines drawn, so they cost the
 // same however many cells express a gene or which part of the slide is in
@@ -279,11 +284,13 @@ export function createCellBoundaryLayerStyle(
   geometry: CellBoundaryLayerGeometry,
   source: CellBoundaryStyleSource,
 ): CellBoundaryLayerStyle {
-  const { cellColor, expressionByElementId } = source
+  const { cellColor, expressionByElementId, cellOverride } = source
 
   if (
     geometry.boundaryCellIds.size === 0 ||
-    (cellColor === undefined && (expressionByElementId?.size ?? 0) === 0)
+    (cellColor === undefined &&
+      cellOverride === undefined &&
+      (expressionByElementId?.size ?? 0) === 0)
   ) {
     return EMPTY_CELL_BOUNDARY_LAYER_STYLE
   }
@@ -292,6 +299,20 @@ export function createCellBoundaryLayerStyle(
   const lineColorByCellId = new Map<string, Color>()
 
   for (const cellId of geometry.boundaryCellIds) {
+    const override = cellOverride?.(cellId)
+
+    if (override === 'hidden') {
+      fillColorByCellId.set(cellId, HIDDEN_BOUNDARY_COLOR)
+      lineColorByCellId.set(cellId, HIDDEN_BOUNDARY_COLOR)
+      continue
+    }
+
+    if (override !== undefined) {
+      fillColorByCellId.set(cellId, boundaryFillColor(override))
+      lineColorByCellId.set(cellId, boundaryLineColor(override))
+      continue
+    }
+
     const expressionElement = expressionByElementId?.get(cellId)
 
     if (expressionElement !== undefined) {
@@ -690,10 +711,13 @@ function cellBoundaryColorBuffer(
     const endIndex = startIndices[cellIndex + 1] ?? startIndex
     const boundary = geometry.boundaries[cellIndex]!
     const styleColor = styleColorByCellId.get(boundary.id) ?? baseColorOf(boundary)
+    // A hidden outline stays transparent; a faded fill would keep a share.
     const color =
-      options.finalAlpha === true
-        ? colorWithFillOpacity(styleColor, opacity)
-        : colorWithOpacity(styleColor, opacity)
+      styleColor === HIDDEN_BOUNDARY_COLOR
+        ? HIDDEN_BOUNDARY_COLOR
+        : options.finalAlpha === true
+          ? colorWithFillOpacity(styleColor, opacity)
+          : colorWithOpacity(styleColor, opacity)
 
     for (let vertexIndex = startIndex; vertexIndex < endIndex; vertexIndex += 1) {
       const colorIndex = vertexIndex * 4

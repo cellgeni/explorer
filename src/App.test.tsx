@@ -5005,12 +5005,16 @@ describe('App', () => {
         await within(reopened).findByText('2 genes by Selections'),
       ).toBeInTheDocument()
       fireEvent.click(within(reopened).getByRole('switch', { name: 'Show numbers' }))
-      expect(
-        within(reopened)
-          .getAllByRole('row')
-          .slice(1)
-          .map((row) => row.textContent),
-      ).toEqual(['ROI 1Actb2100%1.04', 'ROI 1Gad120%0'])
+      // The title changes before the groups' numbers are worked out, which a
+      // slow runner shows as "Reading the selected genes…" (CI on PR 452, 456).
+      await waitFor(() => {
+        expect(
+          within(reopened)
+            .getAllByRole('row')
+            .slice(1)
+            .map((row) => row.textContent),
+        ).toEqual(['ROI 1Actb2100%1.04', 'ROI 1Gad120%0'])
+      })
       expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
     } finally {
       viewport.restore()

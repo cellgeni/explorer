@@ -16,6 +16,7 @@ import {
   overviewCellRadiusMaxPixels,
 } from './cellPointRenderer'
 import { cellPointLayerColors, type CellPointLayerColors } from './cellPointStyle'
+import { createPythonHighlightLayers } from './pythonHighlightLayer'
 import { GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY } from './deckLayerColors'
 import type {
   CellBoundaryDatum,
@@ -295,6 +296,10 @@ export function createOverviewLayers(
 
   if (geneExpressionLayer !== null) {
     layers.push(geneExpressionLayer)
+  }
+
+  if (cellsVisible && options.pythonHighlights !== undefined) {
+    layers.push(...createPythonHighlightLayers(options.pythonHighlights, cellPointScale))
   }
 
   const transcriptDensityLayer = createTranscriptDensityLayer(

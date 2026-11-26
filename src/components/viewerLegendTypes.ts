@@ -37,6 +37,41 @@ export interface CategoryLegendSection {
   readonly showOnly?: boolean | undefined
 }
 
-export type ViewerLegendSection = ContinuousLegendSection | CategoryLegendSection
+export type PythonLegendSwatch =
+  | { readonly kind: 'color'; readonly color: string }
+  // A highlight's ring.
+  | { readonly kind: 'ring'; readonly color: string }
+  | {
+      readonly kind: 'ramp'
+      // CSS gradient, low on the left.
+      readonly gradient: string
+      readonly min: string
+      readonly max: string
+    }
+  // The cells show() keeps.
+  | { readonly kind: 'shown' }
+
+export interface PythonLegendItem {
+  readonly id: string
+  readonly label: string
+  readonly count: number
+  readonly swatch: PythonLegendSwatch
+}
+
+// The Python console's layers (plan 29-D8), each with a button to clear it.
+export interface PythonLegendSection {
+  readonly kind: 'python'
+  readonly id: string
+  readonly title: string
+  readonly items: readonly PythonLegendItem[]
+  // What happens to the cells no layer colours.
+  readonly detail?: string | undefined
+  readonly noun: { readonly singular: string; readonly plural: string }
+}
+
+export type ViewerLegendSection =
+  | ContinuousLegendSection
+  | CategoryLegendSection
+  | PythonLegendSection
 
 export const LEGEND_CATEGORY_LIMIT = 12

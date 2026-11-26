@@ -77,8 +77,9 @@ is read, others are quick.
 
 ## Drawing
 
-These calls check their arguments now. Drawing on the canvas comes in the
-console's next version; until then they raise an error that says so.
+Drawing calls make layers on the canvas. The canvas draws an input's layers
+once, when the input ends, and an input that draws nothing does not redraw
+it.
 
 | Call                                     | Effect                                                                          |
 | ---------------------------------------- | ------------------------------------------------------------------------------- |
@@ -91,7 +92,27 @@ console's next version; until then they raise an error that says so.
 | `clear()`, `clear("name")`               | Removes every layer, or one                                                     |
 
 Each takes `name=`; without one the layer is called `Result`, so running an
-input again replaces its result. Colours are CSS names or hex.
+input again replaces its result. A colour layer and a highlight can share a
+name; `clear("name")` removes both. Colours are CSS names or hex.
+
+- **Colour layers draw over the colour mode**, gene expression included. A
+  cell takes the colour of the last layer that holds it; a redrawn layer goes
+  on top. Their outlines take the same colour.
+- **Ramps** run from `vmin` to `vmax`, by default the range of `values` over
+  the masked cells; values outside are drawn at the ends. A single-hue ramp
+  starts pale. NaN is drawn as the ramp's low end, the pale colour of a
+  single-hue ramp, whatever `reverse` says.
+- **Other cells** fade while any colour layer is drawn, as hidden classes
+  do. `others("hide")` leaves them out instead. With no colour layer,
+  `others()` changes nothing.
+- **Hidden cells**, by `show` or `others("hide")`, are not drawn, hovered or
+  picked, and nor are their outlines; their highlights are left out.
+- **Layers live in the app**, not in Python: `Stop` and a restart keep them.
+  A new dataset, or new cells for it, clears them. `clear()` starts over:
+  it removes every layer and the `show` mask, and sets `others("fade")`.
+- **The legend** lists the layers under _Python_, first, each with its swatch
+  or ramp, its count and a button to clear it, and the cells `show` keeps
+  with a button to show every cell. Screenshots include them.
 
 ## Examples
 
