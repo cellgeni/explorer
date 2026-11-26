@@ -313,31 +313,27 @@ describe('useVisiumHdBinWorkflow', () => {
       }),
       genePanel: vi.fn(async () => ['Actb']),
       meta: vi.fn(async () => visiumMeta(grid)),
-      readBinnedOverview: vi.fn(
-        async (): Promise<VisiumHdBinnedOverview> => ({
-          binSizeMicrometers: 8,
-          scalefactors: {
-            micronsPerPixel: 0.5,
-            tissueHiresScale: 0.2,
-            tissueLowresScale: 0.02,
-          },
-          grid,
-          gridCells: gridCells(grid, 'BC-8'),
-          fullresRows: new Float64Array([16]),
-          fullresCols: new Float64Array([16]),
-          inTissue: new Uint8Array([1]),
-          sourcePaths: {
-            tissuePositions:
-              'binned_outputs/square_008um/spatial/tissue_positions.parquet',
-            scalefactors: 'binned_outputs/square_008um/spatial/scalefactors_json.json',
-            tissueHiresImage:
-              'binned_outputs/square_008um/spatial/tissue_hires_image.png',
-            tissueLowresImage:
-              'binned_outputs/square_008um/spatial/tissue_lowres_image.png',
-            filteredMatrixH5: 'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
-          },
-        }),
-      ),
+      readBinnedOverview: vi.fn(async (): Promise<VisiumHdBinnedOverview> => ({
+        binSizeMicrometers: 8,
+        scalefactors: {
+          micronsPerPixel: 0.5,
+          tissueHiresScale: 0.2,
+          tissueLowresScale: 0.02,
+        },
+        grid,
+        gridCells: gridCells(grid, 'BC-8'),
+        fullresRows: new Float64Array([16]),
+        fullresCols: new Float64Array([16]),
+        inTissue: new Uint8Array([1]),
+        sourcePaths: {
+          tissuePositions: 'binned_outputs/square_008um/spatial/tissue_positions.parquet',
+          scalefactors: 'binned_outputs/square_008um/spatial/scalefactors_json.json',
+          tissueHiresImage: 'binned_outputs/square_008um/spatial/tissue_hires_image.png',
+          tissueLowresImage:
+            'binned_outputs/square_008um/spatial/tissue_lowres_image.png',
+          filteredMatrixH5: 'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+        },
+      })),
     }
     const onFallback = vi.fn()
     const setFlatMorphologyImage = vi.fn()

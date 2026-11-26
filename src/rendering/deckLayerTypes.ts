@@ -217,21 +217,10 @@ export interface CellPointPacking {
 }
 
 export type GeneExpressionColorScale =
-  | 'gold'
-  | 'magma'
-  | 'viridis'
-  | 'plasma'
-  | 'cividis'
-  | 'teal'
-  | 'rose'
-  | 'glasbey'
+  'gold' | 'magma' | 'viridis' | 'plasma' | 'cividis' | 'teal' | 'rose' | 'glasbey'
 export type GeneExpressionScoreMode = 'sum' | 'mean' | 'z-score'
 export type TranscriptDensityRampScale =
-  | 'thermal'
-  | 'magma'
-  | 'viridis'
-  | 'cividis'
-  | 'teal'
+  'thermal' | 'magma' | 'viridis' | 'cividis' | 'teal'
 // `gene` draws a marker per selected gene in each square, in the gene's
 // colour; squares counting all transcripts keep the default ramp.
 export type TranscriptDensityColorScale = TranscriptDensityRampScale | 'gene'

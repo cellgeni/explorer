@@ -54,16 +54,16 @@ Xenium UI unchanged.
 ## Slices
 
 - [x] 1. Detection and capability plumbing: `VisiumHdDataset`, generic caches,
-     platform-aware diagnostics, the generic element-ID contract, and the
-     affine-grid contract. Visium HD is detected from binned
-     `tissue_positions.parquet`, `scalefactors_json.json`, and
-     `filtered_feature_bc_matrix.h5`.
+      platform-aware diagnostics, the generic element-ID contract, and the
+      affine-grid contract. Visium HD is detected from binned
+      `tissue_positions.parquet`, `scalefactors_json.json`, and
+      `filtered_feature_bc_matrix.h5`.
 - [x] 2. Binned overview reader: 16 µm `tissue_positions.parquet`, filtered to
-     `in_tissue = 1`, converted through `microns_per_pixel`, returned as
-     columnar grid cells. 8 µm behind a selector.
+      `in_tissue = 1`, converted through `microns_per_pixel`, returned as
+      columnar grid cells. 8 µm behind a selector.
 - [x] 3. Grid rendering through a dedicated layer, with correct winding for
-     left-handed image bases. Hover and selection show barcode, bin size,
-     array row/column, full-res pixel, and expression.
+      left-handed image bases. Hover and selection show barcode, bin size,
+      array row/column, full-res pixel, and expression.
 - [x] 4. Flat tissue image with scale-factor alignment and opacity.
   - [x] **Reopened (2026-11-08), fixed 2026-11-12:** fallback from high-res
         to low-res. `image()` sends a `HEAD` for `tissue_hires_image.png`; if
@@ -72,12 +72,12 @@ Xenium UI unchanged.
         notice names the skipped path, on the first load and after a bin
         switch. With neither image it fails as before.
 - [x] 5. Binned gene panel (`features.tsv.gz`) and expression. Never use the
-     Xenium cell-ID codec for Visium.
+      Xenium cell-ID codec for Visium.
 - [x] 6. ROI over bins with barcode export; embeddings from binned
-     `analysis/umap/gene_expression_2_components/projection.csv`, keyed by
-     barcode.
+      `analysis/umap/gene_expression_2_components/projection.csv`, keyed by
+      barcode.
 - [x] 7. 2 µm without loading all 11.2M position rows: filtered matrix barcodes
-     plus a derived affine transform.
+      plus a derived affine transform.
 - [x] 8. Feature Slice and segmented outputs:
   - [x] Feature Slice H5 selected-gene reader, budget error classification, and
         lazy-range worker backend.

@@ -224,7 +224,7 @@ function medianNearestNeighbourDistance(
     const low = lowerBound(sorted, point.x)
 
     // Walk outwards in x until the x gap alone exceeds the best distance.
-    for (let left = low - 1, right = low; left >= 0 || right < sorted.length; ) {
+    for (let left = low - 1, right = low; left >= 0 || right < sorted.length;) {
       const leftPoint = left >= 0 ? sorted[left] : undefined
       const rightPoint = right < sorted.length ? sorted[right] : undefined
       const leftGap = leftPoint === undefined ? Infinity : point.x - leftPoint.x

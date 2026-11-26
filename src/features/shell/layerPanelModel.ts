@@ -21,11 +21,7 @@ import type { TranscriptsSectionModel } from '../sections/transcriptsSectionMode
 // section per layer, each header with a visibility checkbox, the name and a
 // one-line state.
 export type LayerSectionId =
-  | 'image'
-  | 'cells'
-  | 'segmentation'
-  | 'transcripts'
-  | 'annotations'
+  'image' | 'cells' | 'segmentation' | 'transcripts' | 'annotations'
 
 // A part of the panel to bring into view, such as the class list from the
 // legend's "+N more": the panel opens, then the section, and the anchor (or

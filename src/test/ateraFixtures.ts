@@ -4,17 +4,7 @@ import { zipArchive } from './zipFixtures'
 // entry path (no leading slash) to bytes, uncompressed.
 
 export type Dtype =
-  | '<i8'
-  | '<i4'
-  | '<u4'
-  | '<i2'
-  | '<u2'
-  | '<f2'
-  | '<f4'
-  | '<f8'
-  | '|u1'
-  | '|i1'
-  | '|b1'
+  '<i8' | '<i4' | '<u4' | '<i2' | '<u2' | '<f2' | '<f4' | '<f8' | '|u1' | '|i1' | '|b1'
 
 export type ZarrEntries = Map<string, Uint8Array>
 

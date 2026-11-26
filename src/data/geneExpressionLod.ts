@@ -24,11 +24,7 @@ export const VISIUM_HD_GENE_EXPRESSION_2UM_EXACT_ZOOM_MIN =
   VISIUM_HD_2UM_EXACT_GRID_ZOOM_MIN
 
 export type GeneExpressionLoadMode =
-  | 'exact'
-  | 'sampled'
-  | 'overview-sampled'
-  | 'exact-region'
-  | 'all-cells'
+  'exact' | 'sampled' | 'overview-sampled' | 'exact-region' | 'all-cells'
 export type GeneExpressionDetailMode = 'auto' | 'exact-region' | 'all-cells'
 
 // The cells a z-score compares a cell with: every cell when expression is read

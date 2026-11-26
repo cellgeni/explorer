@@ -341,9 +341,8 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
 
     return {
       ...batch,
-      elements: batch.elements.map(
-        (element): GeneExpressionElement =>
-          withTranscriptCount(element, overview, element.id),
+      elements: batch.elements.map((element): GeneExpressionElement =>
+        withTranscriptCount(element, overview, element.id),
       ),
     }
   }

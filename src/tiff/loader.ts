@@ -2176,8 +2176,7 @@ export class TiffPyramidLoader {
   // Tiles being read by a run, by chunk key, so that no other run reads them.
   private readonly tilesInRuns = new Map<string, TileRun>()
   private readonly loadLevelChunks:
-    | ((level: number) => Promise<TiffChunkIndex>)
-    | undefined
+    ((level: number) => Promise<TiffChunkIndex>) | undefined
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly stripLevels: ReadonlyMap<number, TiffStripLevel>
   private readonly retiledLevels: ReadonlyMap<number, TiffRetiledLevel>

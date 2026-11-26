@@ -70,8 +70,6 @@ export interface PythonLegendSection {
 }
 
 export type ViewerLegendSection =
-  | ContinuousLegendSection
-  | CategoryLegendSection
-  | PythonLegendSection
+  ContinuousLegendSection | CategoryLegendSection | PythonLegendSection
 
 export const LEGEND_CATEGORY_LIMIT = 12

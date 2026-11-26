@@ -518,8 +518,7 @@ describe('useDatasetLifecycle', () => {
     function startLoad() {
       return {
         current: null as
-          | ((datasetUrl: string, loadImage: boolean) => Promise<void>)
-          | null,
+          ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
       }
     }
 
@@ -1408,8 +1407,7 @@ describe('useDatasetLifecycle', () => {
       const refs = createLifecycleRefs()
       const startDatasetLoadRef = {
         current: null as
-          | ((datasetUrl: string, loadImage: boolean) => Promise<void>)
-          | null,
+          ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
       }
       const datasetUrl = detection.baseUrl
       const summary = {

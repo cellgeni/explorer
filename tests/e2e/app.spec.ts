@@ -2487,7 +2487,7 @@ test('saves a 2× screenshot of the view that matches the screen @smoke', async 
 
 function pngChunks(png: Buffer): { readonly type: string; readonly data: Buffer }[] {
   const chunks: { type: string; data: Buffer }[] = []
-  for (let offset = 8; offset + 12 <= png.length; ) {
+  for (let offset = 8; offset + 12 <= png.length;) {
     const length = png.readUInt32BE(offset)
     const type = png.subarray(offset + 4, offset + 8).toString('latin1')
     chunks.push({ type, data: png.subarray(offset + 8, offset + 8 + length) })

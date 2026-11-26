@@ -195,8 +195,7 @@ function geojsonFetcher(text: string, chunkBytes: number) {
 // would. `fail` raises an error event instead; `silent` never answers.
 class FakeWorker implements VisiumHdSegmentationIndexWorkerLike {
   onmessage:
-    | ((event: MessageEvent<VisiumHdSegmentationIndexWorkerResponse>) => void)
-    | null = null
+    ((event: MessageEvent<VisiumHdSegmentationIndexWorkerResponse>) => void) | null = null
   onerror: ((event: ErrorEvent) => void) | null = null
   readonly requests: VisiumHdSegmentationIndexWorkerRequest[] = []
   terminated = false

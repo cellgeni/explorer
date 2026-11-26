@@ -33,8 +33,7 @@ class FakeWorker implements PythonWorkerLike {
 
   last<T extends PythonWorkerRequest['type']>(type: T) {
     return this.sent.findLast((entry) => entry.message.type === type)?.message as
-      | Extract<PythonWorkerRequest, { type: T }>
-      | undefined
+      Extract<PythonWorkerRequest, { type: T }> | undefined
   }
 }
 
