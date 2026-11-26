@@ -12,6 +12,7 @@ import type * as zarr from 'zarrita'
 import { abortable } from '../utils/abortable'
 import { createAsyncLimiter } from '../utils/asyncLimiter'
 import { isAbortError } from '../utils/abort'
+import { retryingFetch } from '../data/fetchRetry'
 
 // An Icechunk repository read through icechunk-js. Its snapshot holds every
 // node's Zarr v3 metadata, so the hierarchy is known as soon as it opens and
@@ -94,9 +95,10 @@ export function openIcechunkRepository(
     return abortable(cached.promise, options.signal)
   }
 
+  // Repository objects and virtual chunks time out and are tried again (O7).
   const promise = readIcechunkRepository(
     normalizedUrl,
-    options.fetcher ?? globalThis.fetch.bind(globalThis),
+    retryingFetch(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
     options.virtualChunkUrl,
   )
   openedRepositories.set(key, { fetcher: options.fetcher, promise })

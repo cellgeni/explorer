@@ -40,18 +40,6 @@ Sequencing:
 
 Other gaps found in the review:
 
-- [ ] Range reads have no timeout or retry. On 2026-11-13, 3 of 6 loads of the
-      460-plex zip from `ftp.ebi.ac.uk` had one or two range requests that
-      took 55–90 s while the requests sent with them finished in under a
-      second, and the load waited for them. Zip entries, hyparquet and Zarr
-      chunk reads would need a per-request timeout with a retry (see
-      [s3-cors-playbook.md](../s3-cors-playbook.md#hosts-that-stall-range-requests)).
-      Partly done: the H5 worker's range reads time out after 120 s and are
-      tried three times (`h5RangeFile.ts`), and detection probes use
-      `fetchWithTimeout` (`datasetFactory.ts`). Zip entries
-      (`cachedZipStore.ts`), hyparquet (`hyparquetCells.ts`, and the Visium
-      HD positions, barcode mappings and imported vector segmentations) and
-      the Zarr `FetchStore` (`zarrStores.ts`) still have neither.
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
       than the Xenium overview, SpatialData shapes and imported vector
       segmentations, which have workers of their own (Visium HD positions and

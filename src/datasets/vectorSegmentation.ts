@@ -1,6 +1,7 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetRead } from 'hyparquet'
 import type { AsyncBuffer, Compressors, FileMetaData, ParquetParsers } from 'hyparquet'
 import { DEFAULT_PARSERS } from 'hyparquet/src/convert.js'
+import { retryingFetch } from '../data/fetchRetry'
 import { createGeojsonFeatureStream } from '../data/geojsonFeatureStream'
 import { forEachMaybeGzipLine, forEachMaybeGzipText } from '../data/readMaybeGzipText'
 import { looksLikeWktPolygon, wktOuterRing } from '../data/wktPolygons'
@@ -176,7 +177,9 @@ async function parquetFile(options: ReadVectorSegmentationOptions): Promise<Asyn
 
   return asyncBufferFromUrl({
     url: options.file.url,
-    ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+    fetch: retryingFetch(
+      options.fetcher === undefined ? {} : { fetcher: options.fetcher },
+    ),
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
 }

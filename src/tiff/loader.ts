@@ -105,6 +105,7 @@ import type {
 } from '../data/imagePyramid'
 import type { QptiffIfdSummary } from './qptiff'
 import { isAbortError } from '../utils/abort'
+import { retryingFetch } from '../data/fetchRetry'
 
 export interface TiffChunk {
   readonly offset: number
@@ -2143,7 +2144,10 @@ export class TiffPyramidLoader {
     this.tilesFromSharedReads =
       this.ndpiLevels.size > 0 &&
       this.ndpiLevels.size + this.stripLevels.size === this.numLevels
-    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+    // Tile and tag reads time out and are tried again (O7).
+    this.fetcher = retryingFetch(
+      options.fetcher === undefined ? {} : { fetcher: options.fetcher },
+    )
     this.byteRangeCache =
       options.byteRangeCache === undefined
         ? defaultPersistentByteRangeCache()

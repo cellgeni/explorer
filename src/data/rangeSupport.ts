@@ -1,3 +1,4 @@
+import { fetchWithRetry } from './fetchRetry'
 import { fileNotListedError } from './folderListing'
 import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
@@ -50,14 +51,20 @@ export async function assertHttpRangeSupportUncached(
 
   let response: Response
 
+  // Tried again as the reads after it are (fetchWithRetry, O7), so that one
+  // dropped probe or 503 does not fail the load.
   try {
-    response = await fetcher(url, {
-      method: 'GET',
-      headers: {
-        Range: RANGE_PROBE_HEADER,
+    response = await fetchWithRetry(
+      url,
+      {
+        method: 'GET',
+        headers: {
+          Range: RANGE_PROBE_HEADER,
+        },
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
       },
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+      { fetcher },
+    )
   } catch (cause) {
     if (isAbortError(cause)) {
       throw cause
