@@ -1,4 +1,5 @@
 import { DEMO_DATASET_URL } from '../../store/viewerStore'
+import { FetchTimeoutError, fetchWithRetry } from '../../data/fetchRetry'
 
 // The example gallery (plan 15.3-A, D9). The index is read from
 // GitHub at runtime, so new examples appear without a release; a build can
@@ -187,18 +188,14 @@ export async function fetchExamplesIndex(
     timeoutMs = EXAMPLES_FETCH_TIMEOUT_MS,
   }: FetchExamplesIndexOptions = {},
 ): Promise<readonly Example[]> {
-  const controller = new AbortController()
-  const abort = () => {
-    controller.abort()
-  }
-  const timeout = setTimeout(abort, timeoutMs)
-  signal?.addEventListener('abort', abort, { once: true })
-
+  // Through fetchWithRetry (O7), once: the start screen shows its error
+  // rather than waiting for more attempts.
   try {
-    const response = await fetchImpl(url, {
-      signal: controller.signal,
-      cache: 'no-cache',
-    })
+    const response = await fetchWithRetry(
+      url,
+      { cache: 'no-cache', ...(signal === undefined ? {} : { signal }) },
+      { fetcher: fetchImpl, idleTimeoutMs: timeoutMs, attempts: 1 },
+    )
 
     if (!response.ok) {
       throw new ExamplesIndexError(`The examples index answered HTTP ${response.status}.`)
@@ -206,15 +203,12 @@ export async function fetchExamplesIndex(
 
     return parseExamplesIndex(await response.json())
   } catch (error) {
-    if (controller.signal.aborted && signal?.aborted !== true) {
+    if (error instanceof FetchTimeoutError) {
       throw new ExamplesIndexError(
         `The examples index did not answer within ${(timeoutMs / 1000).toLocaleString()} s.`,
       )
     }
     throw error
-  } finally {
-    clearTimeout(timeout)
-    signal?.removeEventListener('abort', abort)
   }
 }
 

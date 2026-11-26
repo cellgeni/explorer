@@ -1,6 +1,7 @@
 import { asyncBufferFromUrl } from 'hyparquet'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DuckDbExtensionLoadError } from '../../data/duckdb'
+import { FetchTimeoutError } from '../../data/fetchRetry'
 import { FileNotListedError } from '../../data/folderListing'
 import {
   DatasetAddressError,
@@ -792,6 +793,25 @@ describe('errors as the readers word them (EXP-327, EXP-328)', () => {
     expect(error).toMatchObject({ code: 'decode', title: 'Image could not be loaded' })
     expect(formatStructuredError(error)).toContain('tissue_hires_image.png')
     expect(error.action).toContain('CORS')
+  })
+
+  it('reports a read that timed out after its last attempt as a host not responding (O7)', () => {
+    const timeout = new FetchTimeoutError('https://example.test/cells.zarr/0/0', 30_000)
+
+    expect(createStructuredLoadError('Dataset overview', timeout)).toMatchObject({
+      code: 'network',
+      title: 'Host not responding',
+      message: expect.stringContaining('https://example.test/cells.zarr/0/0'),
+    })
+    // As Icechunk's storage wraps it.
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        new Error(
+          `Failed to fetch https://example.test/repo/chunks/1: ${timeout.message}`,
+        ),
+      ).title,
+    ).toBe('Host not responding')
   })
 })
 

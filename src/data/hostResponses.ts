@@ -55,6 +55,16 @@ export function likelyMissingFileError(
   )
 }
 
+// Whether `url`'s origin has answered readably but never with an error
+// status, so that a failed fetch there is more likely an error response it
+// hid than a network failure.
+export function hidesErrorResponses(url: string): boolean {
+  const origin = originOf(url)
+  const record = origin === undefined ? undefined : originResponses.get(origin)
+
+  return record !== undefined && !record.readableError
+}
+
 // A HEAD request for hosts whose CORS rules allow GET only (the
 // azimuth-vitessce S3 bucket): they answer HEAD without CORS headers, so it
 // fails like a network error. When HEAD fails on an origin where none has

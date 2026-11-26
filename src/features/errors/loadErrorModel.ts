@@ -434,6 +434,22 @@ export function createStructuredLoadError(
     )
   }
 
+  // A read whose last attempt went 30 s without bytes (fetchWithRetry, O7),
+  // also when a reader has wrapped it as a failed fetch.
+  if (isRequestTimeout(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'network',
+        title: 'Host not responding',
+        message,
+        action:
+          'Check the address and the network connection, then load again. Run Diagnostics shows each request.',
+      },
+      detail,
+    )
+  }
+
   if (isTypeErrorLike(error) || isNetworkErrorMessage(normalizedMessage)) {
     return withOptionalDetail(
       {
@@ -667,6 +683,13 @@ function isTypeErrorLike(error: unknown): boolean {
     typeof error === 'object' &&
     'name' in error &&
     error.name === 'TypeError'
+  )
+}
+
+function isRequestTimeout(error: unknown, normalizedMessage: string): boolean {
+  return (
+    (error instanceof Error && error.name === 'TimeoutError') ||
+    /\brequest timed out\b/.test(normalizedMessage)
   )
 }
 

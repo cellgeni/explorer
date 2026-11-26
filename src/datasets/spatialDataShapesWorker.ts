@@ -1,5 +1,6 @@
 import { asyncBufferFromUrl } from 'hyparquet'
 import type { AsyncBuffer } from 'hyparquet'
+import { retryingFetch } from '../data/fetchRetry'
 import {
   readSpatialDataShapes,
   type ReadSpatialDataShapesOptions,
@@ -49,7 +50,7 @@ export function spatialDataShapesWorkerReader(
         ? undefined
         : await asyncBufferFromUrl({
             url: options.url,
-            fetch: options.fetcher,
+            fetch: retryingFetch({ fetcher: options.fetcher }),
             ...(options.signal === undefined
               ? {}
               : { requestInit: { signal: options.signal } }),

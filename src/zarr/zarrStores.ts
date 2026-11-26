@@ -1,4 +1,5 @@
 import * as zarr from 'zarrita'
+import { fetchWithRetry } from '../data/fetchRetry'
 
 export type ConsolidatedZarrStore = Required<zarr.AsyncReadable> & {
   contents(): { path: string; kind: 'array' | 'group' }[]
@@ -65,7 +66,11 @@ export function createZarrFetchStore(
       // wait for each other.
       const range = request.headers.get('Range')
       const sent = range === null ? request : new Request(request, { cache: 'no-store' })
-      const response = await (fetcher ?? fetch)(sent)
+      const response = await fetchWithRetry(
+        sent,
+        undefined,
+        fetcher === undefined ? {} : { fetcher },
+      )
 
       // zarrita takes a 200 as the range asked for, so a host that ignores
       // Range would hand it a whole shard as its index or one inner chunk.

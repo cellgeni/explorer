@@ -131,6 +131,7 @@ import {
   type AnnotationGroupOption,
   type LoadDatasetAnnotationsOptions,
 } from '../data/annotation'
+import { fetchWithRetry } from '../data/fetchRetry'
 
 export interface AnnDataH5adDatasetOptions {
   readonly url: string
@@ -543,7 +544,6 @@ const VISIUM_IMAGE_KINDS: readonly VisiumImageKind[] = ['hires', 'lowres']
 // Obs columns that name each row's library in multi-sample Visium AnnData.
 const VISIUM_LIBRARY_COLUMNS = ['library_id', 'library', 'sample']
 
-const H5AD_FETCH_TIMEOUT_MS = 60_000
 // The groups an .h5ad file's tree walk visits. Layers, raw, the pairwise
 // matrices and uns other than the Visium layout and a SpatialData table's
 // instance key are never read, and in a file read by range each object visited
@@ -3569,7 +3569,7 @@ function referenceStoreFetch(
       const resolvedUrl = ReferenceStore.resolveUri(request.url)
       const resolvedRequest =
         resolvedUrl === request.url ? request : new Request(resolvedUrl, request)
-      return fetcher(resolvedRequest)
+      return fetchWithRetry(resolvedRequest, undefined, { fetcher })
     })
 }
 
@@ -4021,53 +4021,26 @@ async function readObservationTracks(
   return { categoricalTracks, continuousTracks }
 }
 
+// The file's size, its whole bytes, and its reference file are read through
+// fetchWithRetry (O7): an attempt ends after 30 s with no bytes, its body
+// included, and is tried again, three attempts in all.
 async function fetchH5adHead(url: string, fetcher: typeof fetch): Promise<Response> {
-  return fetchH5adRequest(
+  return fetchWithRetry(
     url,
-    (input, init) => fetchHead(fetcher, String(input), init),
     {},
-    'H5AD file metadata',
+    { fetcher: (input, init) => fetchHead(fetcher, String(input), init) },
   )
 }
 
 async function fetchH5adFile(url: string, fetcher: typeof fetch): Promise<Response> {
-  return fetchH5adRequest(url, fetcher, {}, 'H5AD file')
+  return fetchWithRetry(url, {}, { fetcher })
 }
 
 async function fetchH5adReferenceFile(
   url: string,
   fetcher: typeof fetch,
 ): Promise<Response> {
-  return fetchH5adRequest(url, fetcher, {}, 'H5AD reference file')
-}
-
-async function fetchH5adRequest(
-  url: string,
-  fetcher: typeof fetch,
-  init: RequestInit,
-  label: string,
-): Promise<Response> {
-  const controller = new AbortController()
-  let timedOut = false
-  const timeout = globalThis.setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, H5AD_FETCH_TIMEOUT_MS)
-
-  try {
-    return await fetcher(url, { ...init, signal: controller.signal })
-  } catch (error) {
-    if (timedOut) {
-      throw new Error(
-        `${label} request timed out after ${H5AD_FETCH_TIMEOUT_MS.toLocaleString()} ms.`,
-        { cause: error },
-      )
-    }
-
-    throw error
-  } finally {
-    globalThis.clearTimeout(timeout)
-  }
+  return fetchWithRetry(url, {}, { fetcher })
 }
 
 async function readH5adResponseBytes(

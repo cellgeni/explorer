@@ -34,6 +34,7 @@ import {
   type H5TreeGroup,
   type H5TreeNode,
 } from './h5FileMessages'
+import { fetchWithRetry } from '../data/fetchRetry'
 
 // The H5 file worker's handler. It also runs on the main thread where there is
 // no Worker (Vitest's jsdom), through `createInProcessH5FileWorker`.
@@ -344,7 +345,7 @@ function rangeUnsupportedError(message: string): Error {
 }
 
 async function fetchWholeFile(source: UrlSource): Promise<Uint8Array> {
-  const response = await fetch(source.url)
+  const response = await fetchWithRetry(source.url)
 
   if (!response.ok) {
     throw new Error(`${source.label} returned HTTP ${response.status}.`)
@@ -359,7 +360,7 @@ async function openUrlByRange(
   source: UrlSource,
   createRangeRead: (url: string, label: string) => SyncRangeRead,
 ): Promise<OpenH5File> {
-  const response = await fetch(source.url, {
+  const response = await fetchWithRetry(source.url, {
     headers: { Range: `bytes=0-${RANGE_FIRST_FETCH_BYTES - 1}` },
   })
 

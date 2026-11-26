@@ -261,7 +261,7 @@ M1, interaction:
 
 M2, requests:
 
-- [ ] **O7. One fetch with a timeout and retries.** (M) A wrapper in
+- [x] **O7. One fetch with a timeout and retries.** (M) A wrapper in
       `src/data/` for every range read listed above, replacing the four
       timeouts. Each attempt ends after a time with no bytes, headers or
       body; network errors, timeouts, 408, 429 and 5xx are tried again with
@@ -271,6 +271,8 @@ M2, requests:
       ([Answered Questions](#answered-questions)).
   - Tests with a fake fetch that hangs, fails, or stalls mid-body.
   - Measure with range-server's stall option.
+  - Built in [#441](https://github.com/cellgeni/explorer/pull/441):
+    [Range Read Timeouts And Retries](#range-read-timeouts-and-retries-2026-11-26).
 - [ ] **O8. Cancelling a load stops its reads.** (M–L) A signal through
       `cachedSpatialDataset`, `overview()`, `readBinnedOverview()`,
       `summary()` and `visiumSummary()`. A shared read is aborted only
@@ -783,6 +785,54 @@ draw at the full view (M3, Metal, 2× pixel ratio, 1400 × 900, timed with a
 | Point size alone | 48 ms   | —                     | 59 ms          |
 | Both (#403)      | 18 ms   | 43 ms                 | 46 ms          |
 
+## Range Read Timeouts And Retries (2026-11-26)
+
+Task O7, [#441](https://github.com/cellgeni/explorer/pull/441). Range reads
+go through `fetchWithRetry` (`src/data/fetchRetry.ts`; [HTTP Requirements In
+Code](../../architecture.md#http-requirements-in-code)). An attempt ends
+when it has waited 30 s for bytes and its host has sent no bytes to any of
+the page's requests in that time; timeouts, failed fetches, 408, 429 and 5xx
+are tried again, three attempts in all; a body that stops part way resumes.
+The H5 worker's synchronous reads follow the same rules, with a timeout of
+30 s plus the time their bytes take at 256 kB/s.
+
+A first version timed each request on its own. It would have cut and
+retried healthy reads waiting in Chromium's queue, which sends at most six
+HTTP/1.1 requests to a host at once; on 2026-11-18 the 460-plex zip queued
+246 table chunk reads at 32 Mbit/s. So a request times out only once its
+host has gone quiet as well, and the page and its workers tell each other
+when a host sends bytes (a `BroadcastChannel`).
+
+Measured with `scripts/range-server.mjs`'s faults on the synthetic data
+([#435](https://github.com/cellgeni/explorer/pull/435)): production builds
+of main (`0922724`) and the branch, alternating, GPU drawing. Each run had
+a fresh server with the same seed for both builds, so both met the same
+faults until their requests diverged. The run ends when the image's status
+line (the four-channel OME-TIFF), the cell count (the Xenium folder, outlines
+off) or the gene search (the H5AD) shows, or 20 s after an error does.
+
+| Faults (share of range reads)     | Data          | Main                           | Branch                                   |
+| --------------------------------- | ------------- | ------------------------------ | ---------------------------------------- |
+| 10% held 90 s before the headers  | OME-TIFF      | 181 s, 201 s, not within 300 s | 83 s, 177 s; one run failed at 134 s     |
+| 10% held 90 s after half the body | OME-TIFF      | 180 s, 181 s, not within 300 s | 63 s, 125 s; one run failed at 94 s      |
+| 10% answered 503                  | OME-TIFF      | Failed in 5 of 5, at 0.5 s     | Loaded in 5 of 5, in 2.9–5.2 s           |
+| 10% answered 503                  | Xenium folder | Failed in 5 of 5, at 1.5–1.8 s | Loaded in 2 of 5, in 5.1–5.7 s; 3 failed |
+| 10% answered 503                  | H5AD (1M)     | Failed in 3 of 3, at 0.5 s     | Loaded in 3 of 3, in 2.7–3.0 s           |
+| Every range read held 200 s       | OME-TIFF      | Waits                          | "Host not responding" at 93 s            |
+
+- **The failed runs** had one read held or refused three times in a row,
+  and the branch reported "Host not responding" or the HTTP status. At 10%
+  a read fails three times in about 1 in 1,000, and these loads make 50 to
+  250 range reads. Main waited out each held read, so a hold never failed
+  its load; it only slowed it, past 300 s in one run of each.
+- **With 20% of reads refused**, the OME-TIFF failed in 3 of 3 runs on both
+  builds.
+- **Without faults** the builds are the same within run-to-run noise, three
+  runs each: the Xenium load (S2) and its first gene (S3), the H5AD load and
+  gene (S6), and the OME-TIFF at 300 ms a request (S7, 7.1 s and 52
+  requests on both). The wrapper itself took 0–5 ms of main-thread time on
+  S2 and S6, whose large reads run in workers, and 15–20 ms on S7.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -930,3 +980,16 @@ Found by the 2026-11-16 review:
       A chunk a worker cannot decode still goes to the main thread alone.
       OME-Zarr tiles and SpatialData labels use the same pool and still
       start new workers after a failure.
+
+Closed by the pass's tasks:
+
+- [x] Range reads had no timeout or retry (O7, 2026-11-26). On 2026-11-13, 3
+      of 6 loads of the 460-plex zip from `ftp.ebi.ac.uk` had one or two
+      range requests that took 55–90 s while the requests sent with them
+      finished in under a second, and the load waited for them. They now go
+      through `fetchWithRetry`
+      ([#441](https://github.com/cellgeni/explorer/pull/441))
+      ([Range Read Timeouts And Retries](#range-read-timeouts-and-retries-2026-11-26)).
+      Not covered: DuckDB's own reads, the transcript zip that
+      `@zarrita/storage` reads, the Visium HD nucleus mask read by geotiff's
+      `fromUrl`, and whole-file reads such as CSV and matrix files.

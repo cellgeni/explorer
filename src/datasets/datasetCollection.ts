@@ -20,6 +20,7 @@ import {
   type DatasetManifestSource,
   type Fail,
 } from './datasetManifest'
+import { FetchTimeoutError, fetchWithRetry } from '../data/fetchRetry'
 
 export const DATASET_COLLECTION_VERSION = 1
 
@@ -393,66 +394,60 @@ export async function fetchDatasetCollection(
   }: FetchDatasetCollectionOptions = {},
 ): Promise<DatasetCollection> {
   signal?.throwIfAborted()
-  const controller = new AbortController()
-  const abort = () => {
-    controller.abort()
-  }
-  const timeout = setTimeout(abort, timeoutMs)
-  signal?.addEventListener('abort', abort, { once: true })
   const timedOut = `the file did not answer within ${(timeoutMs / 1000).toLocaleString()} s.`
+  let response: Response
+
+  // Through fetchWithRetry (O7): an attempt that goes `timeoutMs` without
+  // bytes, its body included, ends and is tried again.
+  try {
+    response = await fetchWithRetry(
+      url,
+      { cache: 'no-cache', ...(signal === undefined ? {} : { signal }) },
+      { fetcher: fetchImpl, idleTimeoutMs: timeoutMs },
+    )
+  } catch (error) {
+    if (signal?.aborted === true) throw error
+
+    throw new DatasetCollectionError(
+      url,
+      error instanceof FetchTimeoutError
+        ? timedOut
+        : 'the file could not be read. Check the URL and that the host allows browser reads (CORS).',
+      { cause: error },
+    )
+  }
+
+  if (!response.ok) {
+    throw new DatasetCollectionError(url, `the file answered HTTP ${response.status}.`)
+  }
+
+  let text: string
+
+  // The timeout covers the body too: a body that stalls or breaks off is
+  // not a JSON error (EXP-214).
+  try {
+    text = await response.text()
+  } catch (error) {
+    if (signal?.aborted === true) throw error
+
+    throw new DatasetCollectionError(
+      url,
+      error instanceof FetchTimeoutError
+        ? timedOut
+        : 'the file broke off before it was read whole. Check the network, then load it again.',
+      { cause: error },
+    )
+  }
+
+  let json: unknown
 
   try {
-    let response: Response
-
-    try {
-      response = await fetchImpl(url, { signal: controller.signal, cache: 'no-cache' })
-    } catch (error) {
-      if (signal?.aborted === true) throw error
-
-      throw new DatasetCollectionError(
-        url,
-        controller.signal.aborted
-          ? timedOut
-          : 'the file could not be read. Check the URL and that the host allows browser reads (CORS).',
-        { cause: error },
-      )
-    }
-
-    if (!response.ok) {
-      throw new DatasetCollectionError(url, `the file answered HTTP ${response.status}.`)
-    }
-
-    let text: string
-
-    // The timeout covers the body too: a body that stalls or breaks off is
-    // not a JSON error (EXP-214).
-    try {
-      text = await response.text()
-    } catch (error) {
-      if (signal?.aborted === true) throw error
-
-      throw new DatasetCollectionError(
-        url,
-        controller.signal.aborted
-          ? timedOut
-          : 'the file broke off before it was read whole. Check the network, then load it again.',
-        { cause: error },
-      )
-    }
-
-    let json: unknown
-
-    try {
-      json = JSON.parse(text)
-    } catch (error) {
-      throw new DatasetCollectionError(url, 'the file is not JSON.', { cause: error })
-    }
-
-    return parseDatasetCollection(json, url)
-  } finally {
-    clearTimeout(timeout)
-    signal?.removeEventListener('abort', abort)
+    json = JSON.parse(text)
+  } catch (error) {
+    throw new DatasetCollectionError(url, 'the file is not JSON.', { cause: error })
   }
+
+  return parseDatasetCollection(json, url)
 }
 
 function collectionLabel(url: string): string {

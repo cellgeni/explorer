@@ -1,3 +1,9 @@
+import {
+  FETCH_ATTEMPTS,
+  FETCH_IDLE_TIMEOUT_MS,
+  isRetriedStatus,
+  noteFetchActivity,
+} from '../data/fetchRetry'
 import type { RangeBlockCache, SyncRangeRead } from './rangeBlockCache'
 
 // A remote HDF5 file in h5wasm's file system, read by range on demand, so
@@ -82,24 +88,29 @@ export function mountRangeFile(
 }
 
 export interface XhrRangeReadOptions {
+  // The time an attempt may take besides the time for its bytes.
   readonly timeoutMs?: number
   readonly attempts?: number
   readonly createRequest?: () => XMLHttpRequest
 }
 
-const DEFAULT_RANGE_TIMEOUT_MS = 120_000
-const DEFAULT_RANGE_ATTEMPTS = 3
+// A synchronous request reports no progress, so its timeout covers the whole
+// read: the app's 30 s with no bytes (fetchRetry.ts), plus the time the bytes
+// take at 256 kB/s, 64 s for the largest read (16 MiB).
+const RANGE_TIMEOUT_BYTES_PER_MS = 256
 
 // Synchronous range requests, allowed for binary responses only in workers.
-// A dropped connection or a timeout is retried at once; an HTTP error is not.
-// Content-Range is often hidden by CORS, so a reply is checked by its status
-// and length.
+// The rules are fetchWithRetry's: a dropped connection, a timeout, and 408,
+// 429 and 5xx are tried again, three attempts in all; another HTTP error is
+// not. A synchronous read cannot wait between attempts without holding a
+// core, so they follow at once. Content-Range is often hidden by CORS, so a
+// reply is checked by its status and length.
 export function createXhrRangeRead(
   url: string,
   label: string,
   options: XhrRangeReadOptions = {},
 ): SyncRangeRead {
-  const attempts = Math.max(1, options.attempts ?? DEFAULT_RANGE_ATTEMPTS)
+  const attempts = Math.max(1, options.attempts ?? FETCH_ATTEMPTS)
   const createRequest = options.createRequest ?? (() => new XMLHttpRequest())
 
   return (start, end) => {
@@ -110,7 +121,9 @@ export function createXhrRangeRead(
       const request = createRequest()
       request.open('GET', url, false)
       request.responseType = 'arraybuffer'
-      request.timeout = options.timeoutMs ?? DEFAULT_RANGE_TIMEOUT_MS
+      request.timeout =
+        (options.timeoutMs ?? FETCH_IDLE_TIMEOUT_MS) +
+        Math.ceil((end - start) / RANGE_TIMEOUT_BYTES_PER_MS)
       request.setRequestHeader('Range', `bytes=${start}-${end - 1}`)
 
       try {
@@ -125,6 +138,11 @@ export function createXhrRangeRead(
         continue
       }
 
+      if (isRetriedStatus(request.status) && attempt < attempts - 1) {
+        failure = new Error(`${label} returned HTTP ${request.status} for ${range}.`)
+        continue
+      }
+
       if (request.status === 200) {
         throw new Error(`${label} ignored a range request (HTTP 200 for ${range}).`)
       }
@@ -135,6 +153,10 @@ export function createXhrRangeRead(
 
       const body = request.response as ArrayBuffer | null
       const byteLength = body?.byteLength ?? 0
+
+      // The page's requests to this host wait behind this worker's; they
+      // time out only once the host has gone quiet (fetchRetry.ts).
+      noteFetchActivity(url)
 
       if (body === null || byteLength !== end - start) {
         throw new Error(

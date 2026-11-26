@@ -5,6 +5,7 @@ import {
   type ZipDirectory,
   type ZipEntry,
 } from './zipArchive'
+import { fetchWithRetry } from './fetchRetry'
 
 // A dataset folder shipped as one zip, such as an Atera run's `outs` folder
 // zipped whole, read in place. Once detection registers the zip, the URL
@@ -400,11 +401,15 @@ async function readZipRange(
   end: number,
   signal: AbortSignal | undefined,
 ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> {
-  const response = await folder.fetcher(folder.url, {
-    headers: { Range: `bytes=${start}-${end}` },
-    cache: 'no-store',
-    ...(signal === undefined ? {} : { signal }),
-  })
+  const response = await fetchWithRetry(
+    folder.url,
+    {
+      headers: { Range: `bytes=${start}-${end}` },
+      cache: 'no-store',
+      ...(signal === undefined ? {} : { signal }),
+    },
+    { fetcher: folder.fetcher },
+  )
 
   if (response.status === 206 && response.body !== null) {
     return response.body
@@ -422,12 +427,16 @@ async function readZipRange(
 // length from the central directory's, so the header is read once.
 function entryDataStart(folder: RegisteredZipFolder, entry: ZipEntry): Promise<number> {
   return cached(folder.dataStarts, entry.name, Number.POSITIVE_INFINITY, async () => {
-    const response = await folder.fetcher(folder.url, {
-      headers: {
-        Range: `bytes=${entry.localHeaderOffset}-${entry.localHeaderOffset + LOCAL_HEADER_SIZE - 1}`,
+    const response = await fetchWithRetry(
+      folder.url,
+      {
+        headers: {
+          Range: `bytes=${entry.localHeaderOffset}-${entry.localHeaderOffset + LOCAL_HEADER_SIZE - 1}`,
+        },
+        cache: 'no-store',
       },
-      cache: 'no-store',
-    })
+      { fetcher: folder.fetcher },
+    )
 
     if (response.status !== 206) {
       await response.body?.cancel().catch(() => undefined)
