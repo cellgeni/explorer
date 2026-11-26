@@ -314,7 +314,7 @@ M2, requests:
   - Not adopted: tried in
     [#458](https://github.com/cellgeni/explorer/pull/458), where the cell
     outlines arrived 2.7–5.9 s later. The outline query changes it led to
-    are kept:
+    are in [#463](https://github.com/cellgeni/explorer/pull/463):
     [Xenium Outline Queries In Less Memory](#xenium-outline-queries-in-less-memory-2026-11-26).
 - [ ] **O13. The Zarr decode pool remembers a failed worker.** (S) After
       one fails, OME-Zarr tiles and SpatialData labels decode on the main
@@ -1024,7 +1024,8 @@ Leads:
 
 ## Xenium Outline Queries In Less Memory (2026-11-26)
 
-Task O12. A DuckDB client of their own for nucleus outlines was tried in
+Task O12, [#463](https://github.com/cellgeni/explorer/pull/463). A DuckDB
+client of their own for nucleus outlines was tried in
 [#458](https://github.com/cellgeni/explorer/pull/458) and not adopted: the
 cell and nucleus downloads then share the host, so the cell outlines, on by
 default, arrive later. Remeasuring it led to two changes to the outline
