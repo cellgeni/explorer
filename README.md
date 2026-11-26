@@ -48,6 +48,16 @@ by convention a pull request is merged once the format, lint, typecheck, unit
 test and build job and the E2E smoke job pass. GitHub Pages deploys a push to
 `main` only after its CI run succeeds.
 
+The build includes the Python console's runtime under `pyodide/`: Pyodide and
+NumPy, 16.5 MB (9.3 MB gzipped), loaded only when the console first opens.
+The first build fetches NumPy's wheel from Pyodide's release, checks it
+against Pyodide's lock file and keeps it in `node_modules/.cache`. The
+console's Python package has its own tests:
+
+```sh
+uv run --project src/python pytest src/python/tests
+```
+
 End-to-end tests use the built app through Vite preview, in Playwright's
 Chromium. Install it once, and again after Playwright is updated (on Linux,
 `npx playwright install --with-deps chromium` also installs the system

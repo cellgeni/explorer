@@ -44,6 +44,7 @@ export {
   PlotsIcon,
   PlusIcon,
   QueryIcon,
+  PythonIcon,
   RulerIcon,
   SettingsIcon,
   SideBySideIcon,

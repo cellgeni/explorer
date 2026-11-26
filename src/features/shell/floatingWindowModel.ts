@@ -7,6 +7,8 @@ export const PLOTS_WINDOW_SIZE: FloatingWindowSize = { width: 480, height: 420 }
 export const PLOTS_WINDOW_MIN_SIZE: FloatingWindowSize = { width: 320, height: 280 }
 export const QUERY_WINDOW_SIZE: FloatingWindowSize = { width: 520, height: 460 }
 export const QUERY_WINDOW_MIN_SIZE: FloatingWindowSize = { width: 360, height: 300 }
+export const PYTHON_WINDOW_SIZE: FloatingWindowSize = { width: 560, height: 420 }
+export const PYTHON_WINDOW_MIN_SIZE: FloatingWindowSize = { width: 360, height: 260 }
 
 // The CSS inset from the canvas's right edge (--space-3), and the gap
 // between two windows (--space-2).
@@ -23,8 +25,8 @@ export function plotsWindowRightOffset(
   return embeddingOpen && !narrow ? RIGHT_INSET + embeddingWidth + WINDOW_GAP : undefined
 }
 
-// The Cell Query window opens to the left of the other open windows
-// (23-D9), whose widths are given right to left.
+// The Cell Query and Python windows open to the left of the other open
+// windows (23-D9, 29-D11), whose widths are given right to left.
 export function queryWindowRightOffset(
   openWidths: readonly number[],
   narrow: boolean,
@@ -47,7 +49,7 @@ export function windowOpensUnderDrawer(options: {
   return left < options.drawerRight
 }
 
-export type ShellWindow = 'embedding' | 'plots' | 'query'
+export type ShellWindow = 'embedding' | 'plots' | 'query' | 'python'
 
 // Under 860 px each window is full width, so one shows at a time (22-D8,
 // 23-D9): the one in front, else the first open in the top bar's order. A
@@ -58,5 +60,8 @@ export function narrowShownWindow(
   front: ShellWindow | null,
 ): ShellWindow | null {
   if (front !== null && open[front]) return front
-  return (['embedding', 'plots', 'query'] as const).find((window) => open[window]) ?? null
+  return (
+    (['embedding', 'plots', 'query', 'python'] as const).find((window) => open[window]) ??
+    null
+  )
 }

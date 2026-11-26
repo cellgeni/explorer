@@ -22,6 +22,7 @@ import {
   PlotsIcon,
   Popover,
   QueryIcon,
+  PythonIcon,
   RulerIcon,
   SettingsIcon,
   Slider,
@@ -99,6 +100,12 @@ const PANEL_BUTTONS: Readonly<
     icon: <QueryIcon />,
     showTitle: 'Find cells by their classes and values, in a table',
     hideTitle: 'Hide the cell query panel',
+  },
+  python: {
+    label: 'Python',
+    icon: <PythonIcon />,
+    showTitle: 'Choose and colour cells with Python code',
+    hideTitle: 'Hide the Python console',
   },
 }
 

@@ -607,21 +607,22 @@ which zarrita's `ZipFileStore` reads without one.
 
 ## Workers
 
-| Worker                                | Created by                              | Purpose                                                                                                                                  |
-| ------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (see below)      | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums; decode and trace label TIFF tiles |
-| DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                                    |
-| `zarrDecode.worker.ts`                | `ZarrDecodePool` (see below)            | Decode OME-Zarr tiles, or chunks into Cell Query's per-cell sums; trace SpatialData labels; run zarrita codecs for main-thread reads     |
-| `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range                          |
-| `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                                         |
-| `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read)               |
-| `merscopeTable.worker.ts`             | `readMerscopeTableInWorker`             | MERSCOPE `cell_by_gene.csv` and `cell_metadata.csv`: fetch, gunzip and parse them (one per read)                                         |
-| `featureBarcodeMex.worker.ts`         | `readFeatureBarcodeMexInWorker`         | A standard Visium MEX matrix folder: fetch, inflate and parse it into CSR arrays (one per read)                                          |
-| `zipEntry.worker.ts`                  | `readZipEntryInWorker`                  | One zip entry, a MERSCOPE `.vzg` image pyramid: fetch and inflate it (one per read)                                                      |
-| `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                                   |
-| `vectorSegmentation.worker.ts`        | `readVectorSegmentationInWorker`        | An image's imported GeoJSON, WKT or Parquet segmentation, by URL or picked file: parse it into shape columns (one per read)              |
-| `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)                     |
-| `cellQuery.worker.ts`                 | `createCellQuerySession`                | The Cell Query panel's columns by cell, its matching, sorting and the table's values (one per dataset)                                   |
+| Worker                                | Created by                              | Purpose                                                                                                                                                                 |
+| ------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (see below)      | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums; decode and trace label TIFF tiles                                |
+| DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                                                                   |
+| `zarrDecode.worker.ts`                | `ZarrDecodePool` (see below)            | Decode OME-Zarr tiles, or chunks into Cell Query's per-cell sums; trace SpatialData labels; run zarrita codecs for main-thread reads                                    |
+| `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range                                                         |
+| `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                                                                        |
+| `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read)                                              |
+| `merscopeTable.worker.ts`             | `readMerscopeTableInWorker`             | MERSCOPE `cell_by_gene.csv` and `cell_metadata.csv`: fetch, gunzip and parse them (one per read)                                                                        |
+| `featureBarcodeMex.worker.ts`         | `readFeatureBarcodeMexInWorker`         | A standard Visium MEX matrix folder: fetch, inflate and parse it into CSR arrays (one per read)                                                                         |
+| `zipEntry.worker.ts`                  | `readZipEntryInWorker`                  | One zip entry, a MERSCOPE `.vzg` image pyramid: fetch and inflate it (one per read)                                                                                     |
+| `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                                                                  |
+| `vectorSegmentation.worker.ts`        | `readVectorSegmentationInWorker`        | An image's imported GeoJSON, WKT or Parquet segmentation, by URL or picked file: parse it into shape columns (one per read)                                             |
+| `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)                                                    |
+| `cellQuery.worker.ts`                 | `createCellQuerySession`                | The Cell Query panel's columns by cell, its matching, sorting and the table's values (one per dataset)                                                                  |
+| `python.worker.ts`                    | `PythonSession`                         | The Python console: Pyodide and NumPy from the build's `pyodide/` folder, running inputs one at a time; Python's reads block on the main thread's replies (one per tab) |
 
 ### Decode Workers
 
@@ -731,6 +732,23 @@ holds with their names, which the panel reads again. If the worker fails, or
 there is no `Worker`, the same store runs on the main thread. See
 [plan 22](plan/phases/22-plots-panel.md).
 
+The Python console reads a gene per overview cell through `GeneRowReader`
+(`src/data/geneValuesByRow.ts`), over the same `GeneValuesSource`. On its
+first read it joins the matrix's rows to the overview's by cell ID, once,
+into an `Int32Array` (each matrix row's overview row, or -1) and an empty
+overview column: 0 for each cell the matrix lists, NaN for each it does not.
+A read copies that column and places the gene's stored values. It holds a
+read to the Plots budget (`plotReadDecision`): over 32 MiB it throws
+`GeneReadTooLarge` unless the call allows large reads, and over 256 MiB
+`GeneReadRefused`. `estimateGeneValuesRead` and `geneValues` take an optional
+`layer`, which Plots never passes. An H5AD (and a SpatialData table) reads
+`layers/<name>`, or `raw/X` for `raw` with `raw/var`'s genes; each is opened
+when first asked for and kept, and a section shares its file's. A file in an
+H5 file worker walks the layers then, with the worker's `tree` request, as
+its load walks only the groups the viewer reads; a file read by range slices
+them per request rather than reading them whole. `geneValuesLayers()` lists
+them. Xenium, Atera and MERSCOPE have one matrix, and say so for any layer.
+
 The Cell Query panel keeps the columns its conditions and table use in its
 own worker (`src/features/query/cellQuery.ts`), started once per dataset and
 given the overview's cell IDs, so rows are the overview's cells in their
@@ -758,6 +776,25 @@ dataset, and stops the reads in flight when another opens. The window
 syncs it with the columns in use and renders from its snapshot;
 `read(column)` waits for a column's values, sharing the reads in flight
 and reading a failed one again.
+
+The Python console (plan 29, `src/features/python/`) runs Pyodide 314 and
+NumPy in `python.worker.ts`. Their files are the `pyodide` package's and
+NumPy's wheel, which a Vite plugin (`scripts/pyodideRuntime.ts`) copies into
+the build under `pyodide/` and serves in development: the wheel is fetched
+once by the name in Pyodide's lock file, checked against its SHA-256 and
+kept in `node_modules/.cache`. The worker writes the `explorer` package
+(`src/python/explorer/`, tested with pytest on CPython) and its runner
+(`src/python/runtime/`) into Python's file system. When Python needs data it
+posts a typed request (`src/workers/pythonMessages.ts`) and waits for the
+reply with `run_sync`, which needs WebAssembly JSPI; replies are handled at
+once, other messages in turn. On the main thread `PythonSession` owns the
+worker, the log and Stop (a `KeyboardInterrupt` through a shared buffer
+where the page is cross-origin isolated, else a new worker), and refuses
+requests the protocol lacks. The answers (`pythonData.ts`) come from the
+app's state when Python asks: positions with y down, Cell Query's columns by
+overview row through the shared `CellColumnReader`, genes through
+`GeneRowReader`, and shapes, whose `contains` runs `roiSelectionContains`.
+Every array is made for the answer and transferred.
 
 Image columns (plan 26) are measured by `CellImageMeasurements`
 (`src/features/query/cellImageMeasurements.ts`), one per Cell Query model.

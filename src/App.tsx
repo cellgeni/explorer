@@ -84,6 +84,9 @@ import type { CellQueryPictureImage } from './features/query/CellPicture'
 import type { CellQueryImageChannel } from './features/query/cellQueryImage'
 import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQueryModel'
 import { useCellQueryModel } from './features/query/useCellQueryModel'
+import { CellColumnReader } from './features/query/cellColumnReader'
+import { usePythonConsole } from './features/python/usePythonConsole'
+import { openPlotsSource } from './features/plots/usePlotsWorkflow'
 import {
   availableLayerSections,
   cardForLink,
@@ -1033,6 +1036,8 @@ export function App({ dependencies }: AppProps = {}) {
         platformAdapter.capabilities.annotations &&
         platformAdapter.kind !== 'visium-hd',
       query: platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd',
+      // The Python console (plan 29) reads the cells Cell Query does.
+      python: platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd',
     }),
     [platformAdapter.capabilities, platformAdapter.kind],
   )
@@ -5348,6 +5353,15 @@ export function App({ dependencies }: AppProps = {}) {
       }),
     [morphologyChannelSettings, morphologyChannels],
   )
+  // Cell Query's columns, read once for it and the Python console. Cell
+  // Query's model gives it the loaders.
+  const [cellColumnReader] = useState(() => new CellColumnReader())
+  useEffect(
+    () => () => {
+      cellColumnReader.dispose()
+    },
+    [cellColumnReader],
+  )
   const cellQuery = useCellQueryModel({
     open: shellPanels.queryOpen,
     available: queryAvailable,
@@ -5380,6 +5394,49 @@ export function App({ dependencies }: AppProps = {}) {
     imageZPlane: morphologyImage?.zStack?.zPlane ?? null,
     imageTimePoint: morphologyImage?.timeSeries?.timePoint ?? null,
     appendDebugEvent,
+    columnReader: cellColumnReader,
+  })
+
+  // The Python console (plan 29): the cells Cell Query reads, as NumPy
+  // arrays, answered from the dataset as it stands when Python asks.
+  const pythonAvailable = shellPanelAvailability.python && loadState.status === 'ready'
+  const pythonPlatformLabel = PLATFORM_NAMES[platformAdapter.kind]
+  const openPythonGeneSource = useCallback(
+    async (url: string) => {
+      const opened = await openPlotsSource(getSpatialDataset, url, pythonPlatformLabel)
+      return opened.kind === 'ready' ? opened.source : null
+    },
+    [getSpatialDataset, pythonPlatformLabel],
+  )
+  const pythonView = useCallback(() => {
+    const detail = lastViewportDetailRef.current
+    if (detail === null) return null
+    const { minX, minY, maxX, maxY } = detail.bbox
+    return {
+      center: [(minX + maxX) / 2, (minY + maxY) / 2] as const,
+      bounds: [minX, minY, maxX, maxY] as const,
+    }
+  }, [])
+  const pythonConsole = usePythonConsole({
+    available: pythonAvailable,
+    datasetUrl: loadedDatasetUrl,
+    datasetName: loadedDatasetName ?? loadedDatasetUrl ?? '',
+    cells: overviewCells,
+    elementNoun: platformAdapter.labels.embeddingElementPlural,
+    annotations:
+      annotationState.status === 'ready'
+        ? annotationState.annotations
+        : EMPTY_ANNOTATIONS,
+    datasetSets: plotsDatasetSets,
+    metadataTracks: cellMetadataTracks,
+    columnReader: cellColumnReader,
+    geneNames: geneOptions,
+    openGeneSource: openPythonGeneSource,
+    savedSelections: selectionList.selections,
+    currentSelection: activeRoiSelection,
+    features: geometricAnnotations,
+    view: pythonView,
+    selectedCellId: selectedCell?.id ?? null,
   })
 
   // The cards (plan 15.2-D): Selection, Cell, Transcript and
@@ -5652,6 +5709,7 @@ export function App({ dependencies }: AppProps = {}) {
               onTranscriptHover={handleTranscriptHover}
               onTranscriptClick={handlePinTranscript}
               onCellClick={handleViewerCellClick}
+              onPointPick={pythonConsole.onPointPick}
               onCellBoundaryClick={handleViewerCellBoundaryClick}
               onGridCellClick={handleViewerGridCellClick}
               onRoiComplete={
@@ -5802,6 +5860,7 @@ export function App({ dependencies }: AppProps = {}) {
         embedding={shellPanelAvailability.embedding ? embedding : null}
         plots={plotsAvailable ? plots : null}
         query={queryAvailable ? cellQuery : null}
+        python={pythonConsole.model}
         panels={shellPanels}
         onPanelsChange={setShellPanels}
         layerReveal={layerReveal}

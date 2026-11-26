@@ -35,7 +35,7 @@ const SCORE_COLUMN: CellQueryColumn = {
   source: { kind: 'track', trackId: 'score' },
 }
 const TRANSCRIPTS_COLUMN: CellQueryColumn = {
-  id: 'cell:transcriptCount',
+  id: 'cell:transcripts',
   label: 'Transcripts',
   kind: 'number',
   group: 'Cell',
@@ -244,7 +244,7 @@ describe('CellColumnReader', () => {
 
     await expect(reader.read(TRANSCRIPTS_COLUMN, () => context())).resolves.toEqual({
       type: 'number-column',
-      columnId: 'cell:transcriptCount',
+      columnId: 'cell:transcripts',
       values: Float64Array.from([10, 25, 40, 5]),
     })
     expect(load.loadSetAnnotations).not.toHaveBeenCalled()

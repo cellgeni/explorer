@@ -51,7 +51,7 @@ describe('windowOpensUnderDrawer (EXP-029)', () => {
 })
 
 describe('narrowShownWindow', () => {
-  const allOpen = { embedding: true, plots: true, query: true }
+  const allOpen = { embedding: true, plots: true, query: true, python: true }
 
   it('shows the window in front, else the first open in the top bar order', () => {
     expect(narrowShownWindow(allOpen, 'query')).toBe('query')
@@ -60,7 +60,16 @@ describe('narrowShownWindow', () => {
     // The front window was closed.
     expect(narrowShownWindow({ ...allOpen, query: false }, 'query')).toBe('embedding')
     expect(
-      narrowShownWindow({ embedding: false, plots: false, query: false }, 'plots'),
+      narrowShownWindow(
+        { embedding: false, plots: false, query: false, python: true },
+        null,
+      ),
+    ).toBe('python')
+    expect(
+      narrowShownWindow(
+        { embedding: false, plots: false, query: false, python: false },
+        'plots',
+      ),
     ).toBeNull()
   })
 })
