@@ -7,15 +7,10 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { slug } from '../../utils/slug'
-import { lazyIdLookup, type IdLookup } from '../../data/lazyIdLookup'
-import type {
-  ContinuousCellMetadataTrack,
-  ContinuousCellMetadataValue,
-} from '../../data/customAnnotations'
+import { lazyIdLookup } from '../../data/lazyIdLookup'
+import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
 import { formatCsv } from '../../utils/csv'
-import type { CellQueryColumnRequest } from '../../workers/cellQueryMessages'
-import { annotationSetGrouping } from '../annotations/annotationModel'
 import type { CellMetadataTrackValuesLoader } from '../annotations/useCellMetadataTrackValues'
 import type {
   AnnotationLoader,
@@ -25,13 +20,11 @@ import type {
 import { downloadTextFile, type AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import { plotFileName } from '../plots/plotExport'
 import {
-  datasetSetGroupId,
   datasetSetOptionId,
   formatReadSize,
   plotSetOptions,
   SELECTIONS_SET_ID,
   type PlotDatasetSet,
-  type PlotSavedSelection,
 } from '../plots/plotsPanelModel'
 import { useSelectionCells } from '../plots/useSelectionCells'
 import type { SavedSelection } from '../roi/selectionListModel'
@@ -45,13 +38,19 @@ import { CellOutlineReader } from './cellOutlineReader'
 import { defaultCellPictureField, type CellPictureOutline } from './cellPictureModel'
 import type { CellQueryPictureImage } from './CellPicture'
 import {
+  cellColumnNeeds,
+  CellColumnReader,
+  cellColumnState,
+  objectId,
+  type CellColumnState,
+  type CellQueryClassOption,
+} from './cellColumnReader'
+import {
   CELL_QUERY_ID_COLUMN,
-  type CellQueryClassInput,
   type CellQueryCondition,
   type CellQuerySort,
 } from './cellQuery'
 import {
-  formatCellImageReadSize,
   imageChannelOptions,
   imageColumnNeeds,
   imageGroupNote,
@@ -74,8 +73,6 @@ import {
   isConditionComplete,
   isImageColumnId,
   overviewCellColumns,
-  overviewNumberColumn,
-  overviewSegmentationColumn,
   parseImageColumnId,
   setColumnId,
   type CellQueryColumn,
@@ -86,7 +83,6 @@ import {
   type CellQuerySession,
   type CellQueryValues,
 } from './cellQuerySession'
-import { useOnDemandLoads, type OnDemandLoad } from './useOnDemandLoads'
 import type { Annotation } from '../../data/annotation'
 
 // The Cell Query window (plan 23-B to 23-E): conditions on the dataset's
@@ -100,12 +96,7 @@ export const CELL_QUERY_RUN_DELAY_MS = 250
 // Rows per values request when exporting.
 const EXPORT_CHUNK = 20_000
 
-export interface CellQueryClassOption {
-  readonly id: string
-  readonly label: string
-  // Cells in the class, where known.
-  readonly count: number | null
-}
+export type { CellQueryClassOption } from './cellColumnReader'
 
 export interface CellQueryConditionView {
   readonly index: number
@@ -249,19 +240,6 @@ export interface CellQueryModelInput {
   readonly createImageMeasurements?: () => CellImageMeasurements
 }
 
-type ColumnInput =
-  | { readonly status: 'loading' }
-  // An image column waiting for Measure (plan 26-D7) or after Cancel.
-  | { readonly status: 'waiting' }
-  | { readonly status: 'error'; readonly message: string }
-  | {
-      readonly status: 'ready'
-      // Changes whenever the column's values do.
-      readonly key: string
-      readonly classes: readonly CellQueryClassOption[]
-      readonly request: () => CellQueryColumnRequest
-    }
-
 interface SessionEntry {
   readonly url: string
   readonly cells: readonly OverviewCellDatum[]
@@ -281,20 +259,6 @@ interface QueryResult {
 
 // Each row's text by column, for a run of the table's rows.
 export type CellQueryRowValues = readonly Readonly<Record<string, string>>[]
-
-// Ids for objects, so a key changes when a list is replaced.
-const objectIds = new WeakMap<object, number>()
-let nextObjectId = 0
-
-function objectId(value: object): number {
-  let id = objectIds.get(value)
-  if (id === undefined) {
-    nextObjectId += 1
-    id = nextObjectId
-    objectIds.set(value, id)
-  }
-  return id
-}
 
 const EMPTY_CLASSES: readonly CellQueryClassOption[] = []
 const NO_MEASUREMENTS: readonly CellQueryMeasurementView[] = []
@@ -527,59 +491,41 @@ export function useCellQueryModel({
     [measurements],
   )
 
-  // Values read on demand: dataset sets, metadata tracks and the saved
-  // selections' cells.
-  const datasetGroupIds = useMemo(
+  // Values read on demand: dataset sets and metadata tracks by the column
+  // reader, kept for the dataset, and the saved selections' cells.
+  const [columnReader] = useState(
     () =>
-      neededColumns.flatMap((column) =>
-        column.source.kind === 'set' && column.source.setKind === 'dataset'
-          ? [datasetSetGroupId(column.source.setId) ?? '']
-          : [],
-      ),
-    [neededColumns],
+      new CellColumnReader({
+        loadSetAnnotations,
+        loadMetadataTrackValues,
+        appendDebugEvent,
+      }),
   )
-  const loadGroup = useCallback(
-    (
-      url: string,
-      groupId: string,
-      signal: AbortSignal,
-    ): Promise<readonly Annotation<string>[]> =>
-      loadSetAnnotations(url, { groupId, signal }),
-    [loadSetAnnotations],
+  const columnLoads = useSyncExternalStore(
+    columnReader.subscribe,
+    columnReader.getSnapshot,
+    columnReader.getSnapshot,
   )
-  const describeGroup = useCallback((groupId: string) => `annotation set ${groupId}`, [])
-  const datasetSetLoads = useOnDemandLoads({
-    enabled: active,
-    datasetUrl,
-    keys: datasetGroupIds,
-    load: loadGroup,
-    describe: describeGroup,
-    appendDebugEvent,
-  })
-  const unreadTrackIds = useMemo(
-    () =>
-      neededColumns.flatMap(({ source }) =>
-        source.kind === 'track' &&
-        metadataTracks.find((track) => track.id === source.trackId)?.values === null
-          ? [source.trackId]
-          : [],
-      ),
+  const columnNeeds = useMemo(
+    () => cellColumnNeeds(neededColumns, metadataTracks),
     [metadataTracks, neededColumns],
   )
-  const loadTrack = useCallback(
-    (url: string, trackId: string, signal: AbortSignal) =>
-      loadMetadataTrackValues(url, trackId, { signal }),
-    [loadMetadataTrackValues],
+  useEffect(() => {
+    columnReader.setLoaders({
+      loadSetAnnotations,
+      loadMetadataTrackValues,
+      appendDebugEvent,
+    })
+  }, [appendDebugEvent, columnReader, loadMetadataTrackValues, loadSetAnnotations])
+  useEffect(() => {
+    columnReader.sync(datasetUrl, columnNeeds, active)
+  }, [active, columnNeeds, columnReader, datasetUrl])
+  useEffect(
+    () => () => {
+      columnReader.dispose()
+    },
+    [columnReader],
   )
-  const describeTrack = useCallback((trackId: string) => `metadata track ${trackId}`, [])
-  const trackLoads = useOnDemandLoads({
-    enabled: active,
-    datasetUrl,
-    keys: unreadTrackIds,
-    load: loadTrack,
-    describe: describeTrack,
-    appendDebugEvent,
-  })
   const savedSelections = useSelectionCells({
     enabled:
       active &&
@@ -605,19 +551,19 @@ export function useCellQueryModel({
     [cells],
   )
   const columnInputs = useMemo(() => {
-    const inputs = new Map<string, ColumnInput>()
+    const inputs = new Map<string, CellColumnState>()
     for (const column of neededColumns) {
       inputs.set(
         column.id,
-        columnInput(column, {
+        cellColumnState(column, {
+          datasetUrl,
           cells,
           placedCellIds,
           cellColumns,
           annotations,
-          datasetSetLoads,
           savedSelections,
           metadataTracks,
-          trackLoads,
+          loads: columnLoads,
           imageSnapshot,
           imageOverLimit: imageNeeds.overLimit,
         }),
@@ -628,14 +574,14 @@ export function useCellQueryModel({
     annotations,
     cellColumns,
     cells,
-    datasetSetLoads,
+    columnLoads,
+    datasetUrl,
     placedCellIds,
     imageNeeds.overLimit,
     imageSnapshot,
     metadataTracks,
     neededColumns,
     savedSelections,
-    trackLoads,
   ])
 
   // The query sent to the worker: complete conditions on listed columns
@@ -1252,213 +1198,6 @@ function sessionEntry(
   const entry: SessionEntry = { url, cells, rowsKey, session, sent: new Map() }
   entryRef.current = entry
   return entry
-}
-
-type PlacedCellIds = Pick<IdLookup<true>, 'has' | 'size'>
-
-interface ColumnInputContext {
-  readonly cells: readonly OverviewCellDatum[]
-  // The IDs on the map, which a class's count is of.
-  readonly placedCellIds: PlacedCellIds
-  readonly cellColumns: ReturnType<typeof overviewCellColumns>
-  readonly annotations: readonly Annotation<string>[]
-  readonly datasetSetLoads: ReadonlyMap<
-    string,
-    OnDemandLoad<readonly Annotation<string>[]>
-  >
-  readonly savedSelections: readonly PlotSavedSelection[]
-  readonly metadataTracks: readonly ContinuousCellMetadataTrack[]
-  readonly trackLoads: ReadonlyMap<
-    string,
-    OnDemandLoad<readonly ContinuousCellMetadataValue[]>
-  >
-  readonly imageSnapshot: CellImageMeasurementsSnapshot
-  // Image columns past the three channels measured at once, and why.
-  readonly imageOverLimit: ReadonlyMap<string, string>
-}
-
-// A column's values as the worker takes them, once they are known.
-function columnInput(column: CellQueryColumn, context: ColumnInputContext): ColumnInput {
-  const { source } = column
-  const { cells } = context
-
-  if (source.kind === 'cell') {
-    const key = `cells:${objectId(cells)}`
-    if (source.field === 'segmentationMethod') {
-      const labels = context.cellColumns.segmentationMethods
-      return {
-        status: 'ready',
-        key,
-        classes: labels.map((label) => ({ id: label, label, count: null })),
-        request: () => ({
-          type: 'category-column-by-row',
-          columnId: column.id,
-          codes: overviewSegmentationColumn(cells, labels),
-          labels,
-        }),
-      }
-    }
-    const { field } = source
-    return {
-      status: 'ready',
-      key,
-      classes: EMPTY_CLASSES,
-      request: () => ({
-        type: 'number-column',
-        columnId: column.id,
-        values: overviewNumberColumn(cells, field),
-      }),
-    }
-  }
-
-  if (source.kind === 'image') {
-    const overLimit = context.imageOverLimit.get(column.id)
-    if (overLimit !== undefined) return { status: 'error', message: overLimit }
-    if (source.spec.stat === 'above' && source.spec.threshold === undefined) {
-      return { status: 'error', message: 'Set a threshold to measure.' }
-    }
-    const key = context.imageSnapshot.keyFor(column.id)
-    const state = key === undefined ? undefined : context.imageSnapshot.state(key)
-    switch (state?.status) {
-      case 'ready': {
-        const { result } = state
-        return {
-          status: 'ready',
-          key: `image:${objectId(result)}`,
-          classes: EMPTY_CLASSES,
-          request: () => ({
-            type: 'number-column',
-            columnId: column.id,
-            values: source.spec.stat === 'mean' ? result.mean : result.above,
-          }),
-        }
-      }
-      case 'error':
-        return { status: 'error', message: state.message }
-      case 'refused':
-        return {
-          status: 'error',
-          message: `The read is over the limit (${formatCellImageReadSize(state.size)}).`,
-        }
-      case 'asking':
-      case 'cancelled':
-        return { status: 'waiting' }
-      default:
-        return { status: 'loading' }
-    }
-  }
-
-  if (source.kind === 'track') {
-    const track = context.metadataTracks.find(
-      (candidate) => candidate.id === source.trackId,
-    )
-    if (track === undefined) {
-      return { status: 'error', message: 'The dataset no longer lists this column.' }
-    }
-    const load = track.values === null ? context.trackLoads.get(track.id) : undefined
-    const values = track.values ?? (load?.status === 'ready' ? load.value : null)
-    if (values === null) {
-      return load?.status === 'error'
-        ? { status: 'error', message: load.message }
-        : { status: 'loading' }
-    }
-    return {
-      status: 'ready',
-      key: `track:${objectId(values)}`,
-      classes: EMPTY_CLASSES,
-      request: () => ({
-        type: 'number-column-by-id',
-        columnId: column.id,
-        cellIds: values.map((value) => value.cellId),
-        values: Float64Array.from(values, (value) => value.value),
-      }),
-    }
-  }
-
-  if (source.setKind === 'selections') {
-    const pending = context.savedSelections.some(
-      (saved) => saved.cells.status === 'loading',
-    )
-    if (pending) return { status: 'loading' }
-    const failed = context.savedSelections.flatMap((saved) =>
-      saved.cells.status === 'error' ? [`${saved.name}: ${saved.cells.message}`] : [],
-    )
-    if (failed.length > 0) return { status: 'error', message: failed.join('; ') }
-
-    return classesInput(
-      column.id,
-      context.placedCellIds,
-      context.savedSelections.flatMap((saved) =>
-        saved.cells.status === 'ready'
-          ? [
-              {
-                id: `selection:${saved.id}`,
-                label: saved.name,
-                cellIds: saved.cells.cellIds,
-              },
-            ]
-          : [],
-      ),
-    )
-  }
-
-  if (source.setKind === 'dataset') {
-    const groupId = datasetSetGroupId(source.setId) ?? ''
-    const load = context.datasetSetLoads.get(groupId)
-    if (load === undefined || load.status === 'loading') return { status: 'loading' }
-    if (load.status === 'error') return { status: 'error', message: load.message }
-    return classesInput(column.id, context.placedCellIds, setClasses(load.value))
-  }
-
-  return classesInput(
-    column.id,
-    context.placedCellIds,
-    setClasses(
-      context.annotations.filter(
-        (annotation) => annotationSetGrouping(annotation).id === source.setId,
-      ),
-    ),
-  )
-}
-
-function setClasses(
-  annotations: readonly Annotation<string>[],
-): readonly CellQueryClassInput[] {
-  return annotations.map((annotation) => ({
-    id: annotation.id,
-    label: annotationSetGrouping(annotation).rowLabel,
-    cellIds: annotation.cellIds,
-  }))
-}
-
-// The key holds the labels, so a renamed selection is sent again; the count
-// is of the cells on the map, as Clusters and Plots count them.
-function classesInput(
-  columnId: string,
-  placedCellIds: PlacedCellIds,
-  classes: readonly CellQueryClassInput[],
-): ColumnInput {
-  return {
-    status: 'ready',
-    key: classes
-      .map(
-        (queryClass) =>
-          `${queryClass.id}#${queryClass.label}#${objectId(queryClass.cellIds)}`,
-      )
-      .join('\u0000'),
-    classes: classes.map((queryClass) => ({
-      id: queryClass.id,
-      label: queryClass.label,
-      count:
-        placedCellIds.size === 0
-          ? queryClass.cellIds.length
-          : queryClass.cellIds.reduce(
-              (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
-              0,
-            ),
-    })),
-    request: () => ({ type: 'category-column', columnId, classes }),
-  }
 }
 
 // A condition's dataset set that Clusters has since loaded keeps reading it
