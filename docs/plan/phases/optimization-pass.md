@@ -190,7 +190,7 @@ that touch them.
 
 M0, measuring:
 
-- [ ] **O1. Scenarios and tools.** (M) Built in
+- [x] **O1. Scenarios and tools.** (M) Built in
       [#433](https://github.com/cellgeni/explorer/pull/433).
   - `scripts/profile-load.mjs`: the GPU channel (`--gpu`), scripted zoom
     and pan steps after the load (`--steps`), further datasets opened in
@@ -200,7 +200,7 @@ M0, measuring:
     fail a share of requests, for O7.
   - The baseline: S1 to S8, three runs each,
     [recorded below](#baseline-2026-11-25).
-- [ ] **O2. Synthetic data at scale.** (M) Built in
+- [x] **O2. Synthetic data at scale.** (M) Built in
       [#435](https://github.com/cellgeni/explorer/pull/435) as
       `scripts/make_scale_data.py`, which writes, outside the repository:
   - a Xenium-shaped output of N cells (1.4 million by default):
@@ -225,7 +225,7 @@ M1, interaction:
   - A fast-check test: the patched arrays equal the full pass for random
     cells, batches and colour modes.
   - Measure S3.
-- [ ] **O4. Colour outlines without rebuilding them.** (M) ViewerCore takes
+- [x] **O4. Colour outlines without rebuilding them.** (M) ViewerCore takes
       the unstyled outlines and applies expression colours as colour
       attributes only. The geometry, the cell filter and the tessellation
       are kept per outline array, and turning the fill on or off does not
@@ -234,6 +234,8 @@ M1, interaction:
   - Tests: the colour attributes equal today's, and a batch builds no
     geometry.
   - Measure S4.
+  - Built in [#439](https://github.com/cellgeni/explorer/pull/439):
+    [Outlines Coloured By ID](#outlines-coloured-by-id-2026-11-25).
 - [ ] **O5. Fewer passes before the first overview draw.** (M) One extent
       pass, reused; the ID maps built when first needed (outlines, a hover,
       Cell Query opening); ranks with filter values, and colours with layer
@@ -241,7 +243,9 @@ M1, interaction:
       arrays rather than from two rounds of objects.
   - Measure S2 first, since the 2026-11-12 numbers came before the worker
     moves.
-- [ ] **O6. App renders on hover and on settling.** (S) Pass a transcript
+  - The ID maps built in [#437](https://github.com/cellgeni/explorer/pull/437):
+    [Cell ID Maps Built On First Use](#cell-id-maps-built-on-first-use-2026-11-25).
+- [x] **O6. App renders on hover and on settling.** (S) Pass a transcript
       hover to App only when the hovered object changes; the tooltip still
       follows the pointer, and the diagnostics dump reads the latest hover
       from a ref. Remove the unread viewport cell count, and keep the
@@ -250,7 +254,9 @@ M1, interaction:
   - A test counts App's hover updates over repeated moves on one
     transcript.
   - Measure S5 with the React Profiler.
-- [ ] **O22. Outlines read as columns.** (S–M) Found by the baseline (S4):
+  - Built in [#440](https://github.com/cellgeni/explorer/pull/440):
+    [App Renders On A New Hover](#app-renders-on-a-new-hover-2026-11-25).
+- [x] **O22. Outlines read as columns.** (S–M) Found by the baseline (S4):
       the outline query returns a row per vertex, about a million for the
       view where outlines first show, and each becomes an object on the
       main thread (`result.toArray()`, `xeniumDatasetReaders.ts:318`;
@@ -258,6 +264,8 @@ M1, interaction:
       columns as typed arrays and cut them into rings by cell instead.
   - Tests: the same outlines as today from a fixture's rows.
   - Measure S4.
+  - Built in [#436](https://github.com/cellgeni/explorer/pull/436):
+    [Outlines Read As Lists](#outlines-read-as-lists-2026-11-25).
 
 M2, requests:
 
@@ -800,6 +808,172 @@ draw at the full view (M3, Metal, 2× pixel ratio, 1400 × 900, timed with a
 | Point size alone | 48 ms   | —                     | 59 ms          |
 | Both (#403)      | 18 ms   | 43 ms                 | 46 ms          |
 
+## Outlines Read As Lists (2026-11-25)
+
+Task O22, [#436](https://github.com/cellgeni/explorer/pull/436). The cell and
+nucleus outline queries returned a row per vertex, about a million for a
+view of 40,000 cells, and each row became an object on the main thread
+through Arrow's row proxies (`result.toArray()`), then was parsed
+(`parseBoundaryRow`) and gathered by cell. At S4's outline step, a CPU
+profile put about 1 s in Arrow's per-row accessors and 0.23 s in
+`parseBoundaryRow`, in one 1.6 s stretch. DuckDB now gathers each outline's
+vertices into lists in its worker, and the main thread reads one row per
+outline (`parseBoundaryRingRow`), taking each list's typed array from its
+Arrow vector
+([Viewport Cell Boundaries](../../modalities/xenium.md#viewport-cell-boundaries)).
+How the lists are gathered changed again in
+[Xenium Outline Queries In Less Memory](#xenium-outline-queries-in-less-memory-2026-11-26).
+
+Measured on the synthetic 1.4M-cell folder (O2), served locally, with
+unminified production builds of main (`3b7e942`) and the branch,
+alternating, three runs each, with GPU drawing and the profiler from O1, a
+7 s profile per zoom step:
+
+| Step                   | Main: busy / longest         | Branch: busy / longest     | Page memory                  |
+| ---------------------- | ---------------------------- | -------------------------- | ---------------------------- |
+| 3: outlines first show | 2,452–2,736 / 1,947–2,501 ms | 1,127–1,434 / 848–1,086 ms | 1,756–1,789 → 1,552–1,638 MB |
+| 4: next zoom           | 1,146–1,186 / 882–902 ms     | 730–872 / 410–484 ms       | 1,977–2,005 → 1,735–1,818 MB |
+
+- **Same results.** Run through DuckDB-WASM in Node on the folder's outline
+  files for a 700 µm box, the old and new queries gave the same 7,235
+  outlines and 180,875 vertices in the same order. Screenshots of both
+  builds at the two zooms where outlines show were byte-identical.
+  Requests were the same: 56 and 3.
+- **The first test to run DuckDB itself**,
+  `src/datasets/xeniumBoundaryQueries.test.ts`, checks the grouping,
+  vertex order and nucleus numbering against the real SQL.
+- **What remained** of step 3's stretch was mostly deck.gl cutting the new
+  outlines into triangles and building their geometry (O4).
+
+Lead: reading each row's lists still takes about 200 ms at the outline
+step, in Arrow's per-row `get`; reading the list columns whole would avoid
+it.
+
+## Cell ID Maps Built On First Use (2026-11-25)
+
+Task O5, first part, [#437](https://github.com/cellgeni/explorer/pull/437).
+A CPU profile of S2's longest stretch, the Xenium load, found three
+structures over every cell that the load itself reads none of:
+
+| Structure                                 | Where                                  | Time   |
+| ----------------------------------------- | -------------------------------------- | ------ |
+| Map of overview cells by ID               | `App.tsx` `overviewCellById`           | 359 ms |
+| Map of cell indices by ID                 | `ViewerCore.tsx` `cellIndexById`       | 108 ms |
+| Set of placed IDs, with Cell Query closed | `useCellQueryModel.ts` `placedCellIds` | 74 ms  |
+
+Each is first read later: on a hover or click, when outlines arrive, by an
+annotation import, an embedding, or a Cell Query column. `lazyIdLookup`
+(`src/data/lazyIdLookup.ts`) has `get`, `has` and `size`, builds its `Map`
+on first use, and answers as `new Map(items.map(...))` did, the last of a
+repeated ID winning. The three places use it.
+
+Measured on the synthetic 1.4M-cell folder with outlines off, unminified
+production builds of main (`3b7e942`) and the branch, alternating, three
+runs each, with GPU drawing:
+
+| Phase                     | Main: busy / longest         | Branch: busy / longest   |
+| ------------------------- | ---------------------------- | ------------------------ |
+| Load                      | 1,602–1,709 / 1,096–1,182 ms | 1,200–1,265 / 630–735 ms |
+| First colouring by `M03a` | 337–344 / 166–171 ms         | 432–533 / 280–285 ms     |
+
+- **The load's longest stretch** is about 0.45 s shorter, and every load
+  gets that.
+- **The first colouring by a gene** is about 0.11 s longer, all of it in
+  `geneExpressionElementForCell`, which looks up each cell in the batch's
+  style index by its ID. V8 hashes a string the first time it is a `Map`
+  key and keeps the hash; the load's maps used to do that for every cell
+  ID, and the first colour pass now does. Later colourings are unchanged.
+  O3 would take the per-cell lookup out of the colour pass.
+- **Same results:** both builds gave "Expression overview: 50,291 positive
+  cells across 1,400,000 slide cells".
+
+The rest of O5 (one extent pass, ranks and colours in one pass each, and
+points packed from the worker's columns) is not built yet.
+
+## Outlines Coloured By ID (2026-11-25)
+
+Task O4, [#439](https://github.com/cellgeni/explorer/pull/439). Every
+expression batch rebuilt the outlines from scratch:
+
+- App restyled every outline, so ViewerCore got a new outline array for each
+  batch, and rebuilt its geometry, packing the rings once for the paths and
+  once for the fills. Turning the fill on or off rebuilt them too.
+- deck.gl cut the fills into triangles twice, for the fill layer and for the
+  hover hit-area layer, which also normalised every ring first.
+- Every pan stop restyled the outlines 160 ms later, since ViewerCore
+  coloured them only from the expression inside the last settled view.
+
+Now each outline set has one set of rings and one set of triangles, shared
+by the paths, the fills and the hit areas. The triangles are computed once
+(`earcut` from `@math.gl/polygon`, which deck.gl already installs) and given
+to deck.gl as `attributes.indices` with `_normalize: false`. The hit area
+is a packed `SolidPolygonLayer` that maps a pick back to its outline by
+index. Colours are looked up by outline ID in the expression index
+ViewerCore already builds (`createCellBoundaryLayerStyle`), so their cost
+depends on the number of outlines, and App passes the outlines as read.
+
+Measured on the synthetic 1.4M-cell folder, unminified production builds
+of main with O22 and O5's first part (`3b7e942` + #436 + #437) and the
+branch, alternating, three runs each, with GPU drawing. The slide is
+coloured by `M03a`, zoomed until outlines show, then `M05a` is added and
+the view zoomed once more, each step profiled for 7 s:
+
+| Step                          | Base: busy / longest         | Branch: busy / longest     | Page memory                  |
+| ----------------------------- | ---------------------------- | -------------------------- | ---------------------------- |
+| 3: outlines first show        | 1,564–2,002 / 1,040–1,264 ms | 1,323–1,569 / 868–1,005 ms | 1,609–1,648 → 1,268–1,283 MB |
+| 4: a second gene, outlines on | 1,026–1,187 / 410–527 ms     | 479–537 / 112–260 ms       | 2,091–2,093 → 1,441–1,457 MB |
+| 5: next zoom                  | 1,404–2,112 / 815–1,504 ms   | 719–812 / 174–226 ms       | 2,079–2,130 → 1,735–1,752 MB |
+
+- **Same results.** Screenshots with the image off were byte-identical,
+  except 22 minimap pixels that flip between two states from run to run in
+  both builds. The same 12-point pointer path gave the same tooltips. A
+  property test (`cellBoundaryStyle.property.test.ts`, 500 cases) checks
+  the colour buffers against the old two passes.
+- **Changed behaviour:** outlines outside the last settled view take their
+  expression colour at once, rather than 160 ms after the view settles over
+  them.
+
+## App Renders On A New Hover (2026-11-25)
+
+Task O6, [#440](https://github.com/cellgeni/explorer/pull/440). The viewer
+reported a transcript hover to App on every pointer move, with the pointer's
+position, so App and ViewerCore rendered once per move over one transcript.
+Only the Transcripts section and the diagnostics dump read it, and neither
+needs the position on every move. `useTranscriptHover` now returns the
+current state for a hover over the same transcript or bin, so React skips
+the render, and keeps the latest hover in a ref for the dump. App also
+keeps its viewport detail when a report has the same box, cell count and
+view (`sameViewportDetail`), and no longer stores the viewer's cell count,
+which nothing read.
+
+Measured with unminified production builds of main (`4fdf384`) and the
+branch, each with a render counter (not in the PR), alternating, three runs
+each, with GPU drawing. S5 is the hosted Xenium demo at zoom 5 with
+transcripts on, the pointer moving every 40 ms for 5 s:
+
+| Moves                              | Main: App / ViewerCore renders | Branch: App / ViewerCore renders |
+| ---------------------------------- | ------------------------------ | -------------------------------- |
+| About 100 moves on one transcript  | 100–101 / 100–101              | 1 / 0                            |
+| About 100 moves across transcripts | 20 / 20                        | 20 / 20                          |
+
+- **React's work** over one transcript fell from 331 ms to 60 ms per 5 s
+  (one profile each). Main-thread totals barely changed, 1.8–2.2 s against
+  1.8–2.4 s: about 1 s of the 5 s is deck.gl's picking reading pixels back
+  on every move, in both builds.
+- **S3** (the synthetic folder coloured by `M03a`, five zoom steps and a
+  pan): App renders once less per step (3 → 2 before outlines load, 6 → 5
+  on zooms that load more), and ViewerCore too. Main-thread time per step
+  is within noise.
+- **Memoising ViewerCore** was not done: in every render measured, at least
+  one of its props had changed, so `React.memo` would have skipped none.
+
+Leads:
+
+- deck.gl's picking reads pixels back synchronously on each pointer move,
+  about 1 s per 5 s of hovering.
+- `estimateVisibleTranscriptsFromCells` takes 15–45 ms per settled view,
+  even with no transcripts shown.
+
 ## Range Read Timeouts And Retries (2026-11-26)
 
 Task O7, [#441](https://github.com/cellgeni/explorer/pull/441). Range reads
@@ -1341,6 +1515,12 @@ Found by the 2026-11-16 review:
 
 Closed by the pass's tasks:
 
+- [x] Hovering transcripts set App state to a new object on every pointer
+      move, so App re-rendered as the pointer moved (O6, 2026-11-25). It
+      now changes only when the hovered transcript does: App renders once
+      for about 100 moves on one transcript, rather than about 100 times
+      ([#440](https://github.com/cellgeni/explorer/pull/440))
+      ([App Renders On A New Hover](#app-renders-on-a-new-hover-2026-11-25)).
 - [x] Range reads had no timeout or retry (O7, 2026-11-26). On 2026-11-13, 3
       of 6 loads of the 460-plex zip from `ftp.ebi.ac.uk` had one or two
       range requests that took 55–90 s while the requests sent with them
