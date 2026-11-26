@@ -6,6 +6,7 @@ import {
   defaultPersistentByteRangeCache,
   fetchKeepingValidator,
 } from '../data/persistentByteRangeCache'
+import { rangeReadsWithoutHttpCache } from '../data/rangeFetch'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { waitForSharedLoad } from '../utils/sharedLoad'
 import { parseVisiumHdSquareBarcode } from './visiumHdBarcodes'
@@ -410,7 +411,7 @@ async function barcodeMappingsFileFromUrl(
   const file = await asyncBufferFromUrl({
     url,
     ...(source === undefined ? {} : { byteLength: source.byteLength }),
-    fetch: fetcher.fetch,
+    fetch: rangeReadsWithoutHttpCache(fetcher.fetch),
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
   const validator = source === undefined ? fetcher.validator() : source.validator

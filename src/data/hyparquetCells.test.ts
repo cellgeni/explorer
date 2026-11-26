@@ -339,6 +339,27 @@ describe('readCellsOverview with hyparquet', () => {
     // As with row objects, an absent optional column is not reported.
     expect(onFallback).not.toHaveBeenCalled()
   })
+  it('sends its Range reads past the HTTP cache, and its HEAD through it', async () => {
+    const sent: string[] = []
+    const fetchBytes = rangeFetcher(xeniumCellsFixtureBytes('cells.parquet'))
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const range = new Headers(init?.headers).get('Range')
+      sent.push(`${init?.method ?? 'GET'} ${range ?? '-'} ${init?.cache ?? 'default'}`)
+      return fetchBytes(input, init)
+    }) as typeof fetch
+
+    await readCellsOverview({
+      url: 'https://example.test/xenium/cells.parquet',
+      fetcher,
+      byteRangeCache: null,
+    })
+
+    expect(sent[0]).toBe('HEAD - default')
+    expect(sent.length).toBeGreaterThan(2)
+    expect(
+      sent.slice(1).every((request) => /^GET bytes=\d+-\d+ no-store$/.test(request)),
+    ).toBe(true)
+  })
 })
 
 describe('cellsOverviewColumnsFromValues', () => {
