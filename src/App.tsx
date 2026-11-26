@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -4670,7 +4671,9 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [appendDebugEvent, handleOpenDataset, loadedDatasetUrl],
   )
-  useEffect(() => {
+  // In the commit, like startDatasetLoadRef, so a section opened from a
+  // control the commit shows sees the dataset that is open.
+  useLayoutEffect(() => {
     openCollectionDatasetRef.current = handleOpenCollectionDataset
   })
   const collectionPreviewLoaders = useMemo(

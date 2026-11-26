@@ -766,6 +766,56 @@ describe('App with a dataset collection', () => {
       expect((await hashAfterWrite()).getAll('compare')).toEqual([SECTION_2])
     })
 
+    it('keeps the open dataset when a section is opened in the commit that shows it', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}`,
+      )
+      let hold = false
+      const detect: SpatialDatasetDetector = async (baseUrl) =>
+        hold && baseUrl === SECTION_2 ? pendingPromise() : detectSpatialDataset(baseUrl)
+      // Clicks the panel's Open as soon as the commit that shows it ends,
+      // before React's passive effects run, as a slow machine can (CI). A
+      // load started then once thought nothing was open, and closed Section 1.
+      const opened = new Promise<void>((resolve) => {
+        const observer = new MutationObserver(() => {
+          const panel = document.querySelector<HTMLElement>(
+            'section[aria-label="Section 2"]',
+          )
+          const open =
+            panel === null ? null : within(panel).queryByRole('button', { name: 'Open' })
+          if (open === null) return
+
+          observer.disconnect()
+          hold = true
+          fireEvent.click(open)
+          resolve()
+        })
+        observer.observe(document.body, { childList: true, subtree: true })
+      })
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detect}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      await opened
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      })
+
+      const bar = screen.getByRole('navigation', { name: 'Collection' })
+      expect(within(bar).getByRole('button', { name: 'Section 1' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      )
+      expect(screen.getByRole('region', { name: 'Section 2' })).toBeInTheDocument()
+    })
+
     it('stacks serial sections in 3D, in the link, until a dataset outside opens', async () => {
       const stacked = parseDatasetCollection(
         {
