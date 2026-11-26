@@ -203,7 +203,11 @@ metadata, and the snapshot serves the same purpose.
 ### `obs` Columns
 
 `readObservationTracks` follows the `column-order` attribute, or all keys
-except the index and `__*` entries:
+except the index and `__*` entries. It reads four columns at a time and
+keeps their order, and reads a column's arrays together: a categorical's
+`codes` and `categories`, a nullable array's `values` and `mask`. The obs
+and var indexes are read together too, and the coordinates with the obs
+columns, since from a Zarr store each array is a request of its own.
 
 - Categorical groups (`codes` + `categories`) become **annotation sets**.
   Negative codes are treated as missing; numeric categories are stringified.

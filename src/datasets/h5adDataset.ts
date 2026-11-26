@@ -3398,15 +3398,22 @@ async function readH5adCacheFromGroup(
 ): Promise<H5adCache> {
   const obs = expectGroup(file.get('/obs'), '/obs')
   const varGroup = expectGroup(file.get('/var'), '/var')
+  // Reads that do not wait on each other start together, and are awaited in
+  // the order they were read in before, so the same failure is reported
+  // (O11 in the optimization pass). From a Zarr store each is a request.
+  const varNamesRead = startedRead(readGeneNames(varGroup))
   const cellIds = uniqueNames(
     (await readDataframeIndex(obs, 'obs')).map((id, index) =>
       id.length === 0 ? `obs-${index}` : id,
     ),
     'obs',
   )
-  const varNames = await readGeneNames(varGroup)
+  const varNames = await varNamesRead
   const geneNames = uniqueNames(varNames.names, 'var')
   const embeddingOptions = readObsmEmbeddingOptions(file, cellIds.length)
+  const observationTracksRead = startedRead(
+    readObservationTracks(obs, cellIds.length, onUnreadableColumn),
+  )
   const resolvedCoordinates =
     resolveCoordinates === undefined
       ? null
@@ -3435,11 +3442,7 @@ async function readH5adCacheFromGroup(
       ? await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds)
       : null
   const coordinateEmbedding = obsmCoordinates?.embedding ?? null
-  const observationTracks = await readObservationTracks(
-    obs,
-    cellIds.length,
-    onUnreadableColumn,
-  )
+  const observationTracks = await observationTracksRead
   const visiumSource =
     coordinateEmbedding === null || options.visiumLayout === false
       ? null
@@ -4248,6 +4251,10 @@ function h5adEmbeddingDisplayRank(kind: string): number {
   return index < 0 ? H5AD_EMBEDDING_DISPLAY_KEYS.length : index
 }
 
+// Obs columns read at once. From a Zarr store a categorical column is two
+// requests, and Chromium sends six at a time to an HTTP/1.1 host.
+const OBS_COLUMN_READ_CONCURRENCY = 4
+
 async function readObservationTracks(
   obs: H5GroupLike,
   rowCount: number,
@@ -4264,123 +4271,143 @@ async function readObservationTracks(
       : obs
           .keys()
           .filter((key) => key !== indexKey && key !== '_index' && !key.startsWith('__'))
-  const categoricalTracks: H5adCategoricalTrack[] = []
-  const continuousTracks: H5adContinuousTrack[] = []
+  // A few columns at a time, kept in the file's order.
+  const tracks = await mapWithConcurrency(keys, OBS_COLUMN_READ_CONCURRENCY, (key) =>
+    readObservationTrack(obs, key, indexKey, rowCount, onUnreadableColumn),
+  )
 
-  for (const key of keys) {
-    try {
-      const entity = obs.get(key)
+  return {
+    categoricalTracks: tracks.filter(
+      (track): track is H5adCategoricalTrack =>
+        track !== null && 'categoryCount' in track,
+    ),
+    continuousTracks: tracks.filter(
+      (track): track is H5adContinuousTrack =>
+        track !== null && !('categoryCount' in track),
+    ),
+  }
+}
 
-      if (entity === null || entity === undefined || key === indexKey) {
-        continue
+// One obs column's track, or null when it has none.
+async function readObservationTrack(
+  obs: H5GroupLike,
+  key: string,
+  indexKey: string | undefined,
+  rowCount: number,
+  onUnreadableColumn?: (key: string, error: ZarrChunkUnavailableError) => void,
+): Promise<H5adCategoricalTrack | H5adContinuousTrack | null> {
+  try {
+    const entity = obs.get(key)
+
+    if (entity === null || entity === undefined || key === indexKey) {
+      return null
+    }
+
+    if (isCategoricalGroup(entity)) {
+      const { codes, categories } = await readCategoricalGroup(entity, `/obs/${key}`)
+
+      if (codes.length !== rowCount) {
+        return null
       }
 
-      if (isCategoricalGroup(entity)) {
-        const { codes, categories } = await readCategoricalGroup(entity, `/obs/${key}`)
+      const colors = await readCategoryColors(entity, `/obs/${key}`, categories.length)
+      return {
+        id: key,
+        label: key,
+        categoryCount: categories.length,
+        values: {
+          kind: 'codes',
+          codes,
+          categories,
+          ...(colors === null ? {} : { colors }),
+        },
+      }
+    }
 
-        if (codes.length !== rowCount) {
-          continue
-        }
+    let entityValue: unknown
 
-        const colors = await readCategoryColors(entity, `/obs/${key}`, categories.length)
-        categoricalTracks.push({
+    if (isNullableArrayGroup(entity)) {
+      const values = await readNullableArray(entity, `/obs/${key}`)
+
+      if (values.length !== rowCount) {
+        return null
+      }
+
+      entityValue = values
+    } else {
+      if (!isDataset(entity)) {
+        return null
+      }
+
+      const shape = entity.shape
+
+      if (shape === null || readShapeDimension(shape, 0, `/obs/${key}`) !== rowCount) {
+        return null
+      }
+
+      const valueRead = startedRead(readDatasetValue(entity))
+      const categories = await readDataframeCategories(obs, key)
+      entityValue = await valueRead
+
+      if (categories !== null && isNumericArray(entityValue)) {
+        const codes = readNumericArray(entityValue, `/obs/${key}`)
+
+        return {
           id: key,
           label: key,
           categoryCount: categories.length,
-          values: {
-            kind: 'codes',
-            codes,
-            categories,
-            ...(colors === null ? {} : { colors }),
-          },
-        })
-        continue
+          values: { kind: 'codes', codes, categories },
+        }
       }
+    }
 
-      let entityValue: unknown
+    if (isNumericArray(entityValue)) {
+      const values = numericArrayToNumbers(readNumericArray(entityValue, `/obs/${key}`))
+      // A loop, not Math.min(...values): spreading a column of more than
+      // about 120,000 cells overflows the call stack.
+      let min = Number.POSITIVE_INFINITY
+      let max = Number.NEGATIVE_INFINITY
 
-      if (isNullableArrayGroup(entity)) {
-        const values = await readNullableArray(entity, `/obs/${key}`)
-
-        if (values.length !== rowCount) {
-          continue
-        }
-
-        entityValue = values
-      } else {
-        if (!isDataset(entity)) {
-          continue
-        }
-
-        const shape = entity.shape
-
-        if (shape === null || readShapeDimension(shape, 0, `/obs/${key}`) !== rowCount) {
-          continue
-        }
-
-        const categories = await readDataframeCategories(obs, key)
-        entityValue = await readDatasetValue(entity)
-
-        if (categories !== null && isNumericArray(entityValue)) {
-          const codes = readNumericArray(entityValue, `/obs/${key}`)
-
-          categoricalTracks.push({
-            id: key,
-            label: key,
-            categoryCount: categories.length,
-            values: { kind: 'codes', codes, categories },
-          })
-          continue
+      for (const value of values) {
+        if (Number.isFinite(value)) {
+          min = Math.min(min, value)
+          max = Math.max(max, value)
         }
       }
 
-      if (isNumericArray(entityValue)) {
-        const values = numericArrayToNumbers(readNumericArray(entityValue, `/obs/${key}`))
-        // A loop, not Math.min(...values): spreading a column of more than
-        // about 120,000 cells overflows the call stack.
-        let min = Number.POSITIVE_INFINITY
-        let max = Number.NEGATIVE_INFINITY
+      return min > max ? null : { id: key, label: key, values, min, max }
+    }
 
-        for (const value of values) {
-          if (Number.isFinite(value)) {
-            min = Math.min(min, value)
-            max = Math.max(max, value)
-          }
-        }
+    const labels = readStringArray(entityValue, `/obs/${key}`)
 
-        if (min > max) {
-          continue
-        }
-
-        continuousTracks.push({ id: key, label: key, values, min, max })
-        continue
-      }
-
-      const labels = readStringArray(entityValue, `/obs/${key}`)
-
-      if (labels.length === rowCount) {
-        categoricalTracks.push({
+    return labels.length === rowCount
+      ? {
           id: key,
           label: key,
           categoryCount: countUniqueLabels(labels),
           values: { kind: 'strings', strings: labels },
-        })
-      }
-    } catch (error) {
-      // Optional columns with unreadable chunks are skipped when the caller
-      // can report them; other failures still fail the load.
-      if (
-        onUnreadableColumn === undefined ||
-        !(error instanceof ZarrChunkUnavailableError)
-      ) {
-        throw error
-      }
-
-      onUnreadableColumn(key, error)
+        }
+      : null
+  } catch (error) {
+    // Optional columns with unreadable chunks are skipped when the caller
+    // can report them; other failures still fail the load.
+    if (
+      onUnreadableColumn === undefined ||
+      !(error instanceof ZarrChunkUnavailableError)
+    ) {
+      throw error
     }
-  }
 
-  return { categoricalTracks, continuousTracks }
+    onUnreadableColumn(key, error)
+    return null
+  }
+}
+
+// A read started now and awaited later, after reads started before it: until
+// then a failure is held for that await rather than reported as unhandled.
+function startedRead<T>(read: Promise<T>): Promise<T> {
+  read.catch(() => undefined)
+  return read
 }
 
 // The file's size, its whole bytes, and its reference file are read through
@@ -4528,14 +4555,12 @@ async function readCategoricalGroup(
   readonly codes: NumericArrayLike
   readonly categories: readonly string[]
 }> {
-  const codes = readNumericArray(
-    await readDatasetValue(expectDataset(group.get('codes'), `${path}/codes`)),
-    `${path}/codes`,
+  const codesDataset = expectDataset(group.get('codes'), `${path}/codes`)
+  const categoriesRead = startedRead(
+    readDatasetValue(expectDataset(group.get('categories'), `${path}/categories`)),
   )
-  const categories = readCategoryLabels(
-    await readDatasetValue(expectDataset(group.get('categories'), `${path}/categories`)),
-    `${path}/categories`,
-  )
+  const codes = readNumericArray(await readDatasetValue(codesDataset), `${path}/codes`)
+  const categories = readCategoryLabels(await categoriesRead, `${path}/categories`)
 
   return { codes, categories }
 }
@@ -4582,13 +4607,12 @@ async function readNullableArray(
   group: H5GroupLike,
   path: string,
 ): Promise<readonly string[] | Float64Array> {
-  const values = await readDatasetValue(
-    expectDataset(group.get('values'), `${path}/values`),
+  const valuesDataset = expectDataset(group.get('values'), `${path}/values`)
+  const maskRead = startedRead(
+    readDatasetValue(expectDataset(group.get('mask'), `${path}/mask`)),
   )
-  const mask = readNumericArray(
-    await readDatasetValue(expectDataset(group.get('mask'), `${path}/mask`)),
-    `${path}/mask`,
-  )
+  const values = await readDatasetValue(valuesDataset)
+  const mask = readNumericArray(await maskRead, `${path}/mask`)
   const isMasked = (index: number) => numericValue(mask, index) !== 0
 
   if (isNumericArray(values)) {
