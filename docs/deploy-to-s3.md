@@ -63,7 +63,7 @@ already deployed. To serve your own gallery instead, build locally with
 
 ## Build Locally
 
-Use Node.js 24, the version CI uses, as in the
+Use Node.js 26, the version CI uses, as in the
 [README's Quick Start](../README.md#quick-start). From the repository root,
 install dependencies and run the normal verification pass:
 

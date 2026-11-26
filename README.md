@@ -22,7 +22,7 @@ cell-feature matrices, Feature Slice H5, H5AD, and native transcript LOD access.
 
 ## Quick Start
 
-Use Node.js 24, the version CI uses, with the npm it comes with, and run the
+Use Node.js 26, the version CI uses, with the npm it comes with, and run the
 commands from the repository root:
 
 ```sh
