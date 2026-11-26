@@ -310,7 +310,7 @@ M2, requests:
   - Measure on the 19-plex tonsil through the mirror (S9).
   - Built in [#449](https://github.com/cellgeni/explorer/pull/449):
     [Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26).
-- [ ] **O11. Shorter chains on load.** (M, one PR per group)
+- [x] **O11. Shorter chains on load.** (M, one PR per group)
   - Probe every Visium HD bin size at once. Built in
     [#469](https://github.com/cellgeni/explorer/pull/469):
     [Shorter Request Chains On Load](#shorter-request-chains-on-load-2026-11-26).
@@ -329,6 +329,8 @@ M2, requests:
     (`transcriptZarr.ts:208`). The gene's arrays are read together in
     [#476](https://github.com/cellgeni/explorer/pull/476):
     [A Xenium Gene's Arrays Read Together](#a-xenium-genes-arrays-read-together).
+    The transcript tiles read ahead are not adopted:
+    [Transcript Tiles Read Ahead](#transcript-tiles-read-ahead-not-adopted).
   - Measure each with `--delay 300` on the `anndata-zarr`, `spatialdata`
     and `visium-hd` fixtures.
 - [x] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
@@ -1618,6 +1620,28 @@ gene and times until the expression line shows:
 
 Test: `src/data/gexZarrCache.test.ts` answers each open and read a round at
 a time. Two genes take 7 rounds, and took 14 on the base.
+
+### Transcript Tiles Read Ahead (Not Adopted)
+
+Exact transcripts (`loadTranscriptZarrViewport`, `transcriptZarr.ts`) read
+the viewport's tiles from `transcripts.zarr.zip` one after another. A
+version read the next two tiles while one was filtered. It read ahead only
+while every tile in flight could still add all its transcripts within the
+point limit, from the grid's counts per tile, so no tile was read only to
+be dropped at the limit.
+
+It made no difference on the demo. Opened at a zoomed-in view where four
+tiles meet (zoom 5, with transcripts on), three alternating runs each:
+
+- **Time:** the exact query took 7.1–8.1 s on the base (#476) and 7.3–8.3 s
+  with the tiles read ahead.
+- **Same reads:** both sent the same 244 requests and drew the same 2,741
+  points.
+- **Why:** one tile's arrays and chunks are already more requests than an
+  HTTP/1.1 host's six connections take at once, so the next tile's only
+  waited their turn.
+
+On an HTTP/2 host it might help; that was not measured.
 
 ## Closed Open Items
 
