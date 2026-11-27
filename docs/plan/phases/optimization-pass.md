@@ -387,7 +387,7 @@ M3, main thread:
       million rows, and move them to a worker if either blocks for more
       than 200 ms. The two `parseCsvRows` read quotes and delimiters
       differently, so merging them is not part of this task.
-  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+  - Built in [#486](https://github.com/cellgeni/explorer/pull/486):
     [CSV Files Parsed In A Worker](#csv-files-parsed-in-a-worker-2026-11-27).
 
 M4, memory:
