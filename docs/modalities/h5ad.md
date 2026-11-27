@@ -274,6 +274,13 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
 | Group, `encoding-type` = `csc_matrix` | `csc` / `csc-zarr`          | One `indptr` span per requested gene                                                                                      |
 | Group, any other encoding             | `csr` / `csr-zarr`          | `indptr` slice per row; Zarr rows are batched into contiguous reads                                                       |
 
+A CSR `/X` read whole by the H5 file worker stays in that worker
+(`csr-worker`, since 2026-11-27): the page holds only `indptr`. A cell's
+genes are slices of the worker's arrays, and a gene's counts for colouring
+and its values for Plots and the Python console are scanned there, so the
+main thread does not scan every stored value for each gene. A CSC or dense
+`/X` is still sent to the page, where a gene is a slice or a column.
+
 On the reference backend, an all-gene read of a dense `/X` (selected-cell
 profile, ROI gene stats) is refused when the chunks holding one cell's genes
 decode to more than 256 MiB (`denseCellProfileMaxBytes`). zarr's default

@@ -2347,6 +2347,74 @@ describe('AnnDataH5adDataset read by range', () => {
     )
   })
 
+  it('keeps a CSR /X in the H5 worker, which scans its genes (O17)', async () => {
+    const host = stubH5adRangeHost(await createTinyH5ad('csr'))
+    const posted: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/kept.h5ad',
+      h5WorkerFactory: () => {
+        const worker = host.h5WorkerFactory()
+        const postMessage = worker.postMessage.bind(worker)
+        worker.postMessage = (message, transfer) => {
+          posted.push(
+            message.op === 'read'
+              ? `read ${message.path}${message.slice === undefined ? '' : ' slice'}`
+              : message.op,
+          )
+          postMessage(message, transfer)
+        }
+        return worker
+      },
+    })
+
+    const expression = await dataset.geneExpression(wholeExtent, ['Gapdh', 'Gad1'])
+    expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+      ['cell-a', 5],
+      ['cell-b', 3],
+      ['cell-c', 10],
+      ['cell-d', 8],
+    ])
+    const values = await dataset.geneValues(['Gad1', 'Gapdh'])
+    expect(
+      values.map((read) =>
+        'error' in read
+          ? read.error
+          : [...read.rows]
+              .map((row, index) => [row, read.values[index]])
+              .sort((left, right) => (left[0] ?? 0) - (right[0] ?? 0)),
+      ),
+    ).toEqual([
+      [
+        [1, 3],
+        [2, 4],
+      ],
+      [
+        [0, 5],
+        [2, 6],
+        [3, 8],
+      ],
+    ])
+    await expect(dataset.estimateGeneValuesRead(['Gapdh'])).resolves.toEqual({
+      kind: 'read',
+      bytes: 0,
+    })
+    // A cell's genes are slices of the kept arrays.
+    await expect(dataset.matrix(['cell-d', 'cell-c'])).resolves.toMatchObject({
+      cells: new Map([
+        ['cell-d', { geneNames: ['Actb', 'Gapdh'], counts: [7, 8] }],
+        ['cell-c', { geneNames: ['Gad1', 'Gapdh'], counts: [4, 6] }],
+      ]),
+    })
+
+    // The page never read /X's values or indices whole.
+    expect(posted).toContain('csr-keep')
+    expect(posted).toContain('csr-row-sums')
+    expect(posted).toContain('csr-gene-values')
+    expect(posted).toContain('read /X/data slice')
+    expect(posted).not.toContain('read /X/data')
+    expect(posted).not.toContain('read /X/indices')
+  })
+
   it.each(['dense', 'csr', 'csc'] as const)(
     'slices a %s /X per request above the matrix budget',
     async (matrixKind) => {

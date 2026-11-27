@@ -376,11 +376,13 @@ M3, main thread:
       `barcodes.tsv.gz` parse (`visiumHdBarcodes.ts:38-145`) too.
   - Built in [#484](https://github.com/cellgeni/explorer/pull/484):
     [Visium HD Tables Read In A Worker](#visium-hd-tables-read-in-a-worker-2026-11-27).
-- [ ] **O17. A gene's CSR scan off the main thread.** (M) For an H5AD read
+- [x] **O17. A gene's CSR scan off the main thread.** (M) For an H5AD read
       by the H5 worker, use its `matrix-cells` request
       (`h5FileMessages.ts:110`) rather than reading the matrix into the
       page (`h5adDataset.ts:4097`, `:4205`). For AnnData Zarr, decide after
       O15's numbers.
+  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+    [A CSR Matrix Kept In The H5 Worker](#a-csr-matrix-kept-in-the-h5-worker-2026-11-27).
 - [ ] **O18. Large CSV files in a worker.** (S) Time both parses at a
       million rows, and move them to a worker if either blocks for more
       than 200 ms. The two `parseCsvRows` read quotes and delimiters
@@ -1854,6 +1856,65 @@ handler across a structured clone against fixtures in
 groups was added): the worker's positions, bin mappings and barcodes match
 the main thread's, typed arrays are transferred, errors keep their names,
 and reads with a fetcher or byte-range cache stay on the main thread.
+
+## A CSR Matrix Kept In The H5 Worker (2026-11-27)
+
+Task O17. After O15 a gene's colouring of S6 scanned the 1M-cell CSR `/X`
+on the main thread in 57 ms, inside one stretch of 0.19–0.21 s. `/X` was read
+whole by the H5 file worker and sent to the page, which held its arrays.
+The worker's `matrix-cells` request reads a 10x `/matrix` by barcode, so it
+did not fit; three new requests do.
+
+What changed:
+
+- **The worker keeps a CSR `/X`** that it would have sent whole
+  (`csr-keep`, `src/workers/h5FileCore.ts`), and the page's matrix becomes
+  `csr-worker`, with only `indptr` in the page.
+- **A gene's counts** are summed there (`csr-row-sums`), with the page's
+  rules: `CsrRowSums` moved to `src/data/csrRowSums.ts` for both.
+- **Plots' and the Python console's gene values** are scanned there
+  (`csr-gene-values`, with `geneValuesFromCsr`).
+- **A cell's genes** (Cell card, Cell Query) are read as slices, as for a
+  matrix read by range; the worker answers reads of the kept paths from its
+  arrays, without h5wasm.
+- CSC and dense matrices, layers and `raw` are unchanged: a CSC gene is a
+  slice, and layers and `raw` are already read by range.
+
+Measured with unminified production builds of the base (#484) and the
+branch, alternating, three runs each, with GPU drawing: S6, then coloured
+by `M03a`. Profiling starts the colouring 3 s after the load; with a 10 s
+wait the page's collection of the load's garbage happens first, as it would
+before most clicks.
+
+| Step                              | Base: busy | Branch: busy | Base: longest | Branch: longest |
+| --------------------------------- | ---------- | ------------ | ------------- | --------------- |
+| Load                              | 896–922 ms | 821–871 ms   | 311–333 ms    | 170–290 ms      |
+| Colour by `M03a`, 3 s after load  | 208–219 ms | 211–247 ms   | 195–201 ms    | 152–169 ms      |
+| Colour by `M03a`, 10 s after load | 209–223 ms | 155–195 ms   | 193–206 ms    | 94–129 ms       |
+
+| Memory after colouring | Base   | Branch     |
+| ---------------------- | ------ | ---------- |
+| Page                   | 890 MB | 595–610 MB |
+| H5 file worker         | 148 MB | 470–476 MB |
+
+- **The scan** is 5 ms of page time rather than 57 ms. Three seconds after
+  the load, the branch's colouring also collects the load's garbage (54–73
+  ms), which the base had collected during its longer load.
+- **The expression line** shows as soon: 0.22–0.25 s after the click,
+  against 0.24–0.26 s, with the same 28,988 positive cells.
+- **Memory moves** to the worker rather than growing: 1.04 GB in all after
+  colouring on the base, 1.07 GB on the branch. The worker's WebAssembly
+  heap, grown to decode `/X`, is not given back on either build.
+- **AnnData Zarr is left as it is.** Its `X` is read in chunks, through a
+  zip on the 460-plex, and its 0.22–0.26 s scan comes in batches as the
+  chunks arrive; the colouring's long stretch there is deck.gl's
+  (see [AnnData Tables Read In Place](#anndata-tables-read-in-place-2026-11-27)).
+  Moving it would mean reading the store in a worker.
+
+Tests: `src/datasets/h5adDataset.test.ts` reads a CSR H5AD by range through
+the in-process worker and checks a gene's counts, gene values, the cells'
+genes and the estimate, and that the page asked the worker to keep `/X` and
+never read `/X/data` or `/X/indices` whole.
 
 ## Closed Open Items
 

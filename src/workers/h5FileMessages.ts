@@ -34,6 +34,9 @@ export type H5FileWorkerRequest =
   | H5FileStructureRequest
   | H5FilePreviewRequest
   | H5FileTreeRequest
+  | H5FileCsrKeepRequest
+  | H5FileCsrRowSumsRequest
+  | H5FileCsrGeneValuesRequest
 
 export interface H5FileOpenRequest {
   readonly id: number
@@ -114,6 +117,42 @@ export interface H5FilePreviewRequest {
   readonly path: string
 }
 
+// Keeps a CSR matrix's arrays in the worker, each read whole, as an H5AD's
+// /X (O17). The page holds none of them: reads of these paths are answered
+// from the kept arrays, and a gene's counts and values are scanned here.
+export interface H5FileCsrKeepRequest {
+  readonly id: number
+  readonly op: 'csr-keep'
+  readonly paths: H5FileCsrPaths
+}
+
+export interface H5FileCsrPaths {
+  readonly data: string
+  readonly indices: string
+  readonly indptr: string
+}
+
+// Each row's values of `cols`, added in that order, from a kept matrix named
+// by its data path. `cols` are the matrix's, of `matrixCols`.
+export interface H5FileCsrRowSumsRequest {
+  readonly id: number
+  readonly op: 'csr-row-sums'
+  readonly data: string
+  readonly rows: Int32Array
+  readonly cols: readonly number[]
+  readonly matrixCols: number
+}
+
+// Each of `cols`' stored values other than 0, by row, from a kept matrix (see
+// `geneValuesFromCsr`).
+export interface H5FileCsrGeneValuesRequest {
+  readonly id: number
+  readonly op: 'csr-gene-values'
+  readonly data: string
+  readonly cols: readonly number[]
+  readonly matrixCols: number
+}
+
 // Rows of a 10x feature-barcode matrix (`/matrix`), by barcode.
 export interface H5FileMatrixCellsRequest {
   readonly id: number
@@ -154,6 +193,9 @@ export type H5FileWorkerResponse =
   | H5FileStructureResponse
   | H5FilePreviewResponse
   | H5FileTreeResponse
+  | H5FileCsrKeepResponse
+  | H5FileCsrRowSumsResponse
+  | H5FileCsrGeneValuesResponse
   | H5FileProgressResponse
   | H5FileWorkerFailure
 
@@ -192,6 +234,29 @@ export interface H5FileTreeResponse {
   readonly ok: true
   readonly op: 'tree'
   readonly tree: H5TreeGroup
+}
+
+export interface H5FileCsrKeepResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'csr-keep'
+}
+
+export interface H5FileCsrRowSumsResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'csr-row-sums'
+  readonly sums: Float64Array
+}
+
+export interface H5FileCsrGeneValuesResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'csr-gene-values'
+  readonly columns: readonly {
+    readonly rows: Uint32Array
+    readonly values: Float32Array
+  }[]
 }
 
 // Sent while a request runs, before its reply: the objects a structure walk

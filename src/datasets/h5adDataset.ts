@@ -87,7 +87,13 @@ import {
   type AnalysisEmbeddingKind,
   type AnalysisEmbeddingOption,
 } from '../data/analysisEmbeddings'
-import { numericReader, type NumericArrayLike } from '../data/numericArray'
+import { CsrRowSums, sumCsrRows } from '../data/csrRowSums'
+import {
+  float64Column,
+  numericReader,
+  plainNumbers,
+  type NumericArrayLike,
+} from '../data/numericArray'
 import type {
   AnnDataMemoryColumn,
   AnnDataMemoryTable,
@@ -473,6 +479,19 @@ type H5adMatrix =
       readonly indptr: NumericArrayLike
       readonly rows: number
       readonly cols: number
+    }
+  // A CSR /X held whole by the H5 file worker that reads the file (O17).
+  // Rows are read as slices of its arrays, and a gene's counts and values are
+  // scanned there, off the main thread.
+  | {
+      readonly kind: 'csr-worker'
+      readonly data: H5adVectorReader
+      readonly indices: H5adVectorReader
+      readonly indptr: NumericArrayLike
+      readonly rows: number
+      readonly cols: number
+      readonly file: H5WorkerFile
+      readonly dataPath: string
     }
 
 // The matrices besides /X, by the name the Python console gives them: each
@@ -2760,7 +2779,12 @@ function rangeReadLabel(stats: H5FileRangeStats | null): string {
 }
 
 function isMatrixInMemory(matrix: H5adMatrix): boolean {
-  return matrix.kind === 'dense' || matrix.kind === 'csr' || matrix.kind === 'csc'
+  return (
+    matrix.kind === 'dense' ||
+    matrix.kind === 'csr' ||
+    matrix.kind === 'csc' ||
+    matrix.kind === 'csr-worker'
+  )
 }
 
 // Walks the paths in the worker, which the open's tree left out.
@@ -4826,6 +4850,34 @@ async function readMatrix(
       : { kind: 'csr-lazy', ...matrix }
   }
 
+  // CSR /X in an H5 file worker stays there, so the page never holds it and
+  // a gene's scan runs there (O17). CSC needs no scan: a gene is a slice.
+  if (
+    encodingType !== 'csc_matrix' &&
+    data.source?.kind === 'h5-worker' &&
+    indices.source?.kind === 'h5-worker' &&
+    indptrDataset.source?.kind === 'h5-worker' &&
+    data.source.file === indices.source.file &&
+    data.source.file === indptrDataset.source.file
+  ) {
+    await data.source.file.keepCsr({
+      data: data.source.path,
+      indices: indices.source.path,
+      indptr: indptrDataset.source.path,
+    })
+
+    return {
+      kind: 'csr-worker',
+      data: h5WorkerVectorReader(data.source, `${path}/data`),
+      indices: h5WorkerVectorReader(indices.source, `${path}/indices`),
+      indptr,
+      rows,
+      cols,
+      file: data.source.file,
+      dataPath: data.source.path,
+    }
+  }
+
   const matrix = {
     data: readNumericArray(await readDatasetValue(data), `${path}/data`),
     indices: readNumericArray(await readDatasetValue(indices), `${path}/indices`),
@@ -4871,6 +4923,8 @@ function h5adGeneValues(
       return geneValuesFromDense(matrix, cols, options)
     case 'csr-lazy':
       return geneValuesFromCsrBatches(rangeReadMatrix(matrix, signal), cols, options)
+    case 'csr-worker':
+      return matrix.file.csrGeneValues(matrix.dataPath, cols, matrix.cols, signal)
     case 'csc-lazy':
       return geneValuesFromColumnSlices(rangeReadMatrix(matrix, signal), cols, {
         ...options,
@@ -4910,6 +4964,7 @@ function h5adGeneValuesEstimate(
     case 'csr':
     case 'csc':
     case 'dense':
+    case 'csr-worker':
       return { kind: 'read', bytes: 0 }
     case 'csr-lazy':
       return {
@@ -5115,7 +5170,6 @@ async function h5adExpressionCounts(
   denseCellProfileMaxBytes: number,
   signal: AbortSignal | undefined,
 ): Promise<Float64Array> {
-  const counts = new Float64Array(rows.length)
   const colByGeneName = h5adColumnsByGene(cache.geneNames)
   const requestedCols = genes
     .map((gene) => colByGeneName.get(gene))
@@ -5123,7 +5177,7 @@ async function h5adExpressionCounts(
   const { matrix } = cache
 
   if (rows.length === 0 || requestedCols.length === 0) {
-    return counts
+    return new Float64Array(rows.length)
   }
 
   const fileRows = rows.map((row) => cache.section?.rows[row] ?? row)
@@ -5133,20 +5187,20 @@ async function h5adExpressionCounts(
     requestedCols.length < matrix.cols ? CsrRowSums.of(requestedCols, matrix.cols) : null
 
   if (sums !== null && matrix.kind === 'csr') {
-    const pointer = numericReader(matrix.indptr)
-    const indices = plainNumbers(matrix.indices)
-    const data = plainNumbers(matrix.data)
-
-    fileRows.forEach((row, slot) => {
-      counts[slot] = sums.row(
-        indices,
-        data,
-        Math.trunc(pointer(row)),
-        Math.trunc(pointer(row + 1)),
-      )
-    })
-    return counts
+    return sumCsrRows(matrix, fileRows, sums)
   }
+
+  if (sums !== null && matrix.kind === 'csr-worker') {
+    return matrix.file.csrRowSums(
+      matrix.dataPath,
+      Int32Array.from(fileRows),
+      requestedCols,
+      matrix.cols,
+      signal,
+    )
+  }
+
+  const counts = new Float64Array(rows.length)
 
   if (sums !== null && matrix.kind === 'csr-lazy') {
     for (const batch of csrLazyRowBatches(matrix.indptr, fileRows)) {
@@ -5204,105 +5258,6 @@ async function h5adExpressionCounts(
     counts[slot] = cells.get(id)?.counts.reduce((sum, value) => sum + value, 0) ?? 0
   })
   return counts
-}
-
-// An array's values as numbers, indexed directly: 64-bit integers converted
-// once per array.
-const plainNumbersByArray = new WeakMap<BigInt64Array | BigUint64Array, Float64Array>()
-
-function plainNumbers(values: NumericArrayLike): ArrayLike<number> {
-  if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
-    let numbers = plainNumbersByArray.get(values)
-
-    if (numbers === undefined) {
-      numbers = float64Column(values)
-      plainNumbersByArray.set(values, numbers)
-    }
-
-    return numbers
-  }
-
-  return values as ArrayLike<number>
-}
-
-// A CSR row's values of the requested columns, added in the order asked, as
-// sparseVectorCell and cellFromCountsByColumn give them.
-class CsrRowSums {
-  // Each column's slot, or -1 for a column not asked for.
-  readonly #slotByCol: Int32Array
-  // Each requested column's slot, in the order asked: a column asked for
-  // twice is added twice.
-  readonly #requestedSlots: Int32Array
-  readonly #values: Float64Array
-  readonly #seen: Uint8Array
-  readonly #touched: Int32Array
-  #touchedCount = 0
-
-  private constructor(requestedCols: readonly number[], cols: number) {
-    this.#slotByCol = new Int32Array(cols).fill(-1)
-    this.#requestedSlots = new Int32Array(requestedCols.length)
-    let slots = 0
-
-    requestedCols.forEach((col, request) => {
-      let slot = this.#slotByCol[col] ?? -1
-
-      if (slot === -1) {
-        slot = slots
-        slots += 1
-        this.#slotByCol[col] = slot
-      }
-
-      this.#requestedSlots[request] = slot
-    })
-
-    this.#values = new Float64Array(slots)
-    this.#seen = new Uint8Array(slots)
-    this.#touched = new Int32Array(slots)
-  }
-
-  // Null when a column is outside the matrix, which the per-cell path reads.
-  static of(requestedCols: readonly number[], cols: number): CsrRowSums | null {
-    return requestedCols.every((col) => Number.isInteger(col) && col >= 0 && col < cols)
-      ? new CsrRowSums(requestedCols, cols)
-      : null
-  }
-
-  // Indexed directly: a reader function per value was half of the scan's
-  // time on the 460-plex's range-read slices.
-  row(
-    indices: ArrayLike<number>,
-    data: ArrayLike<number>,
-    start: number,
-    end: number,
-  ): number {
-    for (let position = start; position < end; position += 1) {
-      const slot = this.#slotByCol[Math.trunc(indices[position] ?? 0)] ?? -1
-
-      if (slot !== -1) {
-        if (this.#seen[slot] === 0) {
-          this.#seen[slot] = 1
-          this.#touched[this.#touchedCount] = slot
-          this.#touchedCount += 1
-        }
-
-        // A column stored twice keeps its last value.
-        this.#values[slot] = data[position] ?? 0
-      }
-    }
-
-    let sum = 0
-
-    for (const slot of this.#requestedSlots) {
-      sum += this.#seen[slot] === 1 ? (this.#values[slot] ?? 0) : 0
-    }
-
-    for (let touched = 0; touched < this.#touchedCount; touched += 1) {
-      this.#seen[this.#touched[touched] ?? 0] = 0
-    }
-
-    this.#touchedCount = 0
-    return sum
-  }
 }
 
 async function h5adMatrixCellsForRows(
@@ -5374,7 +5329,7 @@ async function h5adMatrixCellsForRows(
     return cells
   }
 
-  if (matrix.kind === 'csr-lazy') {
+  if (matrix.kind === 'csr-lazy' || matrix.kind === 'csr-worker') {
     for (const batch of csrLazyRowBatches(
       matrix.indptr,
       rows.map(({ row }) => row),
@@ -6200,31 +6155,6 @@ function isNumericArray(value: unknown): value is NumericArrayLike {
 function numericValue(values: NumericArrayLike, index: number): number {
   const value = values[index]
   return typeof value === 'bigint' ? Number(value) : Number(value ?? 0)
-}
-
-// A column's values as a Float64Array: the array itself when it is one.
-function float64Column(values: NumericArrayLike): Float64Array {
-  if (values instanceof Float64Array) {
-    return values
-  }
-
-  const column = new Float64Array(values.length)
-
-  // A loop rather than Float64Array.from(values, Number), which took twice as
-  // long on the 460-plex's 64-bit integer columns.
-  if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
-    for (let index = 0; index < values.length; index += 1) {
-      column[index] = Number(values[index])
-    }
-  } else if (Array.isArray(values)) {
-    values.forEach((value, index) => {
-      column[index] = Number(value ?? 0)
-    })
-  } else {
-    column.set(values as ArrayLike<number>)
-  }
-
-  return column
 }
 
 function numericArrayToNumbers(values: NumericArrayLike): readonly number[] {
