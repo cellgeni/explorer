@@ -156,7 +156,11 @@ function cachedCellPointLayerColors(
     return cached.colors
   }
 
-  const layerColors = cellPointLayerColors(colors, fillOpacity, lineOpacity)
+  // An expression batch's colours are written over their base's layer colours,
+  // kept here too (O3).
+  const layerColors = cellPointLayerColors(colors, fillOpacity, lineOpacity, (base) =>
+    cachedCellPointLayerColors(base, fillOpacity, lineOpacity),
+  )
   cellPointLayerColorsCache.set(colors, { fillOpacity, lineOpacity, colors: layerColors })
   return layerColors
 }

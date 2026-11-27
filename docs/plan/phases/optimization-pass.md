@@ -216,7 +216,7 @@ M0, measuring:
 
 M1, interaction:
 
-- [ ] **O3. Patch colours per expression batch.** (M) Keep a base colour
+- [x] **O3. Patch colours per expression batch.** (M) Keep a base colour
       array per cells and colouriser, and one for cells without expression.
       For a batch, copy the right one and write only the batch's cells,
       through the cell index ViewerCore already builds; the layer's fill
@@ -225,6 +225,8 @@ M1, interaction:
   - A fast-check test: the patched arrays equal the full pass for random
     cells, batches and colour modes.
   - Measure S3.
+  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+    [Expression Colours Written Per Batch](#expression-colours-written-per-batch-2026-11-27).
 - [x] **O4. Colour outlines without rebuilding them.** (M) ViewerCore takes
       the unstyled outlines and applies expression colours as colour
       attributes only. The geometry, the cell filter and the tessellation
@@ -1643,6 +1645,68 @@ with transcripts on), three alternating runs each:
 
 On an HTTP/2 host it might help; that was not measured.
 
+## Expression Colours Written Per Batch (2026-11-27)
+
+Task O3. Each expression read made the cell points' colours twice, once when
+it started and once when it ended (`geneExpressionActive`), and each time
+`packCellPointColors` styled every cell with a lookup of its ID in the batch,
+then `cellPointLayerColors` made the layer's fill and line colours from all
+of them. On the synthetic 1.4M-cell folder that was 56–96 ms of each zoomed-in
+view's main-thread time, for batches of 15–214 cells.
+
+- **A batch writes only its cells** (`expressionCellPointColors`,
+  `src/rendering/cellPointStyle.ts`). ViewerCore keeps the cells' colours
+  without expression; a batch copies them, or an array of every cell in the
+  zero colour once unmatched cells are styled, and writes its own cells
+  over the copy, found by the cell index (`cellIndexById`).
+- **The layer's colours** are written the same way: the base's fill and
+  line colours are kept per opacity (`cachedCellPointLayerColors`), and a
+  batch's copy recomputes only its cells.
+- **The first batch takes the full pass.** V8 keeps a string's hash once it
+  is first used as a Map key, and on 1.4 million cells that was most of the
+  cost of building the cell index: 220–250 ms from IDs never looked up,
+  60–90 ms after a full pass. Building it for the first batch made the
+  first colouring 60–80 ms slower, so the index is built by the second
+  batch, unless a hover, outlines or Cell Query built it first.
+- **Still the full pass:** expression matched by bin position, and cells
+  that share an ID, which a write by ID cannot match.
+- **Memory:** the two base arrays and their layer colours, about 30 MB on
+  1.4 million cells.
+
+Measured with unminified production builds of main (`c1566d9`) and the
+branch, alternating, three runs each, with GPU drawing, on the synthetic
+folder coloured by `M03a`, then five zoom steps and a pan (S3, outlines
+off; S4, outlines on). Colour work is the time in the colour passes and the
+layer colours, from CPU profiles; on the branch it includes building the
+cell index.
+
+| Step                        | Main: colour work | Branch: colour work | Main: busy | Branch: busy | Main: longest | Branch: longest |
+| --------------------------- | ----------------- | ------------------- | ---------- | ------------ | ------------- | --------------- |
+| S3, colour by `M03a`        | 186–208 ms        | 179–252 ms          | 408–683 ms | 551–895 ms   | 288–323 ms    | 307–419 ms      |
+| S3, step 3 (214 cells read) | 73–80 ms          | 91–105 ms           | 232–246 ms | 248–274 ms   | 81–92 ms      | 117–138 ms      |
+| S3, step 4 (78 cells)       | 57–96 ms          | 2–4 ms              | 179–222 ms | 154–182 ms   | 60–67 ms      | 0–61 ms         |
+| S3, step 5 (15 cells)       | 56–63 ms          | 0–28 ms             | 186–221 ms | 113–171 ms   | 57–80 ms      | 0–56 ms         |
+| S4, step 3, outlines first  | 159–191 ms        | 84–88 ms            | 664–754 ms | 541–584 ms   | 460–550 ms    | 336–367 ms      |
+| S4, step 4                  | 61–65 ms          | 4–15 ms             | 371–420 ms | 313–363 ms   | 112–137 ms    | 101–129 ms      |
+| S4, step 5                  | 55–62 ms          | 4–16 ms             | 248–271 ms | 211–250 ms   | 62–97 ms      | 0–52 ms         |
+
+- **The first colouring** takes one full pass on both builds, 170–250 ms
+  of colour work; its busy time varies with shader compiles and garbage
+  collection on both.
+- **Step 3 builds the cell index** on the branch, 61–74 ms, so its colour
+  work is 18–25 ms more than main's in S3. With outlines on (S4), main
+  built the same index for the outlines at that step (80–114 ms, included
+  above), and the branch builds it once.
+- **Later steps** write their batch over a copy: 0–28 ms rather than 55–96
+  ms of colour work.
+- **The same colours.** Both builds gave the same expression lines, and
+  the property test below compares every array with the full pass.
+
+Tests: `src/rendering/cellPointStyle.property.test.ts` checks, for random
+cells, batches, colour modes, bin sizes and opacities, that the colours and
+the layer's fill and line colours equal the full pass's, and that a batch
+after the first styles no cell.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1793,6 +1857,15 @@ Found by the 2026-11-16 review:
 
 Closed by the pass's tasks:
 
+- [x] Every expression batch recoloured every cell: `packCellPointColors`
+      ran over all cells (`ViewerCore.tsx`), twice per read, and above
+      500,000 cells expression is read by viewport, so on large Xenium
+      datasets it ran on pan and zoom (O3 and O4). Outlines are coloured
+      without being rebuilt since O4 (2026-11-25), and a batch after the
+      first writes only its cells since O3 (2026-11-27): 0–28 ms rather
+      than 55–96 ms a zoomed-in view on 1.4 million cells
+      ([#PR](https://github.com/cellgeni/explorer/pull/PR))
+      ([Expression Colours Written Per Batch](#expression-colours-written-per-batch-2026-11-27)).
 - [x] The Xenium demo blocked the main thread for up to 4 s at a time in the
       first 30 s after load (O5, 2026-11-26). CPU profiles on 2026-11-12 put
       it on the load: hyparquet decoding `cells.parquet` (in a worker since

@@ -9,6 +9,8 @@ export interface IdLookup<Value> {
   has(id: string): boolean
   // The number of distinct IDs, as a Map's size.
   readonly size: number
+  // Whether the Map has been built; reading this does not build it.
+  readonly built: boolean
 }
 
 // As `new Map(items.map((item, index) => [idOf(item), valueOf(item, index)]))`:
@@ -37,6 +39,9 @@ export function lazyIdLookup<Item, Value>(
     has: (id) => built().has(id),
     get size() {
       return built().size
+    },
+    get built() {
+      return byId !== null
     },
   }
 }

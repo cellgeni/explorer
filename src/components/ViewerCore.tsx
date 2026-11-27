@@ -135,6 +135,7 @@ import {
   cellPointRanks,
   cellPointSampleFraction,
   createCellPointStyler,
+  expressionCellPointColors,
   packCellPointColors,
   packCellPointGeometry,
 } from '../rendering/cellPointStyle'
@@ -265,6 +266,7 @@ const DECK_EVENT_RECOGNIZER_OPTIONS = { click: { time: Infinity } }
 
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
+const EMPTY_GENE_EXPRESSION_STYLE_INDEX = createGeneExpressionElementStyleIndex([])
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
 const EMPTY_SELECTION_OUTLINES: readonly ViewerSelectionOutline[] = []
 const NO_MINIMAP_POINTS: readonly (readonly [number, number])[] = []
@@ -1007,9 +1009,49 @@ function ViewerSurface({
       }),
     [geneExpressionActive, geneExpressionPointStyleIndex, observationColorizer],
   )
+  // The colours without expression, which an expression batch writes its
+  // cells over (O3).
+  const observationCellPointColors = useMemo(
+    () =>
+      packCellPointColors(
+        cells,
+        createCellPointStyler({
+          observationColor: observationColorizer,
+          expressionIndex: EMPTY_GENE_EXPRESSION_STYLE_INDEX,
+          styleUnmatchedCells: false,
+        }),
+      ),
+    [cells, observationColorizer],
+  )
+  // Built on first use (a hover, a click, outlines or expression), not on
+  // load (O5).
+  const cellIndexById = useMemo(
+    () =>
+      lazyIdLookup(
+        cells,
+        (cell) => cell.id,
+        (_, index) => index,
+      ),
+    [cells],
+  )
   const modeCellPointColors = useMemo(
-    () => packCellPointColors(cells, cellPointStyler),
-    [cellPointStyler, cells],
+    () =>
+      expressionCellPointColors({
+        cells,
+        styler: cellPointStyler,
+        expressionIndex: geneExpressionPointStyleIndex,
+        styleUnmatchedCells: geneExpressionActive,
+        observationColors: observationCellPointColors,
+        cellIndexById,
+      }),
+    [
+      cellIndexById,
+      cellPointStyler,
+      cells,
+      geneExpressionActive,
+      geneExpressionPointStyleIndex,
+      observationCellPointColors,
+    ],
   )
   // The Python console's layers over the colour mode (plan 29-D7).
   const pythonLayers = useMemo(
@@ -1065,16 +1107,6 @@ function ViewerSurface({
         ? expressingElementsByScore(expressionElements)
         : EMPTY_OVERVIEW_CELLS,
     [expressionElements, geneExpressionOverlayEnabled],
-  )
-  // Built on first use (a hover, a click or outlines), not on load (O5).
-  const cellIndexById = useMemo(
-    () =>
-      lazyIdLookup(
-        cells,
-        (cell) => cell.id,
-        (_, index) => index,
-      ),
-    [cells],
   )
   const cellById = useMemo<OverviewCellLookup>(
     () => ({
