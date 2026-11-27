@@ -75,6 +75,69 @@ export function customAnnotationImportOnMap(
 
 // A file the importer cannot read as labels: its format or columns, not the
 // address it came from.
+// An import as a worker sends it (O18): each track's values as an ID column
+// and a number column rather than one object per cell, which cost 0.2 s to
+// receive at a million cells in Node, against 20-40 ms for columns.
+export interface CustomAnnotationImportColumns {
+  readonly annotations: readonly Annotation[]
+  readonly metadataTracks: readonly ContinuousCellMetadataTrackColumns[]
+  readonly skippedColumns?: readonly SkippedAnnotationColumn[]
+}
+
+export interface ContinuousCellMetadataTrackColumns extends Omit<
+  ContinuousCellMetadataTrack,
+  'values'
+> {
+  readonly values: {
+    readonly cellIds: readonly CellId[]
+    readonly values: Float64Array
+  } | null
+}
+
+export function customAnnotationImportToColumns(
+  parsed: CustomAnnotationImport,
+): CustomAnnotationImportColumns {
+  return {
+    ...parsed,
+    metadataTracks: parsed.metadataTracks.map((track) => ({
+      ...track,
+      values:
+        track.values === null
+          ? null
+          : {
+              cellIds: track.values.map((value) => value.cellId),
+              values: Float64Array.from(track.values, (value) => value.value),
+            },
+    })),
+  }
+}
+
+export function customAnnotationImportFromColumns(
+  columns: CustomAnnotationImportColumns,
+): CustomAnnotationImport {
+  return {
+    ...columns,
+    metadataTracks: columns.metadataTracks.map((track) => {
+      const { values } = track
+
+      if (values === null) {
+        return { ...track, values: null }
+      }
+
+      const trackValues = new Array<ContinuousCellMetadataValue>(values.cellIds.length)
+
+      for (let index = 0; index < trackValues.length; index += 1) {
+        trackValues[index] = {
+          cellId: values.cellIds[index] as CellId,
+          value: values.values[index] as number,
+        }
+      }
+
+      return { ...track, values: trackValues }
+    }),
+  }
+}
+
 export class AnnotationFileFormatError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options)

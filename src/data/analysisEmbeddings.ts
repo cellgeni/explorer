@@ -2,6 +2,7 @@ import { datasetFileUrl, datasetManifestFor, xeniumManifestFileFor } from './dat
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { isListedAsMissing } from './folderListing'
 import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
+import { throwIfAborted } from '../utils/abort'
 
 export type AnalysisEmbeddingKind = string
 export type AnalysisEmbeddingElementLabel = 'cells' | 'bins' | 'spots'
@@ -31,7 +32,26 @@ export interface LoadDatasetAnalysisEmbeddingsOptions {
   readonly fetcher?: typeof fetch
   readonly visiumHdBinSizeMicrometers?: AnalysisEmbeddingVisiumHdBinSize
   readonly onFallback?: FallbackNotifier
+  // Parses a projection's text, as csvTablesWorker.ts does in a worker (O18);
+  // by default on this thread.
+  readonly parseColumns?: AnalysisEmbeddingColumnsParser
 }
+
+// A projection's rows that have an ID and finite coordinates, as columns,
+// and the header columns it lacks, by name. Columns, not one object per row,
+// so a worker can send a million rows back cheaply.
+export interface AnalysisEmbeddingColumns {
+  readonly ids: readonly string[]
+  readonly x: Float64Array
+  readonly y: Float64Array
+  readonly missingColumns: readonly string[]
+}
+
+export type AnalysisEmbeddingColumnsParser = (
+  csv: string,
+  kind: AnalysisEmbeddingKind,
+  signal?: AbortSignal,
+) => Promise<AnalysisEmbeddingColumns>
 
 export interface ParseAnalysisEmbeddingCsvOptions {
   readonly onFallback?: FallbackNotifier
@@ -107,15 +127,24 @@ export async function loadDatasetAnalysisEmbeddings(
       options.signal,
     )
 
-    const points =
+    const columns =
       csv === null
-        ? []
-        : parseAnalysisEmbeddingCsv(csv, candidate.kind, {
-            sourcePath: candidate.path,
-            ...(options.onFallback === undefined
-              ? {}
-              : { onFallback: options.onFallback }),
-          })
+        ? null
+        : await (options.parseColumns ?? parseAnalysisEmbeddingColumnsHere)(
+            csv,
+            candidate.kind,
+            options.signal,
+          )
+    throwIfAborted(options.signal)
+
+    if (columns !== null) {
+      notifyMissingEmbeddingColumns(columns.missingColumns, candidate.kind, {
+        sourcePath: candidate.path,
+        ...(options.onFallback === undefined ? {} : { onFallback: options.onFallback }),
+      })
+    }
+
+    const points = columns === null ? [] : analysisEmbeddingPointsFromColumns(columns)
 
     if (points.length === 0) {
       appendSkippedEmbeddingPath(skippedPathsByKind, candidate)
@@ -185,12 +214,26 @@ export function parseAnalysisEmbeddingCsv(
   kind: AnalysisEmbeddingKind,
   options: ParseAnalysisEmbeddingCsvOptions = {},
 ): readonly AnalysisEmbeddingPoint[] {
+  const columns = parseAnalysisEmbeddingColumns(csv, kind)
+  notifyMissingEmbeddingColumns(columns.missingColumns, kind, options)
+  return analysisEmbeddingPointsFromColumns(columns)
+}
+
+export function parseAnalysisEmbeddingColumns(
+  csv: string,
+  kind: AnalysisEmbeddingKind,
+): AnalysisEmbeddingColumns {
   const rows = parseCsvRows(csv).filter((row) =>
     row.some((value) => value.trim().length > 0),
   )
 
   if (rows.length < 2) {
-    return []
+    return {
+      ids: [],
+      x: new Float64Array(0),
+      y: new Float64Array(0),
+      missingColumns: [],
+    }
   }
 
   const header = rows[0] ?? []
@@ -200,44 +243,82 @@ export function parseAnalysisEmbeddingCsv(
   const idIndex = idColumnIndex ?? 0
   const xIndex = xColumnIndex ?? fallbackAxisIndex(1)
   const yIndex = yColumnIndex ?? fallbackAxisIndex(2)
-  const points: AnalysisEmbeddingPoint[] = []
-  const missingColumns = [
-    ...(idColumnIndex === undefined ? ['cell id'] : []),
-    ...(xColumnIndex === undefined ? [`${kind.toUpperCase()} x`] : []),
-    ...(yColumnIndex === undefined ? [`${kind.toUpperCase()} y`] : []),
-  ]
+  const ids: string[] = []
+  const x = new Float64Array(rows.length - 1)
+  const y = new Float64Array(rows.length - 1)
 
-  if (missingColumns.length > 0) {
-    notifyFallback(options.onFallback, {
-      source: 'Analysis embeddings',
-      message: `Projection CSV is missing recognized ${missingColumns.join(
-        ', ',
-      )} header${missingColumns.length === 1 ? '' : 's'}; using positional CSV columns instead.`,
-      action:
-        'The embedding can still load, but verify the projection if the CSV column order is custom.',
-      ...(options.sourcePath === undefined ? {} : { detail: options.sourcePath }),
-      coalesceKey: `analysis-embedding-columns:${kind}:${options.sourcePath ?? 'inline'}`,
-    })
-  }
-
-  for (const row of rows.slice(1)) {
+  for (let index = 1; index < rows.length; index += 1) {
+    const row = rows[index] ?? []
     const id = row[idIndex]?.trim()
-    const x = coordinate(row[xIndex])
-    const y = coordinate(row[yIndex])
+    const rowX = coordinate(row[xIndex])
+    const rowY = coordinate(row[yIndex])
 
     if (
       id === undefined ||
       id.length === 0 ||
-      !Number.isFinite(x) ||
-      !Number.isFinite(y)
+      !Number.isFinite(rowX) ||
+      !Number.isFinite(rowY)
     ) {
       continue
     }
 
-    points.push({ id, x, y })
+    x[ids.length] = rowX
+    y[ids.length] = rowY
+    ids.push(id)
+  }
+
+  return {
+    ids,
+    x: x.slice(0, ids.length),
+    y: y.slice(0, ids.length),
+    missingColumns: [
+      ...(idColumnIndex === undefined ? ['cell id'] : []),
+      ...(xColumnIndex === undefined ? [`${kind.toUpperCase()} x`] : []),
+      ...(yColumnIndex === undefined ? [`${kind.toUpperCase()} y`] : []),
+    ],
+  }
+}
+
+export function analysisEmbeddingPointsFromColumns(
+  columns: AnalysisEmbeddingColumns,
+): readonly AnalysisEmbeddingPoint[] {
+  const points = new Array<AnalysisEmbeddingPoint>(columns.ids.length)
+
+  for (let index = 0; index < points.length; index += 1) {
+    points[index] = {
+      id: columns.ids[index] as string,
+      x: columns.x[index] as number,
+      y: columns.y[index] as number,
+    }
   }
 
   return points
+}
+
+const parseAnalysisEmbeddingColumnsHere: AnalysisEmbeddingColumnsParser = async (
+  csv,
+  kind,
+) => parseAnalysisEmbeddingColumns(csv, kind)
+
+function notifyMissingEmbeddingColumns(
+  missingColumns: readonly string[],
+  kind: AnalysisEmbeddingKind,
+  options: ParseAnalysisEmbeddingCsvOptions,
+): void {
+  if (missingColumns.length === 0) {
+    return
+  }
+
+  notifyFallback(options.onFallback, {
+    source: 'Analysis embeddings',
+    message: `Projection CSV is missing recognized ${missingColumns.join(
+      ', ',
+    )} header${missingColumns.length === 1 ? '' : 's'}; using positional CSV columns instead.`,
+    action:
+      'The embedding can still load, but verify the projection if the CSV column order is custom.',
+    ...(options.sourcePath === undefined ? {} : { detail: options.sourcePath }),
+    coalesceKey: `analysis-embedding-columns:${kind}:${options.sourcePath ?? 'inline'}`,
+  })
 }
 
 // A coordinate field as a number; NaN for an empty field, which pandas writes
