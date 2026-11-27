@@ -1,5 +1,5 @@
 import { xeniumCellIdText } from './cellid'
-import type { NumericArrayLike } from './numericArray'
+import { numericReader, type NumericArrayLike } from './numericArray'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { throwIfAborted } from '../utils/abort'
 
@@ -577,15 +577,6 @@ class ColumnBuilder {
 }
 
 // 64-bit indices and pointers, as h5py writes them, read as numbers.
-function numericReader(values: NumericArrayLike): (index: number) => number {
-  if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
-    return (index) => Number(values[index] ?? 0n)
-  }
-
-  const numbers = values as ArrayLike<number>
-  return (index) => numbers[index] ?? 0
-}
-
 function nextTask(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0)

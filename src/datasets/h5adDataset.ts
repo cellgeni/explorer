@@ -87,7 +87,7 @@ import {
   type AnalysisEmbeddingKind,
   type AnalysisEmbeddingOption,
 } from '../data/analysisEmbeddings'
-import type { NumericArrayLike } from '../data/numericArray'
+import { numericReader, type NumericArrayLike } from '../data/numericArray'
 import type {
   AnnDataMemoryColumn,
   AnnDataMemoryTable,
@@ -372,9 +372,9 @@ interface H5adVisiumSource {
   readonly rowLibraries: readonly (string | null)[] | null
   // That column's name, by which the table splits into its libraries.
   readonly libraryColumn: string | null
-  readonly inTissue: readonly number[] | null
-  readonly arrayRows: readonly number[] | null
-  readonly arrayCols: readonly number[] | null
+  readonly inTissue: Float64Array | null
+  readonly arrayRows: Float64Array | null
+  readonly arrayCols: Float64Array | null
 }
 
 interface H5adVisiumLibrary {
@@ -415,7 +415,10 @@ type H5adLabels =
 interface H5adContinuousTrack {
   readonly id: string
   readonly label: string
-  readonly values: readonly number[]
+  // As read when that is a Float64Array, else a copy: a number array per
+  // column took 80 ms and more on a load of 20 columns of a million cells
+  // (O15).
+  readonly values: Float64Array
   readonly min: number
   readonly max: number
 }
@@ -603,6 +606,8 @@ const DENSE_ZARR_CELL_PROFILE_MAX_BYTES = 256 * 1024 * 1024
 // String obs columns with more distinct values than this are counted as this
 // plus one. The annotation list sets apart columns of more than 500.
 const DISTINCT_LABEL_COUNT_LIMIT = 10_000
+// Labels compared one by one before a Set (DistinctLabels).
+const FEW_DISTINCT_LABELS = 16
 
 export class H5adFileSizeLimitExceededError extends Error {
   readonly url: string
@@ -962,14 +967,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   ): Promise<GeneExpressionBatch> {
     const cache = await this.cache()
     throwIfAborted(options.signal)
-    const selectedCells = h5adCellsInSelection(
+    const selectedRows = h5adRowsInSelection(cache, { kind: 'box', bbox }, options.limit)
+    const counts = await h5adExpressionCounts(
       cache,
-      { kind: 'box', bbox },
-      options.limit,
-    )
-    const matrix = await h5adMatrixForCells(
-      cache,
-      selectedCells.map((cell) => cell.id),
+      selectedRows,
       genes,
       this.denseCellProfileMaxBytes,
       options.signal,
@@ -980,25 +981,24 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     const elements: GeneExpressionElement[] = []
     let zeroCellIndex = 0
 
-    for (const cell of selectedCells) {
-      const expression = matrix.cells.get(cell.id)
-      const count = expression?.counts.reduce((sum, value) => sum + value, 0) ?? 0
+    selectedRows.forEach((row, index) => {
+      const count = counts[index] ?? 0
 
       if (count === 0) {
         zeroCellIndex += 1
 
         if ((zeroCellIndex - 1) % sampleStride !== 0) {
-          continue
+          return
         }
       }
 
       elements.push({
-        id: cell.id,
-        position: cell.position,
+        id: cache.cellIds[row] as SpatialElementId,
+        position: cache.coordinates[row] as DataPoint,
         count,
         ...(spotArea === undefined ? {} : { cellArea: spotArea }),
       })
-    }
+    })
 
     let maxCount = 0
 
@@ -1010,7 +1010,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       elements,
       genes,
       population: sampleStride > 1 ? 'sampled' : 'all',
-      cellCount: selectedCells.length,
+      cellCount: selectedRows.length,
       maxCount,
     }
   }
@@ -1194,7 +1194,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       throw new Error(`H5AD metadata track ${trackId} does not exist.`)
     }
 
-    return track.values.map((value, index) => ({
+    return Array.from(track.values, (value, index) => ({
       cellId: cache.cellIds[index] as never,
       value,
     }))
@@ -1270,7 +1270,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   async numericObsColumn(
     key: string,
     options: { readonly signal?: AbortSignal } = {},
-  ): Promise<readonly number[] | null> {
+  ): Promise<Float64Array | null> {
     const cache = await this.cache(options.signal)
     return cache.continuousTracks.find((track) => track.id === key)?.values ?? null
   }
@@ -1983,7 +1983,7 @@ function obsLabelValues(
   const numeric = cache.continuousTracks.find((track) => track.id === column)
 
   if (numeric !== undefined) {
-    return numeric.values.map((value) =>
+    return Array.from(numeric.values, (value) =>
       Number.isInteger(value) && value >= 0 ? value : null,
     )
   }
@@ -2025,7 +2025,7 @@ function obsIdValues(
   const numeric = cache.continuousTracks.find((track) => track.id === column)
 
   if (numeric !== undefined) {
-    return numeric.values.map(instanceIdString)
+    return Array.from(numeric.values, instanceIdString)
   }
 
   const text = cache.categoricalTracks.find((track) => track.id === column)
@@ -2175,7 +2175,7 @@ function withSection(base: H5adCache, column: string, value: string): H5adCache 
       return { ...track, values, categoryCount: distinctLabelCount(values, rows.length) }
     }),
     continuousTracks: base.continuousTracks.map((track) => {
-      const values = pickRows(track.values, rows)
+      const values = pickNumbers(track.values, rows)
       return { ...track, values, ...finiteRange(values) }
     }),
     extent: bboxForPoints(coordinates),
@@ -2226,15 +2226,16 @@ function visiumLibrarySection(
   libraryId: string,
   rows: Uint32Array,
 ): H5adVisiumSource {
-  const pick = <T>(values: readonly T[] | null) =>
-    values === null ? null : pickRows(values, rows)
+  const pick = (values: Float64Array | null) =>
+    values === null ? null : pickNumbers(values, rows)
 
   return {
     ...source,
     libraries: source.libraries.filter(({ id }) => id === libraryId),
     defaultLibraryId: libraryId,
     pixels: pickRows(source.pixels, rows),
-    rowLibraries: pick(source.rowLibraries),
+    rowLibraries:
+      source.rowLibraries === null ? null : pickRows(source.rowLibraries, rows),
     inTissue: pick(source.inTissue),
     arrayRows: pick(source.arrayRows),
     arrayCols: pick(source.arrayCols),
@@ -2245,7 +2246,7 @@ function visiumLibrarySection(
 // order: a categorical's categories, numbers ascending, else as first seen.
 // Null when obs has no such column.
 // Distinct finite values, counted up to one past `limit`.
-function distinctFiniteCount(values: readonly number[], limit: number): number {
+function distinctFiniteCount(values: Float64Array, limit: number): number {
   const seen = new Set<number>()
 
   for (const value of values) {
@@ -2314,6 +2315,10 @@ function pickRows<T>(values: ArrayLike<T>, rows: Uint32Array): T[] {
   return Array.from(rows, (row) => values[row] as T)
 }
 
+function pickNumbers(values: Float64Array, rows: Uint32Array): Float64Array {
+  return Float64Array.from(rows, (row) => values[row] ?? Number.NaN)
+}
+
 function pickLabels(labels: H5adLabels, rows: Uint32Array): H5adLabels {
   return labels.kind === 'codes'
     ? {
@@ -2326,7 +2331,7 @@ function pickLabels(labels: H5adLabels, rows: Uint32Array): H5adLabels {
 }
 
 function distinctLabelCount(labels: H5adLabels, rowCount: number): number {
-  const seen = new Set<string>()
+  const seen = new DistinctLabels()
 
   for (let row = 0; row < rowCount && seen.size < DISTINCT_LABEL_COUNT_LIMIT; row += 1) {
     const label = labelAt(labels, row)
@@ -2336,7 +2341,7 @@ function distinctLabelCount(labels: H5adLabels, rowCount: number): number {
   return seen.size
 }
 
-function finiteRange(values: readonly number[]): {
+function finiteRange(values: Float64Array): {
   readonly min: number
   readonly max: number
 } {
@@ -4362,7 +4367,7 @@ async function readObservationTrack(
     }
 
     if (isNumericArray(entityValue)) {
-      const values = numericArrayToNumbers(readNumericArray(entityValue, `/obs/${key}`))
+      const values = float64Column(readNumericArray(entityValue, `/obs/${key}`))
       // A loop, not Math.min(...values): spreading a column of more than
       // about 120,000 cells overflows the call stack.
       let min = Number.POSITIVE_INFINITY
@@ -5001,16 +5006,7 @@ async function h5adMatrixForCells(
   denseCellProfileMaxBytes: number,
   signal?: AbortSignal,
 ): Promise<GexResult<SpatialElementId>> {
-  const rowByCellId = new Map<string, number>()
-  const colByGeneName = new Map<string, number>()
-
-  cache.cellIds.forEach((cellId, row) => {
-    rowByCellId.set(cellId, cache.section?.rows[row] ?? row)
-  })
-  cache.geneNames.forEach((geneName, col) => {
-    colByGeneName.set(geneName, col)
-  })
-
+  const { rowByCellId, colByGeneName } = h5adLookups(cache)
   const requestedCols = genes
     .map((gene) => colByGeneName.get(gene))
     .filter((col): col is number => col !== undefined)
@@ -5056,6 +5052,259 @@ async function h5adMatrixForCells(
   }
 }
 
+// The file's row of each cell ID, and the column of each gene name, as
+// h5adMatrixForCells reads them: kept per table rather than built for each
+// read, a Map of every cell in each (O15).
+const h5adLookupsByCache = new WeakMap<
+  H5adCache,
+  {
+    readonly rowByCellId: ReadonlyMap<string, number>
+    readonly colByGeneName: ReadonlyMap<string, number>
+  }
+>()
+
+function h5adLookups(cache: H5adCache): {
+  readonly rowByCellId: ReadonlyMap<string, number>
+  readonly colByGeneName: ReadonlyMap<string, number>
+} {
+  let lookups = h5adLookupsByCache.get(cache)
+
+  if (lookups === undefined) {
+    const rowByCellId = new Map<string, number>()
+    cache.cellIds.forEach((cellId, row) => {
+      rowByCellId.set(cellId, cache.section?.rows[row] ?? row)
+    })
+    lookups = { rowByCellId, colByGeneName: h5adColumnsByGene(cache.geneNames) }
+    h5adLookupsByCache.set(cache, lookups)
+  }
+
+  return lookups
+}
+
+// Each gene name's column; a repeated name keeps its last.
+const h5adColumnsByGeneNames = new WeakMap<
+  readonly string[],
+  ReadonlyMap<string, number>
+>()
+
+function h5adColumnsByGene(geneNames: readonly string[]): ReadonlyMap<string, number> {
+  let colByGeneName = h5adColumnsByGeneNames.get(geneNames)
+
+  if (colByGeneName === undefined) {
+    const columns = new Map<string, number>()
+    geneNames.forEach((geneName, col) => {
+      columns.set(geneName, col)
+    })
+    colByGeneName = columns
+    h5adColumnsByGeneNames.set(geneNames, colByGeneName)
+  }
+
+  return colByGeneName
+}
+
+// Each selected table row's expression of `genes`, summed in the order asked,
+// as the counts of h5adMatrixForCells add up: a column stored twice in a row
+// keeps its last value, and zeros add nothing. A CSR matrix, in memory or read
+// by range, and a dense one in memory are read row by row into the sums, with
+// no ID lookups and no object per cell; on a million cells those took 0.6 s
+// (O15). Other layouts read through h5adMatrixCellsForRows.
+async function h5adExpressionCounts(
+  cache: H5adCache,
+  rows: readonly number[],
+  genes: readonly string[],
+  denseCellProfileMaxBytes: number,
+  signal: AbortSignal | undefined,
+): Promise<Float64Array> {
+  const counts = new Float64Array(rows.length)
+  const colByGeneName = h5adColumnsByGene(cache.geneNames)
+  const requestedCols = genes
+    .map((gene) => colByGeneName.get(gene))
+    .filter((col): col is number => col !== undefined)
+  const { matrix } = cache
+
+  if (rows.length === 0 || requestedCols.length === 0) {
+    return counts
+  }
+
+  const fileRows = rows.map((row) => cache.section?.rows[row] ?? row)
+  // All genes: the per-cell path adds each cell's stored genes in column
+  // order, which the sums here do not keep.
+  const sums =
+    requestedCols.length < matrix.cols ? CsrRowSums.of(requestedCols, matrix.cols) : null
+
+  if (sums !== null && matrix.kind === 'csr') {
+    const pointer = numericReader(matrix.indptr)
+    const indices = plainNumbers(matrix.indices)
+    const data = plainNumbers(matrix.data)
+
+    fileRows.forEach((row, slot) => {
+      counts[slot] = sums.row(
+        indices,
+        data,
+        Math.trunc(pointer(row)),
+        Math.trunc(pointer(row + 1)),
+      )
+    })
+    return counts
+  }
+
+  if (sums !== null && matrix.kind === 'csr-lazy') {
+    for (const batch of csrLazyRowBatches(matrix.indptr, fileRows)) {
+      throwIfAborted(signal)
+      const [indices, data] =
+        batch.end > batch.start
+          ? await Promise.all([
+              matrix.indices.slice(batch.start, batch.end, signal),
+              matrix.data.slice(batch.start, batch.end, signal),
+            ])
+          : [[], []]
+      const batchIndices = plainNumbers(indices)
+      const batchData = plainNumbers(data)
+
+      for (const span of batch.rows) {
+        counts[span.slot] = sums.row(
+          batchIndices,
+          batchData,
+          span.start - batch.start,
+          span.end - batch.start,
+        )
+      }
+    }
+
+    return counts
+  }
+
+  if (sums !== null && matrix.kind === 'dense') {
+    const value = numericReader(matrix.values)
+
+    fileRows.forEach((row, slot) => {
+      let sum = 0
+
+      for (const col of requestedCols) {
+        sum += value(row * matrix.cols + col)
+      }
+
+      counts[slot] = sum
+    })
+    return counts
+  }
+
+  const ids = rows.map((row) => cache.cellIds[row] as SpatialElementId)
+  const cells = await h5adMatrixCellsForRows(
+    matrix,
+    fileRows.map((row, slot) => ({ id: ids[slot] as SpatialElementId, row })),
+    requestedCols,
+    cache.geneNames,
+    genes.length === 1,
+    denseCellProfileMaxBytes,
+    signal,
+  )
+
+  ids.forEach((id, slot) => {
+    counts[slot] = cells.get(id)?.counts.reduce((sum, value) => sum + value, 0) ?? 0
+  })
+  return counts
+}
+
+// An array's values as numbers, indexed directly: 64-bit integers converted
+// once per array.
+const plainNumbersByArray = new WeakMap<BigInt64Array | BigUint64Array, Float64Array>()
+
+function plainNumbers(values: NumericArrayLike): ArrayLike<number> {
+  if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
+    let numbers = plainNumbersByArray.get(values)
+
+    if (numbers === undefined) {
+      numbers = float64Column(values)
+      plainNumbersByArray.set(values, numbers)
+    }
+
+    return numbers
+  }
+
+  return values as ArrayLike<number>
+}
+
+// A CSR row's values of the requested columns, added in the order asked, as
+// sparseVectorCell and cellFromCountsByColumn give them.
+class CsrRowSums {
+  // Each column's slot, or -1 for a column not asked for.
+  readonly #slotByCol: Int32Array
+  // Each requested column's slot, in the order asked: a column asked for
+  // twice is added twice.
+  readonly #requestedSlots: Int32Array
+  readonly #values: Float64Array
+  readonly #seen: Uint8Array
+  readonly #touched: Int32Array
+  #touchedCount = 0
+
+  private constructor(requestedCols: readonly number[], cols: number) {
+    this.#slotByCol = new Int32Array(cols).fill(-1)
+    this.#requestedSlots = new Int32Array(requestedCols.length)
+    let slots = 0
+
+    requestedCols.forEach((col, request) => {
+      let slot = this.#slotByCol[col] ?? -1
+
+      if (slot === -1) {
+        slot = slots
+        slots += 1
+        this.#slotByCol[col] = slot
+      }
+
+      this.#requestedSlots[request] = slot
+    })
+
+    this.#values = new Float64Array(slots)
+    this.#seen = new Uint8Array(slots)
+    this.#touched = new Int32Array(slots)
+  }
+
+  // Null when a column is outside the matrix, which the per-cell path reads.
+  static of(requestedCols: readonly number[], cols: number): CsrRowSums | null {
+    return requestedCols.every((col) => Number.isInteger(col) && col >= 0 && col < cols)
+      ? new CsrRowSums(requestedCols, cols)
+      : null
+  }
+
+  // Indexed directly: a reader function per value was half of the scan's
+  // time on the 460-plex's range-read slices.
+  row(
+    indices: ArrayLike<number>,
+    data: ArrayLike<number>,
+    start: number,
+    end: number,
+  ): number {
+    for (let position = start; position < end; position += 1) {
+      const slot = this.#slotByCol[Math.trunc(indices[position] ?? 0)] ?? -1
+
+      if (slot !== -1) {
+        if (this.#seen[slot] === 0) {
+          this.#seen[slot] = 1
+          this.#touched[this.#touchedCount] = slot
+          this.#touchedCount += 1
+        }
+
+        // A column stored twice keeps its last value.
+        this.#values[slot] = data[position] ?? 0
+      }
+    }
+
+    let sum = 0
+
+    for (const slot of this.#requestedSlots) {
+      sum += this.#seen[slot] === 1 ? (this.#values[slot] ?? 0) : 0
+    }
+
+    for (let touched = 0; touched < this.#touchedCount; touched += 1) {
+      this.#seen[this.#touched[touched] ?? 0] = 0
+    }
+
+    this.#touchedCount = 0
+    return sum
+  }
+}
+
 async function h5adMatrixCellsForRows(
   matrix: H5adMatrix,
   rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
@@ -5067,6 +5316,11 @@ async function h5adMatrixCellsForRows(
 ): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
   const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
   const allGenesRequested = requestedCols.length === matrix.cols
+  const sparseOptions = {
+    requestedColSet: allGenesRequested ? null : new Set(requestedCols),
+    countsByColumn: new Map<number, number>(),
+    includeZeroCounts,
+  }
 
   if (matrix.kind === 'dense') {
     for (const { id, row } of rows) {
@@ -5112,10 +5366,7 @@ async function h5adMatrixCellsForRows(
           end,
           requestedCols,
           geneNames,
-          {
-            allGenesRequested,
-            includeZeroCounts,
-          },
+          sparseOptions,
         ),
       )
     }
@@ -5124,7 +5375,10 @@ async function h5adMatrixCellsForRows(
   }
 
   if (matrix.kind === 'csr-lazy') {
-    for (const batch of csrLazyRowBatches(matrix.indptr, rows)) {
+    for (const batch of csrLazyRowBatches(
+      matrix.indptr,
+      rows.map(({ row }) => row),
+    )) {
       throwIfAborted(signal)
       const [indices, data] =
         batch.end > batch.start
@@ -5134,9 +5388,9 @@ async function h5adMatrixCellsForRows(
             ])
           : [[], []]
 
-      for (const { id, start, end } of batch.rows) {
+      for (const { slot, start, end } of batch.rows) {
         cells.set(
-          id,
+          rows[slot]?.id as SpatialElementId,
           sparseVectorCell(
             indices,
             data,
@@ -5144,10 +5398,7 @@ async function h5adMatrixCellsForRows(
             end - batch.start,
             requestedCols,
             geneNames,
-            {
-              allGenesRequested,
-              includeZeroCounts,
-            },
+            sparseOptions,
           ),
         )
       }
@@ -5173,8 +5424,9 @@ async function h5adMatrixCellsForRows(
 interface CsrLazyRowBatch {
   readonly start: number
   readonly end: number
+  // Each row's place in the rows asked for, and its values' range.
   readonly rows: readonly {
-    readonly id: SpatialElementId
+    readonly slot: number
     readonly start: number
     readonly end: number
   }[]
@@ -5184,11 +5436,11 @@ interface CsrLazyRowBatch {
 // instead of re-reading the same chunks row by row.
 function csrLazyRowBatches(
   indptr: NumericArrayLike,
-  rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
+  rows: readonly number[],
 ): readonly CsrLazyRowBatch[] {
   const spans = rows
-    .map(({ id, row }) => ({
-      id,
+    .map((row, slot) => ({
+      slot,
       start: Math.trunc(numericValue(indptr, row)),
       end: Math.trunc(numericValue(indptr, row + 1)),
     }))
@@ -5197,7 +5449,7 @@ function csrLazyRowBatches(
   let current: {
     start: number
     end: number
-    rows: { id: SpatialElementId; start: number; end: number }[]
+    rows: { slot: number; start: number; end: number }[]
   } | null = null
 
   for (const span of spans) {
@@ -5514,6 +5766,9 @@ function denseRowCell(
   return cellFromCountsByColumn(countsByColumn, requestedCols, geneNames, options)
 }
 
+// One cell's genes from its CSR row. `requestedColSet` is null when every
+// gene is asked for; `countsByColumn` is a Map reused from cell to cell, so a
+// read of many cells makes no Set or Map per cell (O15).
 function sparseVectorCell(
   indices: NumericArrayLike,
   data: NumericArrayLike,
@@ -5522,12 +5777,13 @@ function sparseVectorCell(
   requestedCols: readonly number[],
   geneNames: readonly string[],
   options: {
-    readonly allGenesRequested: boolean
+    readonly requestedColSet: ReadonlySet<number> | null
+    readonly countsByColumn: Map<number, number>
     readonly includeZeroCounts: boolean
   },
 ): { geneNames: string[]; counts: number[] } {
-  const requestedColSet = options.allGenesRequested ? null : new Set(requestedCols)
-  const countsByColumn = new Map<number, number>()
+  const { requestedColSet, countsByColumn } = options
+  countsByColumn.clear()
 
   for (let index = start; index < end; index += 1) {
     const col = Math.trunc(numericValue(indices, index))
@@ -5539,9 +5795,10 @@ function sparseVectorCell(
     countsByColumn.set(col, numericValue(data, index))
   }
 
-  const outputCols = options.allGenesRequested
-    ? Array.from(countsByColumn.keys()).sort((left, right) => left - right)
-    : requestedCols
+  const outputCols =
+    requestedColSet === null
+      ? Array.from(countsByColumn.keys()).sort((left, right) => left - right)
+      : requestedCols
 
   return cellFromCountsByColumn(countsByColumn, outputCols, geneNames, {
     includeZeroCounts: options.includeZeroCounts,
@@ -5578,14 +5835,15 @@ function emptyH5adCells(
   return new Map(rows.map(({ id }) => [id, { geneNames: [], counts: [] }]))
 }
 
+// The table rows of the cells in a selection, in row order, up to `limit`.
 // The limit counts cells inside the selection, so a lasso is tested before a
 // cell counts towards it.
-function h5adCellsInSelection(
+function h5adRowsInSelection(
   cache: H5adCache,
   selection: RoiSelection,
   limit: number | undefined,
-): readonly DatasetCell[] {
-  const cells: DatasetCell[] = []
+): readonly number[] {
+  const rows: number[] = []
   const maxCells = limit === undefined ? Number.POSITIVE_INFINITY : Math.max(0, limit)
 
   for (let index = 0; index < cache.cellIds.length; index += 1) {
@@ -5600,17 +5858,25 @@ function h5adCellsInSelection(
       continue
     }
 
-    cells.push({
-      id: id as never,
-      position,
-    })
+    rows.push(index)
 
-    if (cells.length >= maxCells) {
+    if (rows.length >= maxCells) {
       break
     }
   }
 
-  return cells
+  return rows
+}
+
+function h5adCellsInSelection(
+  cache: H5adCache,
+  selection: RoiSelection,
+  limit: number | undefined,
+): readonly DatasetCell[] {
+  return h5adRowsInSelection(cache, selection, limit).map((row) => ({
+    id: cache.cellIds[row] as never,
+    position: cache.coordinates[row] as DataPoint,
+  }))
 }
 
 function h5adCellMetadata(cache: H5adCache, row: number): CellMetadata {
@@ -5720,7 +5986,7 @@ function countUniqueLabels(
   labels: readonly string[],
   limit = DISTINCT_LABEL_COUNT_LIMIT,
 ): number {
-  const values = new Set<string>()
+  const values = new DistinctLabels()
 
   for (const label of labels) {
     if (label.length > 0) {
@@ -5733,6 +5999,31 @@ function countUniqueLabels(
   }
 
   return values.size
+}
+
+// Distinct labels, each compared first with the few already seen. A Set hashes
+// a string the first time it is used as a key: on the 460-plex's 598,222
+// segmentation methods, all one of two values, those hashes took 0.9 s of the
+// load, against 14 ms of comparisons (O15).
+class DistinctLabels {
+  readonly #few: string[] = []
+  readonly #more = new Set<string>()
+
+  get size(): number {
+    return this.#few.length + this.#more.size
+  }
+
+  add(label: string): void {
+    if (this.#few.includes(label)) {
+      return
+    }
+
+    if (this.#few.length < FEW_DISTINCT_LABELS) {
+      this.#few.push(label)
+    } else {
+      this.#more.add(label)
+    }
+  }
 }
 
 function bboxForPoints(points: readonly DataPoint[]): BBox {
@@ -5787,6 +6078,11 @@ function uniqueNames(
   // A suffix skips names stored elsewhere in the list, so c0, c0, c0-2 gives
   // c0, c0-3, c0-2 rather than two c0-2s.
   const stored = new Set(bases)
+
+  if (stored.size === bases.length) {
+    return bases
+  }
+
   const used = new Set<string>()
   const nextSuffix = new Map<string, number>()
 
@@ -5904,6 +6200,31 @@ function isNumericArray(value: unknown): value is NumericArrayLike {
 function numericValue(values: NumericArrayLike, index: number): number {
   const value = values[index]
   return typeof value === 'bigint' ? Number(value) : Number(value ?? 0)
+}
+
+// A column's values as a Float64Array: the array itself when it is one.
+function float64Column(values: NumericArrayLike): Float64Array {
+  if (values instanceof Float64Array) {
+    return values
+  }
+
+  const column = new Float64Array(values.length)
+
+  // A loop rather than Float64Array.from(values, Number), which took twice as
+  // long on the 460-plex's 64-bit integer columns.
+  if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
+    for (let index = 0; index < values.length; index += 1) {
+      column[index] = Number(values[index])
+    }
+  } else if (Array.isArray(values)) {
+    values.forEach((value, index) => {
+      column[index] = Number(value ?? 0)
+    })
+  } else {
+    column.set(values as ArrayLike<number>)
+  }
+
+  return column
 }
 
 function numericArrayToNumbers(values: NumericArrayLike): readonly number[] {

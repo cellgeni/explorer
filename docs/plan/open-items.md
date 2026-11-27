@@ -45,13 +45,13 @@ Other gaps found in the review:
       segmentations, which have workers of their own (Visium HD positions and
       barcode mappings; the positions decode for about 0.6 s in short tasks,
       measured 2026-11-17), and the fetching and assembly in zarrita reads. The
-      AnnData table code also runs there, for both H5AD backends. On the
-      598,222-cell 460-plex zip that is making the cell IDs unique (about 240 ms
-      in one task, a `Map` of all 598,222), converting numeric columns to number
-      arrays (110–145 ms over 20 columns) and counting the distinct values of
-      string columns (about 110 ms); the CSR scan for a gene took 230–270 ms on
-      the SpatialData Visium table. The moves so far, with their measurements,
-      are under
+      AnnData table code also runs there, for both H5AD backends. Since O15
+      (2026-11-27) its passes are cheaper: on the 598,222-cell 460-plex zip a
+      load spends 0.33–0.38 s on making the cell IDs unique, counting string
+      columns' values and number columns, against 1.3 s, and the CSR scan for
+      a gene 0.22–0.26 s, against 0.69–0.70 s
+      ([AnnData Tables Read In Place](phases/optimization-pass.md#anndata-tables-read-in-place-2026-11-27)).
+      The moves so far, with their measurements, are under
       [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13).
       Not listed until 2026-11-16: an annotation file named by
       `annotationUrl=` (`customAnnotations.ts`) and an embedding's projection
