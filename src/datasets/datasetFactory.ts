@@ -636,8 +636,7 @@ async function detectSpatialDatasetLayout(
     }
   }
 
-  const bins = await probeVisiumHdBins(normalizedBaseUrl, options, checked)
-  const segmentedOutputs = await probeVisiumHdSegmentedOutputs(
+  const { bins, segmentedOutputs } = await probeVisiumHdOutputs(
     normalizedBaseUrl,
     options,
     checked,
@@ -732,8 +731,7 @@ async function detectWithReader(
       : { platform: 'merscope', baseUrl: url, files, checked }
   }
 
-  const bins = await probeVisiumHdBins(url, options, checked)
-  const segmentedOutputs = await probeVisiumHdSegmentedOutputs(url, options, checked)
+  const { bins, segmentedOutputs } = await probeVisiumHdOutputs(url, options, checked)
 
   return bins.length === 0
     ? unknown
@@ -1702,10 +1700,19 @@ async function detectVisiumHdFromManifest(
   checked: DatasetProbeResult[],
 ): Promise<SpatialDatasetDetection> {
   const { rootUrl } = manifest
+  // Probed alongside the bins, and listed after them.
+  const segmentedProbe =
+    manifest.segmentedOutputs === undefined
+      ? probeVisiumHdSegmentedOutputs(rootUrl, options)
+      : undefined
+  // A bin error is thrown first; the probe's own error then goes unread.
+  segmentedProbe?.catch(() => undefined)
   let bins: VisiumHdBinDescriptor[]
 
   if (manifest.bins === undefined) {
-    bins = await probeVisiumHdBins(rootUrl, options, checked)
+    const probed = await probeVisiumHdBins(rootUrl, options)
+    checked.push(...probed.probes)
+    bins = probed.bins
 
     if (bins.length === 0) {
       throw new DatasetManifestError(
@@ -1748,10 +1755,16 @@ async function detectVisiumHdFromManifest(
     bins.sort((left, right) => left.binSizeMicrometers - right.binSizeMicrometers)
   }
 
-  const segmentedOutputs =
-    manifest.segmentedOutputs === undefined
-      ? await probeVisiumHdSegmentedOutputs(rootUrl, options, checked)
-      : segmentedOutputPathsFromManifest(manifest.segmentedOutputs)
+  let segmentedOutputs: VisiumHdSegmentedOutputPaths
+
+  if (manifest.segmentedOutputs === undefined) {
+    const segmented = await (segmentedProbe ??
+      probeVisiumHdSegmentedOutputs(rootUrl, options))
+    checked.push(...segmented.probes)
+    segmentedOutputs = segmented.outputs
+  } else {
+    segmentedOutputs = segmentedOutputPathsFromManifest(manifest.segmentedOutputs)
+  }
 
   return visiumHdDetection(baseUrl, bins, segmentedOutputs, manifest, checked)
 }
@@ -1777,29 +1790,52 @@ function visiumHdDetection(
 }
 
 // Standard Space Ranger tiers under `rootUrl` that have positions (for 2 µm,
-// filtered barcodes), scalefactors, and a filtered matrix.
+// filtered barcodes), scalefactors, and a filtered matrix. Every tier is
+// probed at once; a tier at a time took a round of requests each (O11 in the
+// optimization pass). The probes come back a tier at a time, in that order.
 async function probeVisiumHdBins(
   rootUrl: string,
   options: DetectSpatialDatasetOptions,
-  checked: DatasetProbeResult[],
-): Promise<VisiumHdBinDescriptor[]> {
-  const bins: VisiumHdBinDescriptor[] = []
+): Promise<{
+  readonly bins: VisiumHdBinDescriptor[]
+  readonly probes: DatasetProbeResult[]
+}> {
+  const tiers = await Promise.all(
+    VISIUM_HD_BINS.map(async (bin) => {
+      const descriptor = visiumHdBinDescriptor(bin.size, bin.outputPath)
+      const probes = await Promise.all(
+        visiumHdRequiredBinPaths(descriptor).map((path) =>
+          probeDatasetPath(rootUrl, path, options),
+        ),
+      )
+      return { descriptor, probes }
+    }),
+  )
 
-  for (const bin of VISIUM_HD_BINS) {
-    const descriptor = visiumHdBinDescriptor(bin.size, bin.outputPath)
-    const probes = await Promise.all(
-      visiumHdRequiredBinPaths(descriptor).map((path) =>
-        probeDatasetPath(rootUrl, path, options),
-      ),
-    )
-    checked.push(...probes)
-
-    if (probes.every((probe) => probe.ok)) {
-      bins.push(descriptor)
-    }
+  return {
+    bins: tiers
+      .filter((tier) => tier.probes.every((probe) => probe.ok))
+      .map((tier) => tier.descriptor),
+    probes: tiers.flatMap((tier) => tier.probes),
   }
+}
 
-  return bins
+// The bins and the segmented outputs, probed together; their probes are
+// listed bins first.
+async function probeVisiumHdOutputs(
+  rootUrl: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<{
+  readonly bins: VisiumHdBinDescriptor[]
+  readonly segmentedOutputs: VisiumHdSegmentedOutputPaths
+}> {
+  const [bins, segmented] = await Promise.all([
+    probeVisiumHdBins(rootUrl, options),
+    probeVisiumHdSegmentedOutputs(rootUrl, options),
+  ])
+  checked.push(...bins.probes, ...segmented.probes)
+  return { bins: bins.bins, segmentedOutputs: segmented.outputs }
 }
 
 function visiumHdBinDescriptor(
@@ -1827,15 +1863,16 @@ function visiumHdBinDescriptor(
 async function probeVisiumHdSegmentedOutputs(
   rootUrl: string,
   options: DetectSpatialDatasetOptions,
-  checked: DatasetProbeResult[],
-): Promise<VisiumHdSegmentedOutputPaths> {
+): Promise<{
+  readonly outputs: VisiumHdSegmentedOutputPaths
+  readonly probes: DatasetProbeResult[]
+}> {
   const probes = await Promise.all(
     VISIUM_HD_SEGMENTED_OUTPUT_PROBES.map((probe) =>
       probeDatasetPath(rootUrl, probe.path, options),
     ),
   )
-  checked.push(...probes)
-  return segmentedOutputPathsFromProbes(probes)
+  return { outputs: segmentedOutputPathsFromProbes(probes), probes }
 }
 
 function segmentedOutputPathsFromManifest(

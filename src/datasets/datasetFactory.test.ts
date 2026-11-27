@@ -157,6 +157,66 @@ describe('spatial dataset detection', () => {
     })
   })
 
+  it('probes every Visium HD bin size and the segmented outputs in one round', async () => {
+    const answer = fetcherForOkPaths([
+      '/visium/binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz',
+      '/visium/binned_outputs/square_002um/spatial/scalefactors_json.json',
+      '/visium/binned_outputs/square_002um/filtered_feature_bc_matrix.h5',
+      '/visium/binned_outputs/square_008um/spatial/tissue_positions.parquet',
+      '/visium/binned_outputs/square_008um/spatial/scalefactors_json.json',
+      '/visium/binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+      '/visium/segmented_outputs/cell_segmentations.geojson',
+    ])
+    // Output probes wait until released, a round at a time.
+    let held: (() => void)[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (/_outputs\//.test(new URL(String(input)).pathname)) {
+        await new Promise<void>((resolve) => held.push(resolve))
+      }
+
+      return answer(input, init)
+    }) as unknown as typeof fetch
+    let settled = false
+    const detecting = detectSpatialDataset('https://example.test/visium/', {
+      fetcher,
+    }).finally(() => {
+      settled = true
+    })
+    const rounds: number[] = []
+
+    while (!settled) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      if (held.length > 0) {
+        rounds.push(held.length)
+        const release = held
+        held = []
+        release.forEach((resolve) => resolve())
+      }
+    }
+
+    const detection = await detecting
+    const outputProbes = detection.checked
+      .map((probe) => probe.path)
+      .filter((path) => path.includes('_outputs/'))
+
+    expect(rounds).toEqual([outputProbes.length])
+    if (detection.platform !== 'visium-hd') {
+      throw new Error('Expected Visium HD detection.')
+    }
+    expect(detection.bins.map((bin) => bin.binSizeMicrometers)).toEqual([2, 8])
+    // Listed a tier at a time, then the segmented outputs, as when probed in
+    // turn.
+    expect(outputProbes.slice(0, 9).map((path) => path.split('/')[1])).toEqual([
+      ...Array<string>(3).fill('square_002um'),
+      ...Array<string>(3).fill('square_008um'),
+      ...Array<string>(3).fill('square_016um'),
+    ])
+    expect(
+      outputProbes.slice(9).every((path) => path.startsWith('segmented_outputs/')),
+    ).toBe(true)
+  })
+
   it('detects a 2 µm tier by its barcodes, not its unread positions file', async () => {
     const twoMicrometerOnly = (positionsOrBarcodes: string) =>
       fetcherForOkPaths([

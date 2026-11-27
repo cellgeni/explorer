@@ -311,7 +311,9 @@ M2, requests:
   - Built in [#449](https://github.com/cellgeni/explorer/pull/449):
     [Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26).
 - [ ] **O11. Shorter chains on load.** (M, one PR per group)
-  - Probe every Visium HD bin size at once.
+  - Probe every Visium HD bin size at once. Built in
+    [#469](https://github.com/cellgeni/explorer/pull/469):
+    [Shorter Request Chains On Load](#shorter-request-chains-on-load-2026-11-26).
   - Pass the probe's size to hyparquet, so it skips its `HEAD`.
   - Read AnnData Zarr obs columns, and embeddings, a few at a time.
   - Read a Xenium gene's three arrays together, and read the next
@@ -1425,6 +1427,34 @@ Tests: `src/rendering/deckLayers.test.ts` checks that a cell's datum has
 only the fields the cell has and that cells share their fill colour, and
 `src/rendering/cellAggregation.test.ts` that an array's extent is worked
 out once. Both fail on main.
+
+## Shorter Request Chains On Load (2026-11-26)
+
+Task O11, one PR per group of reads that waited for each other.
+
+### Visium HD Bin Sizes Probed Together
+
+[#469](https://github.com/cellgeni/explorer/pull/469). Detecting a Visium HD
+folder probed its tiers one after another, three requests for 2 µm, then
+8 µm, then 16 µm, and only then the eight segmented-output files (`probeVisiumHdBins`, `datasetFactory.ts`): four
+rounds of requests. They are now sent together, and their probes are still
+listed a tier at a time, then the segmented outputs, so a detection error
+reads as before. A manifest's own bins are still checked as listed, with
+the segmented outputs probed alongside them
+([Detection](../../modalities/visium-hd.md#detection)).
+
+There is no Visium HD folder in the fixtures, and the hosted reference is
+not among this pass's agreed data, so the probes were timed on a folder of
+one-byte files under the probed names, served by `scripts/range-server.mjs`
+at 300 ms a request. Production builds, three runs of each, alternating:
+from the first request to the host, the last request under `*_outputs/`
+ended at 3.68–3.70 s before and 3.07–3.09 s after. That server answers over
+HTTP/1.1, so Chromium sends six requests at a time; a host on HTTP/2 takes
+all seventeen at once, and saves about three round trips.
+
+Test: `src/datasets/datasetFactory.test.ts` holds each output probe until
+released and counts the rounds: four (3, 3, 3 and 8 requests) before, one
+(17) after.
 
 ## Closed Open Items
 
