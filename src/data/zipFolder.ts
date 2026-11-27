@@ -6,6 +6,7 @@ import {
   type ZipEntry,
 } from './zipArchive'
 import { fetchWithRetry } from './fetchRetry'
+import { registerMemoryReporter } from './memoryTelemetry'
 
 // A dataset folder shipped as one zip, such as an Atera run's `outs` folder
 // zipped whole, read in place. Once detection registers the zip, the URL
@@ -67,6 +68,22 @@ interface ZipFolderFile {
 
 const zipFolders = new Map<string, RegisteredZipFolder>()
 let installed = false
+
+// The entries kept inflated, for the memory table (O20), counted at their
+// inflated size from the zip's directory, including any still inflating.
+registerMemoryReporter('Zip entries', () => {
+  let entries = 0
+  let bytes = 0
+
+  for (const folder of zipFolders.values()) {
+    for (const name of folder.inflated.keys()) {
+      entries += 1
+      bytes += folder.directory.entries.get(name)?.size ?? 0
+    }
+  }
+
+  return { entries, workers: 0, bytes }
+})
 
 // Registers the zip so `${folder.url}/<path>` is read from it. Registering
 // the same zip again replaces it.

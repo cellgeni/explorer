@@ -44,7 +44,6 @@ import type {
   VisiumHdParquetObjectReader,
 } from './visiumHdOverview'
 
-export { DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET } from './visiumHdDatasetReaders'
 import type { Annotation, AnnotationGroupOption } from '../data/annotation'
 
 export type {
@@ -91,7 +90,6 @@ export interface VisiumHdDatasetOptions {
   readonly featureSliceReader?: VisiumHdFeatureSliceReader
   readonly featureSliceMetadataReader?: VisiumHdFeatureSliceMetadataReader
   readonly maxTwoMicrometerFilteredBarcodes?: number
-  readonly maxInteractiveFeatureSliceBytes?: number
   readonly maxInteractiveSegmentationGeojsonBytes?: number
   readonly readObjects?: VisiumHdParquetObjectReader
   readonly loadCompressors?: () => Promise<Compressors>
@@ -144,6 +142,13 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     this.maxTwoMicrometerFilteredBarcodes = this.readers.maxTwoMicrometerFilteredBarcodes
   }
 
+  // Drops what the dataset read (O19). Its matrix and Feature Slice workers
+  // are kept per file and end once no dataset that reads them is held
+  // (datasetResources.ts). A later read opens what it needs again.
+  dispose(): void {
+    this.readers.dispose()
+  }
+
   meta(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<DatasetMeta> {
     return this.readers.meta(binSizeMicrometers)
   }
@@ -185,12 +190,6 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     options: ReadVisiumHdFilteredMatrixBarcodesOptions = {},
   ): Promise<VisiumHdSquareBarcodeColumns> {
     return this.readers.filteredMatrixBarcodes(binSizeMicrometers, options)
-  }
-
-  barcodeMappings(
-    options: VisiumHdBarcodeMappingQueryOptions,
-  ): Promise<readonly VisiumHdBarcodeMapping[]> {
-    return this.readers.barcodeMappings(options)
   }
 
   barcodeMappingsForCell(

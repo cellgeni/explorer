@@ -36,6 +36,17 @@ export const dependencyChunkGroups = [
     test: /node_modules[\\/](@cornerstonejs|pako|lerc|zstddec)[\\/]/,
     priority: 30,
   },
+  // The app's own modules that the entry imports statically, in one chunk.
+  // Left to Rolldown, those that a lazily loaded part also imports became
+  // chunks of their own, each a request at start: 46 files at start, where
+  // the start screen took 2.0 s at 150 ms a request, against 1.3 s with this
+  // group's 6 (O21).
+  {
+    name: 'app',
+    test: /[\\/]src[\\/]/,
+    tags: ['$initial' as const],
+    priority: 10,
+  },
 ]
 
 // Records the deployed commit, and a release build's tag, in index.html, so

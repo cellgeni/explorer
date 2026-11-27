@@ -218,7 +218,9 @@ columns, since from a Zarr store each array is a request of its own.
 - String datasets become categorical tracks; empty strings are missing.
   Their distinct values are counted only up to 10,000: a column with more,
   such as cell IDs or barcodes, reports 10,001 and is listed under "More
-  columns" with the other columns of more than 500 categories.
+  columns" with the other columns of more than 500 categories. Each label is
+  compared with the first 16 values before it goes in a Set, which hashes
+  it: 0.9 s for a column of 598,222 labels with two values.
 - `nullable-string-array` groups become categorical tracks and
   `nullable-integer`/`nullable-boolean` groups continuous ones (booleans as
   0/1); masked values are missing.
@@ -271,6 +273,13 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
 | Dataset `n_obs × n_vars`              | `dense` / `dense-zarr`      | Row lookup / each chunk holding a requested cell and gene, read once for all requested cells (`denseZarrCellsFromChunks`) |
 | Group, `encoding-type` = `csc_matrix` | `csc` / `csc-zarr`          | One `indptr` span per requested gene                                                                                      |
 | Group, any other encoding             | `csr` / `csr-zarr`          | `indptr` slice per row; Zarr rows are batched into contiguous reads                                                       |
+
+A CSR `/X` read whole by the H5 file worker stays in that worker
+(`csr-worker`, since 2026-11-27): the page holds only `indptr`. A cell's
+genes are slices of the worker's arrays, and a gene's counts for colouring
+and its values for Plots and the Python console are scanned there, so the
+main thread does not scan every stored value for each gene. A CSC or dense
+`/X` is still sent to the page, where a gene is a slice or a column.
 
 On the reference backend, an all-gene read of a dense `/X` (selected-cell
 profile, ROI gene stats) is refused when the chunks holding one cell's genes

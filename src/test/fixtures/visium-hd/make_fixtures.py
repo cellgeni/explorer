@@ -5,6 +5,9 @@
   group, so 48 row groups of 6 column chunks each, with min/max statistics.
   Cells are 5 x 5 blocks of 2 um bins on a 6-bin pitch; the centre 3 x 3 of
   each is nucleus.
+- tissue_positions.parquet: the same grid's 6 x 5 16 um bins in Space
+  Ranger's columns and types, 12 rows per row group; bins in the last column
+  are out of tissue.
 
 Usage (from the repository root):
     uv run --no-project --python 3.12 --with "pyarrow>=15" \
@@ -61,11 +64,36 @@ def barcode_mappings():
     )
 
 
+def tissue_positions():
+    rows = [(row, col) for row in range(ROWS // 8) for col in range(COLS // 8)]
+
+    return pa.table(
+        {
+            "barcode": pa.array([barcode(16, row, col) for row, col in rows], pa.string()),
+            "in_tissue": pa.array([int(col < COLS // 8 - 1) for _, col in rows], pa.int64()),
+            "array_row": pa.array([row for row, _ in rows], pa.int64()),
+            "array_col": pa.array([col for _, col in rows], pa.int64()),
+            "pxl_row_in_fullres": pa.array(
+                [100.5 + row * 64.25 + col * 0.5 for row, col in rows], pa.float64()
+            ),
+            "pxl_col_in_fullres": pa.array(
+                [200.25 + col * 64.5 - row * 0.25 for row, col in rows], pa.float64()
+            ),
+        }
+    )
+
+
 def main():
     pq.write_table(
         barcode_mappings(),
         HERE / "barcode_mappings.parquet",
         row_group_size=COLS,
+        compression="snappy",
+    )
+    pq.write_table(
+        tissue_positions(),
+        HERE / "tissue_positions.parquet",
+        row_group_size=12,
         compression="snappy",
     )
 

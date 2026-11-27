@@ -329,6 +329,19 @@ export class DatasetManifestError extends Error {
   }
 }
 
+// A dataset collection (datasetCollection.ts) read as a dataset manifest: a
+// `.json` address, or a folder whose `explorer.json` is one. The viewer opens
+// `manifestUrl` as a collection instead; the message is for other readers.
+// The name stays DatasetManifestError's, which error reports go by.
+export class DatasetIsCollectionError extends DatasetManifestError {
+  constructor(manifestUrl: string) {
+    super(
+      manifestUrl,
+      'this is a dataset collection; open it with collection= in the address instead of dataset=.',
+    )
+  }
+}
+
 // True when a URL names a manifest directly rather than a dataset folder.
 // Zarr metadata documents also end in `.json` but are handled as Zarr.
 export function isDatasetManifestUrl(url: string): boolean {
@@ -365,9 +378,7 @@ export function parseDatasetManifest(
   // A collection (datasetCollection.ts) lists datasets instead of describing
   // one, and is opened with `collection=`.
   if ('datasets' in json && !('platform' in json)) {
-    return fail(
-      'this is a dataset collection; open it with collection= in the address instead of dataset=.',
-    )
+    throw new DatasetIsCollectionError(manifestUrl)
   }
 
   // Before the field check: a newer version's fields are unknown here, and

@@ -8,6 +8,7 @@ import {
   loadDatasetAnalysisEmbeddings,
   type LoadDatasetAnalysisEmbeddingsOptions,
 } from '../../data/analysisEmbeddings'
+import { csvTablesInWorker } from '../../data/csvTablesWorker'
 import { loadDatasetGeneExpression } from '../../data/geneExpression'
 import { loadDatasetOverview } from '../../data/datasetOverview'
 import {
@@ -74,6 +75,7 @@ import type { RoiSelectionInput } from '../../data/roiSelection'
 import { fetchExamplesIndex, type Example } from '../start/examplesIndex'
 import { loadDatasetCollection } from '../../datasets/annDataSectionCollection'
 import type { CollectionLoader } from '../collection/useDatasetCollection'
+import { navigatePage } from './useShareableUrlHash'
 import type {
   Annotation,
   AnnotationGroupOption,
@@ -85,6 +87,8 @@ export type ExamplesIndexLoader = (
   url: string,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<readonly Example[]>
+
+export type CollectionPageOpener = (href: string, replace: boolean) => void
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
@@ -281,6 +285,9 @@ export interface AppDependencies {
     readonly warmDatasetForRoi: DatasetWarmupLoader
     readonly loadExamplesIndex: ExamplesIndexLoader
     readonly loadCollection: CollectionLoader
+    // Leaves the page for a collection's link (`href`), replacing the current
+    // history entry or after it.
+    readonly openCollectionPage: CollectionPageOpener
   }
   readonly morphology: {
     readonly loadMorphologyImage: MorphologyImageLoader
@@ -351,6 +358,7 @@ export type AppDependencySlotOverrides = Partial<{
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
   readonly loadExamplesIndex: ExamplesIndexLoader
   readonly loadCollection: CollectionLoader
+  readonly openCollectionPage: CollectionPageOpener
 }>
 
 export interface AppProps {
@@ -367,6 +375,7 @@ export const defaultAppDependencies = {
     warmDatasetForRoi,
     loadExamplesIndex: fetchExamplesIndex,
     loadCollection: loadDatasetCollection,
+    openCollectionPage: navigatePage,
   },
   morphology: {
     loadMorphologyImage,
@@ -381,7 +390,12 @@ export const defaultAppDependencies = {
     loadAnnotationGroups: loadDatasetAnnotationGroups,
   },
   analysis: {
-    loadAnalysisEmbeddings: loadDatasetAnalysisEmbeddings,
+    // A projection is parsed in a worker (O18).
+    loadAnalysisEmbeddings: (baseUrl, options) =>
+      loadDatasetAnalysisEmbeddings(baseUrl, {
+        parseColumns: csvTablesInWorker.embeddingColumns,
+        ...options,
+      }),
   },
   roi: {
     loadRoiCells: loadDatasetRoiCells,

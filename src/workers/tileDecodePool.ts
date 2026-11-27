@@ -1,4 +1,5 @@
 import { workerFailureError } from './workerStartError'
+import { registerMemoryReporter } from '../data/memoryTelemetry'
 import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TileCellSums } from '../data/tileCellMeasure'
@@ -164,6 +165,11 @@ export class TileDecodeWorkerPool {
     return response.trace
   }
 
+  // Workers started and not ended.
+  get workerCount(): number {
+    return this.workers.length
+  }
+
   terminate(): void {
     this.reset(new Error('Tile decode worker pool terminated.'))
   }
@@ -296,6 +302,14 @@ export class TileDecodeWorkerPool {
 }
 
 let sharedStripPool: TileDecodeWorkerPool | null | undefined
+let sharedTilePool: TileDecodeWorkerPool | undefined
+
+// The shared pools' workers; each frees what it decoded once it has sent it.
+registerMemoryReporter('Image decoders', () => ({
+  entries: 0,
+  workers: (sharedTilePool?.workerCount ?? 0) + (sharedStripPool?.workerCount ?? 0),
+  bytes: null,
+}))
 
 // Shared pool for TIFF strip bands, or null where workers are unavailable
 // (for example in tests), in which case callers decode on the main thread.
@@ -306,8 +320,6 @@ export function sharedStripDecodePool(): TileDecodeWorkerPool | null {
 
   return sharedStripPool
 }
-
-let sharedTilePool: TileDecodeWorkerPool | undefined
 
 // Shared pool for the tiles of every TileCache. A cache is made per channel
 // and contrast, so a pool per cache started up to four more workers with each

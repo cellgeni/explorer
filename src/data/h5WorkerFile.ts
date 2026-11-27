@@ -6,6 +6,7 @@ import type { GexResult } from './gexTypes'
 import type { H5StructureWalk, H5ValuePreview } from './h5StructureTypes'
 import type { VisiumFeatureSliceMetadata } from './visiumFeatureSliceH5'
 import type {
+  H5FileCsrPaths,
   H5FileFeatureSliceTarget,
   H5FileRangeStats,
   H5FileSlice,
@@ -17,6 +18,11 @@ import type {
 } from '../workers/h5FileMessages'
 import type { H5FileHandler, H5FileHandlerOptions } from '../workers/h5FileCore'
 import { abortError } from '../utils/abort'
+import {
+  LiveInstances,
+  registerMemoryReporter,
+  sumReportedBytes,
+} from './memoryTelemetry'
 
 // An HDF5 file opened with h5wasm in its own worker, so copying it into
 // h5wasm's file system and decoding its datasets stay off the main thread.
@@ -76,6 +82,24 @@ export interface H5WorkerFile {
   ): Promise<GexResult<ElementId>>
   // A Visium HD feature_slice.h5's metadata, without its feature names.
   featureSliceMetadata(signal?: AbortSignal): Promise<VisiumFeatureSliceMetadata>
+  // Keeps a CSR matrix's arrays in the worker (see `H5FileCsrKeepRequest`).
+  keepCsr(paths: H5FileCsrPaths, signal?: AbortSignal): Promise<void>
+  // Each row's values of `cols` added up, from a kept matrix. `rows` is
+  // transferred.
+  csrRowSums(
+    data: string,
+    rows: Int32Array,
+    cols: readonly number[],
+    matrixCols: number,
+    signal?: AbortSignal,
+  ): Promise<Float64Array>
+  // Each of `cols`' stored values other than 0, by row, from a kept matrix.
+  csrGeneValues(
+    data: string,
+    cols: readonly number[],
+    matrixCols: number,
+    signal?: AbortSignal,
+  ): Promise<readonly { readonly rows: Uint32Array; readonly values: Float32Array }[]>
   // The root's tree with just these paths below it, each whole, for groups
   // the open's tree left out.
   readTree(paths: readonly string[], signal?: AbortSignal): Promise<H5TreeGroup>
@@ -285,6 +309,45 @@ function createH5WorkerFile(
 
       return response.metadata
     },
+    async keepCsr(paths, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'csr-keep', paths }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'csr-keep') {
+        throw new Error('The H5 file worker answered a CSR keep with another reply.')
+      }
+    },
+    async csrRowSums(data, rows, cols, matrixCols, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'csr-row-sums', data, rows, cols: [...cols], matrixCols }),
+        [rows.buffer],
+        signal,
+      )
+
+      if (response.op !== 'csr-row-sums') {
+        throw new Error('The H5 file worker answered a CSR row sum with another reply.')
+      }
+
+      return response.sums
+    },
+    async csrGeneValues(data, cols, matrixCols, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'csr-gene-values', data, cols: [...cols], matrixCols }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'csr-gene-values') {
+        throw new Error(
+          'The H5 file worker answered a CSR gene value read with another reply.',
+        )
+      }
+
+      return response.columns
+    },
     async readTree(paths, signal) {
       const response = await connection.request(
         (id) => ({ id, op: 'tree', paths: [...paths] }),
@@ -342,6 +405,22 @@ function createH5WorkerFile(
   return file
 }
 
+// Every open file's worker, for the memory table (O20). A worker asked while
+// it reads answers after the read.
+const liveConnections = new LiveInstances<H5WorkerConnection>()
+registerMemoryReporter('H5 files', () => {
+  const connections = [...liveConnections]
+
+  return {
+    entries: connections.length,
+    workers: connections.length,
+    bytes:
+      connections.length === 0
+        ? 0
+        : sumReportedBytes(connections.map((connection) => connection.memoryBytes())),
+  }
+})
+
 interface QueuedRequest {
   readonly message: (id: number) => H5FileWorkerRequest
   readonly transfer: Transferable[]
@@ -361,9 +440,12 @@ class H5WorkerConnection {
   private sent: { readonly id: number; request: QueuedRequest | null } | null = null
   private nextRequestId = 1
   private failure: Error | null = null
+  // One memory question at a time, however often the table asks.
+  private memoryRequest: Promise<number | null> | null = null
 
   constructor(worker: H5WorkerLike) {
     this.worker = worker
+    liveConnections.add(this)
     worker.onmessage = (event) => {
       const response = event.data
       const sent = this.sent
@@ -451,6 +533,21 @@ class H5WorkerConnection {
     this.worker.terminate()
   }
 
+  // What the worker holds for its file (`H5FileStatsResponse`), or null if
+  // it has failed.
+  memoryBytes(): Promise<number | null> {
+    this.memoryRequest ??= this.request((id) => ({ id, op: 'stats' }), [])
+      .then(
+        (response) => (response.op === 'stats' ? response.memoryBytes : null),
+        () => null,
+      )
+      .finally(() => {
+        this.memoryRequest = null
+      })
+
+    return this.memoryRequest
+  }
+
   private sendNext(): void {
     if (this.sent !== null || this.failure !== null) {
       return
@@ -477,6 +574,7 @@ class H5WorkerConnection {
 
   private fail(error: Error): void {
     this.failure ??= error
+    liveConnections.delete(this)
     const sent = this.sent?.request ?? null
     this.sent = null
     sent?.reject(error)

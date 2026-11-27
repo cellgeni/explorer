@@ -1,3 +1,4 @@
+import { workerTally } from '../../data/memoryTelemetry'
 import type { GeneValues, GeneValuesRowIds } from '../../data/geneValues'
 import type {
   PlotStatsWorkerRequest,
@@ -9,6 +10,9 @@ import {
   type PlotGroupsSummary,
   type PlotStatsResult,
 } from './plotStats'
+
+// The session's worker, for the memory table (O20).
+const plotStatsWorkers = workerTally('Plots')
 
 // The Plots panel's link to its numbers (plan 22-D6): a worker of its own
 // per dataset, so mapping a million cell IDs to rows and summing genes stay
@@ -65,6 +69,7 @@ export function createPlotStatsSession(
   function startWorker(factory: PlotStatsWorkerFactory): PlotStatsWorkerLike | null {
     try {
       const started = factory()
+      plotStatsWorkers.add(started)
       started.onmessage = (event) => {
         handleResponse(event.data)
       }
@@ -97,6 +102,7 @@ export function createPlotStatsSession(
     worker.onmessage = null
     worker.onerror = null
     worker.terminate()
+    plotStatsWorkers.delete(worker)
     worker = null
     const local = new PlotStatsStore()
     store = local
@@ -174,6 +180,7 @@ export function createPlotStatsSession(
         worker.onmessage = null
         worker.onerror = null
         worker.terminate()
+        plotStatsWorkers.delete(worker)
         worker = null
       }
       store = null

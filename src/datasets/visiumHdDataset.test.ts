@@ -3,10 +3,7 @@ import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
 import { gridCellCenter } from './spatialGrid'
 import { parseVisiumHdFilteredMatrixBarcodes } from './visiumHdBarcodes'
-import {
-  DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
-  VisiumHdDataset,
-} from './visiumHdDataset'
+import { VisiumHdDataset } from './visiumHdDataset'
 import {
   VISIUM_HD_TISSUE_POSITION_COLUMNS,
   createVisiumHdBinnedOverview,
@@ -26,7 +23,6 @@ import type {
   VisiumHdParquetReadObjectsOptions,
   VisiumHdScalefactors,
 } from './visiumHdDataset'
-import type { VisiumHdBarcodeMapping } from './visiumHdBarcodeMappings'
 import type { ReadVisiumHdSegmentationElementsOptions } from './visiumHdSegmentations'
 import { visiumHdSegmentationIndexFromElements } from './visiumHdSegmentationIndex'
 import type { ReadVisiumHdSegmentationIndexOptions } from './visiumHdSegmentationIndexWorker'
@@ -186,96 +182,6 @@ describe('Visium HD dataset readers', () => {
     )
   })
 
-  it('loads and caches budgeted barcode mappings through the dataset', async () => {
-    const fetcher = vi.fn(async () => new Response('unused'))
-    const barcodeMappings = [
-      {
-        square002um: 's_002um_000001_000002-1',
-        square008um: 's_008um_000000_000000-1',
-        square016um: 's_016um_000000_000000-1',
-        cellId: 'cell-1',
-        inNucleus: true,
-        inCell: true,
-      },
-    ]
-    const barcodeMappingsReader = vi.fn(async () => barcodeMappings)
-    const dataset = new VisiumHdDataset({
-      baseUrl: 'https://example.test/visium/',
-      bins: [bin16],
-      fetcher,
-      barcodeMappingsReader,
-    })
-
-    await expect(dataset.barcodeMappings({ maxRows: 25 })).resolves.toBe(barcodeMappings)
-    await expect(dataset.barcodeMappings({ maxRows: 25 })).resolves.toBe(barcodeMappings)
-    expect(barcodeMappingsReader).toHaveBeenCalledTimes(1)
-    expect(barcodeMappingsReader).toHaveBeenCalledWith('https://example.test/visium', {
-      maxRows: 25,
-      fetcher,
-      signal: expect.any(AbortSignal),
-    })
-  })
-
-  it('shares barcode mapping reads between callers that pass signals', async () => {
-    const barcodeMappings: readonly VisiumHdBarcodeMapping[] = []
-    let finishRead: (mappings: readonly VisiumHdBarcodeMapping[]) => void = () => {}
-    const readSignals: AbortSignal[] = []
-    const barcodeMappingsReader = vi.fn(
-      (_baseUrl: string, options: { readonly signal?: AbortSignal }) => {
-        readSignals.push(options.signal as AbortSignal)
-        return new Promise<readonly VisiumHdBarcodeMapping[]>((resolve) => {
-          finishRead = resolve
-        })
-      },
-    )
-    const dataset = new VisiumHdDataset({
-      baseUrl: 'https://example.test/visium/',
-      bins: [bin16],
-      barcodeMappingsReader,
-    })
-    const first = new AbortController()
-    const second = new AbortController()
-
-    const firstRead = dataset.barcodeMappings({ signal: first.signal })
-    const secondRead = dataset.barcodeMappings({ signal: second.signal })
-    first.abort()
-
-    await expect(firstRead).rejects.toMatchObject({ name: 'AbortError' })
-    expect(readSignals[0]?.aborted).toBe(false)
-
-    finishRead(barcodeMappings)
-    await expect(secondRead).resolves.toBe(barcodeMappings)
-    await expect(
-      dataset.barcodeMappings({ signal: new AbortController().signal }),
-    ).resolves.toBe(barcodeMappings)
-    expect(barcodeMappingsReader).toHaveBeenCalledTimes(1)
-  })
-
-  it('cancels a barcode mapping read once every caller has, and reads again after', async () => {
-    const readSignals: AbortSignal[] = []
-    const barcodeMappingsReader = vi.fn(
-      (_baseUrl: string, options: { readonly signal?: AbortSignal }) => {
-        readSignals.push(options.signal as AbortSignal)
-        return new Promise<readonly VisiumHdBarcodeMapping[]>(() => {})
-      },
-    )
-    const dataset = new VisiumHdDataset({
-      baseUrl: 'https://example.test/visium/',
-      bins: [bin16],
-      barcodeMappingsReader,
-    })
-    const controller = new AbortController()
-
-    const read = dataset.barcodeMappings({ maxRows: 10, signal: controller.signal })
-    controller.abort()
-
-    await expect(read).rejects.toMatchObject({ name: 'AbortError' })
-    expect(readSignals[0]?.aborted).toBe(true)
-
-    void dataset.barcodeMappings({ maxRows: 10 })
-    expect(barcodeMappingsReader).toHaveBeenCalledTimes(2)
-  })
-
   it('reads barcode mapping assignments for the requested bins, sharing the footer', async () => {
     const barcodeMappingsReader = vi.fn(async () => [])
     const fetcher = vi.fn(async () => new Response('unused'))
@@ -297,6 +203,7 @@ describe('Visium HD dataset readers', () => {
         bins: { binSizeMicrometers: 16, binIds: ['s_016um_00001_00002-1'] },
         sourceCache: expect.any(Map),
         fetcher,
+        readRangesInWorker: expect.any(Function),
         signal,
       },
     )
@@ -308,6 +215,7 @@ describe('Visium HD dataset readers', () => {
         bins: { binSizeMicrometers: 8, binIds: ['s_008um_00003_00004-1'] },
         sourceCache: expect.any(Map),
         fetcher,
+        readRangesInWorker: expect.any(Function),
       },
     )
     const sourceCaches = barcodeMappingsReader.mock.calls.map(
@@ -1008,7 +916,9 @@ describe('Visium HD dataset readers', () => {
     expect(filteredMatrixBarcodeReader).toHaveBeenCalledWith(
       'https://example.test/visium',
       bin2,
-      { fetcher: expect.any(Function), signal: expect.any(AbortSignal) },
+      // No fetcher was given, so none is passed on: the barcodes are read
+      // in a worker (O16).
+      { signal: expect.any(AbortSignal) },
     )
   })
 
@@ -1049,7 +959,6 @@ describe('Visium HD dataset readers', () => {
       'https://example.test/visium',
       bin2,
       {
-        fetcher: expect.any(Function),
         maxBarcodeCount: 10,
         signal: expect.any(AbortSignal),
       },
@@ -1448,10 +1357,7 @@ describe('Visium HD dataset readers', () => {
       ],
       ['Actb', 'Gad1'],
       expect.objectContaining({
-        backend: 'lazy-range-worker',
         binSizeMicrometers: 16,
-        fetcher: expect.any(Function),
-        maxFullFileBytes: DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
         onStageTiming: expect.any(Function),
       }),
     )
@@ -1517,7 +1423,6 @@ describe('Visium HD dataset readers', () => {
       ],
       ['Actb'],
       expect.objectContaining({
-        backend: 'lazy-range-worker',
         binSizeMicrometers: 16,
       }),
     )

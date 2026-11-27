@@ -11,6 +11,7 @@ import type { ZarrValuePreview } from '../../zarr/zarrValuePreview'
 import { H5FileView } from './H5StructureView'
 import { ParquetFileView } from './ParquetStructureView'
 import {
+  STORE_STRUCTURE_DRAWER_TITLES,
   formatBytes,
   formatCount,
   formatShape,
@@ -43,12 +44,6 @@ import type {
   StructureView,
 } from './useStoreStructure'
 import { ValuesPanel, ValuesTable } from './ValuesPanel'
-
-const DRAWER_TITLES = {
-  store: 'Store structure',
-  file: 'Parquet file',
-  h5: 'HDF5 file',
-} as const
 
 // The drawer of Browse Store and Browse File: the groups and arrays of the
 // Zarr store, the columns of the Parquet file, or the groups and datasets of
@@ -92,7 +87,7 @@ export function StoreStructureDrawer({ store }: { readonly store: StoreStructure
 
   return (
     <Drawer
-      title={DRAWER_TITLES[store.view]}
+      title={STORE_STRUCTURE_DRAWER_TITLES[store.view]}
       side="right"
       open={store.open}
       onClose={store.close}

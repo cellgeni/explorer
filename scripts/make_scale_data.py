@@ -9,6 +9,10 @@ This script writes, into a folder outside the repository:
 - scale.h5ad: an AnnData file (1 million cells by default) with
   obsm/spatial, an X_umap embedding, 20 numeric and 6 categorical obs
   columns, and a sparse X.
+- visium-hd/: a Space Ranger 4 Visium HD output folder (with --what
+  visium-hd), at the reference run's size: a grid of 3,350 x 3,350 bins of
+  2 um, a third of them under tissue, binned to 8 and 16 um, with
+  barcode_mappings.parquet and feature_slice.h5.
 
 Both share one model of a tissue: cells on a jittered 10 um grid, in
 clusters that are patches of the slide, each with five marker genes
@@ -26,19 +30,25 @@ Usage (from the repository root):
         python scripts/make_scale_data.py <out-folder> [options]
 
 Options:
-    --what xenium,h5ad   which datasets to write (default both)
+    --what xenium,h5ad   which datasets to write, of xenium, h5ad and
+                         visium-hd (default xenium,h5ad)
     --xenium-cells N     cells in the Xenium output (1,400,000)
     --h5ad-cells N       cells in the H5AD (1,000,000)
     --genes N            genes in both (500)
     --genes-per-cell N   mean genes expressed per cell (40)
+    --visium-hd-side N   2 um bins along each side of the Visium HD slide
+                         (3,350)
     --seed N             random seed (1)
 """
 
 import argparse
+import gzip
 import json
+import struct
 import time
 import uuid
 import zipfile
+import zlib
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -536,6 +546,248 @@ def write_matrix_h5(path, tissue, ids, rows, genes, counts):
         features.create_dataset("_all_tag_keys", data=np.array([b"genome"]))
 
 
+# Visium HD (--what visium-hd): Space Ranger 4's binned outputs. The 2 um tier
+# is read from its filtered barcodes, the coarser ones from their positions.
+VISIUM_HD_MICRONS_PER_PIXEL = 0.2738
+VISIUM_HD_BIN_SIZES = (2, 8, 16)
+VISIUM_HD_GENES_PER_2UM_BIN = 1.5
+VISIUM_HD_ROW_GROUP = 1_048_576
+# Cells for barcode_mappings.parquet: squares of this many 2 um bins a side.
+VISIUM_HD_CELL_BINS = 5
+
+
+def visium_hd_barcodes(size, rows, cols):
+    return np.char.add(
+        np.char.add(np.char.add(f"s_{size:03d}um_", np.char.zfill(rows.astype(str), 5)), "_"),
+        np.char.add(np.char.zfill(cols.astype(str), 5), "-1"),
+    )
+
+
+def write_visium_hd(folder, side, genes, seed):
+    """Positions, scalefactors and filtered matrices for each bin size.
+
+    Tissue is a disc a third of the slide's area. Each tier's bins are
+    row-major, as Space Ranger writes them, with one row group per positions
+    file (the reference 2 um file has one). Returns the in-tissue bin count
+    per size.
+    """
+    rng = np.random.default_rng(seed)
+    names = gene_names(genes)
+    centre = side / 2
+    radius = side * np.sqrt(1 / (3 * np.pi))
+    counts = {}
+
+    for size in VISIUM_HD_BIN_SIZES:
+        scale = size // 2
+        tier_side = side // scale
+        tier = folder / "binned_outputs" / f"square_{size:03d}um"
+        (tier / "spatial").mkdir(parents=True, exist_ok=True)
+        rows = np.repeat(np.arange(tier_side, dtype=np.int32), tier_side)
+        cols = np.tile(np.arange(tier_side, dtype=np.int32), tier_side)
+        centre_row = (rows + 0.5) * scale
+        centre_col = (cols + 0.5) * scale
+        in_tissue = ((centre_row - centre) ** 2 + (centre_col - centre) ** 2 < radius**2).astype(
+            np.int32
+        )
+        barcodes = visium_hd_barcodes(size, rows, cols)
+        pixels_per_bin = size / VISIUM_HD_MICRONS_PER_PIXEL
+        positions = pa.table(
+            {
+                "barcode": pa.array(barcodes.tolist(), pa.string()),
+                "in_tissue": in_tissue,
+                "array_row": rows,
+                "array_col": cols,
+                "pxl_row_in_fullres": (rows + 0.5) * pixels_per_bin + 40.0,
+                "pxl_col_in_fullres": (cols + 0.5) * pixels_per_bin + 25.0,
+            }
+        )
+        pq.write_table(
+            positions, tier / "spatial" / "tissue_positions.parquet", row_group_size=len(rows)
+        )
+        (tier / "spatial" / "scalefactors_json.json").write_text(
+            json.dumps(
+                {
+                    "spot_diameter_fullres": pixels_per_bin,
+                    "bin_size_um": float(size),
+                    "microns_per_pixel": VISIUM_HD_MICRONS_PER_PIXEL,
+                    "regist_target_img_scalef": 0.2,
+                    "tissue_lowres_scalef": 0.02,
+                    "fiducial_diameter_fullres": pixels_per_bin * 4,
+                    "tissue_hires_scalef": 0.2,
+                }
+            )
+        )
+
+        kept = np.flatnonzero(in_tissue)
+        counts[size] = kept.size
+        kept_barcodes = barcodes[kept]
+        per_bin = rng.poisson(VISIUM_HD_GENES_PER_2UM_BIN * scale * scale, kept.size)
+        weights = 1.0 / np.arange(1, genes + 1) ** 0.8
+        weights /= weights.sum()
+        bin_index = np.repeat(np.arange(kept.size), per_bin)
+        gene_index = rng.choice(genes, per_bin.sum(), p=weights)
+        keys = np.unique(bin_index.astype(np.int64) * genes + gene_index)
+        bin_index = keys // genes
+        gene_index = keys % genes
+        values = 1 + rng.poisson(1.0, keys.size)
+        indptr = np.searchsorted(bin_index, np.arange(kept.size + 1)).astype(np.int64)
+
+        with h5py.File(tier / "filtered_feature_bc_matrix.h5", "w") as file:
+            matrix = file.create_group("matrix")
+            matrix.create_dataset(
+                "barcodes", data=kept_barcodes.astype("S"), **chunked(kept.size)
+            )
+            matrix.create_dataset("data", data=values.astype(np.int32), **chunked(values.size))
+            matrix.create_dataset(
+                "indices", data=gene_index.astype(np.int64), **chunked(gene_index.size)
+            )
+            matrix.create_dataset("indptr", data=indptr)
+            matrix.create_dataset("shape", data=np.array([genes, kept.size], np.int32))
+            features = matrix.create_group("features")
+            encoded = np.array(names, dtype="S")
+            features.create_dataset("id", data=encoded)
+            features.create_dataset("name", data=encoded)
+            features.create_dataset(
+                "feature_type", data=np.array([b"Gene Expression"] * genes)
+            )
+            features.create_dataset("genome", data=np.array([b"Synthetic"] * genes))
+            features.create_dataset("_all_tag_keys", data=np.array([b"genome"]))
+
+        # The gene panel is read from features.tsv.gz, and the 2 um bins from
+        # barcodes.tsv.gz.
+        mex = tier / "filtered_feature_bc_matrix"
+        mex.mkdir(exist_ok=True)
+        with gzip.open(mex / "features.tsv.gz", "wt") as text:
+            text.writelines(f"{name}\t{name}\tGene Expression\n" for name in names)
+
+        if size == 2:
+            with gzip.open(mex / "barcodes.tsv.gz", "wt") as text:
+                text.write("\n".join(kept_barcodes.tolist()))
+                text.write("\n")
+
+            write_visium_hd_feature_slice(
+                folder / "feature_slice.h5",
+                side,
+                names,
+                rows[kept][bin_index],
+                cols[kept][bin_index],
+                gene_index,
+                values,
+            )
+
+        fullres = tier_side * pixels_per_bin + 80
+        for kind, scalef in (("hires", 0.2), ("lowres", 0.02)):
+            write_grey_png(tier / "spatial" / f"tissue_{kind}_image.png", int(fullres * scalef))
+
+    write_visium_hd_barcode_mappings(folder, side, centre, radius)
+    return counts
+
+
+def write_visium_hd_feature_slice(path, side, names, rows, cols, gene_index, values):
+    """feature_slice.h5: each gene's 2 um counts as COO rows, columns and counts.
+
+    Gene expression on Visium HD bins is read from it, at every size. The
+    spot transform places 2 um spot (col, row) at its bin's full-resolution
+    pixel, as the positions files do.
+    """
+    pixels_per_spot = 2 / VISIUM_HD_MICRONS_PER_PIXEL
+    metadata = {
+        "nrows": side,
+        "ncols": side,
+        "spot_pitch": 2,
+        "transform_matrices": {
+            "spot_colrow_to_microscope_colrow": [
+                [pixels_per_spot, 0, pixels_per_spot / 2 + 25],
+                [0, pixels_per_spot, pixels_per_spot / 2 + 40],
+                [0, 0, 1],
+            ]
+        },
+    }
+    order = np.argsort(gene_index, kind="stable")
+    starts = np.searchsorted(gene_index[order], np.arange(len(names) + 1))
+
+    with h5py.File(path, "w") as file:
+        file.attrs["metadata_json"] = json.dumps(metadata)
+        features = file.create_group("features")
+        features.create_dataset("name", data=np.array(names, dtype="S"))
+        features.create_dataset(
+            "feature_type", data=np.array([b"Gene Expression"] * len(names))
+        )
+        slices = file.create_group("feature_slices")
+
+        for gene in range(len(names)):
+            entries = order[starts[gene] : starts[gene + 1]]
+            group = slices.create_group(str(gene))
+
+            for name, column in (("row", rows), ("col", cols), ("data", values)):
+                data = column[entries].astype(np.int32)
+                group.create_dataset(name, data=data, **chunked(max(data.size, 1)))
+
+
+def write_grey_png(path, side):
+    """A square 8-bit greyscale PNG of one shade, standing in for a tissue image."""
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    row = b"\x00" + bytes([96]) * side
+    pixels = zlib.compress(row * side, 9)
+    header = struct.pack(">IIBBBBB", side, side, 8, 0, 0, 0, 0)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+    )
+
+
+def write_visium_hd_barcode_mappings(folder, side, centre, radius):
+    """One row per 2 um bin: its 8 and 16 um bins and its cell, if any.
+
+    Cells are squares of VISIUM_HD_CELL_BINS bins under tissue, their middle
+    bin the nucleus.
+    """
+    schema = pa.schema(
+        [
+            ("square_002um", pa.string()),
+            ("square_008um", pa.string()),
+            ("square_016um", pa.string()),
+            ("cell_id", pa.string()),
+            ("in_nucleus", pa.bool_()),
+            ("in_cell", pa.bool_()),
+        ]
+    )
+    cells_per_row = side // VISIUM_HD_CELL_BINS + 1
+    band = max(1, VISIUM_HD_ROW_GROUP // side)
+
+    with pq.ParquetWriter(folder / "barcode_mappings.parquet", schema) as writer:
+        for first in range(0, side, band):
+            rows = np.repeat(np.arange(first, min(first + band, side), dtype=np.int32), side)
+            cols = np.tile(np.arange(side, dtype=np.int32), rows.size // side)
+            in_tissue = (rows + 0.5 - centre) ** 2 + (cols + 0.5 - centre) ** 2 < radius**2
+            cell = (rows // VISIUM_HD_CELL_BINS) * cells_per_row + cols // VISIUM_HD_CELL_BINS
+            middle = VISIUM_HD_CELL_BINS // 2
+            in_nucleus = in_tissue & (rows % VISIUM_HD_CELL_BINS == middle) & (
+                cols % VISIUM_HD_CELL_BINS == middle
+            )
+            cell_ids = np.char.add(
+                np.char.add("cellid_", np.char.zfill((cell + 1).astype(str), 9)), "-1"
+            )
+            writer.write_table(
+                pa.table(
+                    {
+                        "square_002um": visium_hd_barcodes(2, rows, cols).tolist(),
+                        "square_008um": visium_hd_barcodes(8, rows // 4, cols // 4).tolist(),
+                        "square_016um": visium_hd_barcodes(16, rows // 8, cols // 8).tolist(),
+                        "cell_id": pa.array(
+                            np.where(in_tissue, cell_ids, None).tolist(), pa.string()
+                        ),
+                        "in_nucleus": in_nucleus,
+                        "in_cell": in_tissue,
+                    },
+                    schema=schema,
+                )
+            )
+
+
 def write_morphology(folder, tissue, pixel_um):
     """One uint16 OME-TIFF per channel, tiled, deflate, with SubIFD levels.
 
@@ -656,6 +908,7 @@ def main():
     parser.add_argument("--genes-per-cell", type=float, default=40)
     parser.add_argument("--image-pixel-um", type=float, default=0.85)
     parser.add_argument("--with-h5", action="store_true")
+    parser.add_argument("--visium-hd-side", type=int, default=3_350)
     parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
     what = set(args.what.split(","))
@@ -681,6 +934,14 @@ def main():
             f"{path}: {tissue.cells:,} cells, {tissue.genes} genes, {nnz:,} values, "
             f"{path.stat().st_size / 1e6:.0f} MB in {time.time() - started:.0f} s"
         )
+
+    if "visium-hd" in what:
+        started = time.time()
+        folder = args.out / "visium-hd"
+        counts = write_visium_hd(folder, args.visium_hd_side, args.genes, args.seed)
+        size = sum(path.stat().st_size for path in folder.rglob("*") if path.is_file())
+        tiers = ", ".join(f"{count:,} bins of {bin_size} um" for bin_size, count in counts.items())
+        print(f"{folder}: {tiers} under tissue, {size / 1e6:.0f} MB in {time.time() - started:.0f} s")
 
 
 if __name__ == "__main__":

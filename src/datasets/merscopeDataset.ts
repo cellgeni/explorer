@@ -137,7 +137,7 @@ export interface MerscopeSummary {
 interface MerscopeOverview {
   readonly points: readonly CellOverviewPoint[]
   readonly rowById: ReadonlyMap<string, number>
-  readonly transcriptCounts: readonly number[] | null
+  readonly transcriptCounts: ArrayLike<number> | null
 }
 
 // Cell outlines for the boundary layer; elements are built only for the cells
@@ -222,6 +222,18 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
         },
       },
     })
+  }
+
+  // Drops what the dataset read, its cell table's arrays included (O19). A
+  // later read opens what it needs again.
+  dispose(): void {
+    this.table.dispose()
+    this.vzgPromise = null
+    this.lastPyramid = null
+    this.loaded = null
+    this.overviewLoad.clear()
+    this.boundaryIndexPromise = null
+    this.boundaryElements = null
   }
 
   async meta(): Promise<DatasetMeta> {

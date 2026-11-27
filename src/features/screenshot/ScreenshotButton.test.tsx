@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { imagePixels, micrometers } from '../../data/coords'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
@@ -83,11 +83,16 @@ function model(
   }
 }
 
-function open() {
+// Opens the popover and waits for its form, which loads on first use (O21).
+async function open() {
   fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }))
-  return screen.getByRole('dialog', {
+  const dialog = screen.getByRole('dialog', {
     name: 'Save the spatial view as a high-resolution PNG',
   })
+  await waitFor(() => {
+    expect(within(dialog).queryByText('Loading Screenshot…')).toBeNull()
+  })
+  return dialog
 }
 
 describe('Screenshot (plan 27, task H)', () => {
@@ -128,7 +133,7 @@ describe('Screenshot (plan 27, task H)', () => {
 
   it('gives the size, what it means in print, and the read (D3, D4)', async () => {
     render(<ScreenshotButton screenshot={model(snapshot())} iconOnly={false} />)
-    const dialog = open()
+    const dialog = await open()
 
     expect(within(dialog).getByRole('button', { name: '2×' })).toHaveAttribute(
       'aria-pressed',
@@ -144,14 +149,14 @@ describe('Screenshot (plan 27, task H)', () => {
     ).toBeInTheDocument()
   })
 
-  it('turns off scales past the size limit (D10)', () => {
+  it('turns off scales past the size limit (D10)', async () => {
     render(
       <ScreenshotButton
         screenshot={model(snapshot({ viewport: { width: 2100, height: 1200 } }))}
         iconOnly={false}
       />,
     )
-    const dialog = open()
+    const dialog = await open()
     const eight = within(dialog).getByRole('button', { name: '8×' })
 
     // 16,800 px wide.
@@ -160,14 +165,14 @@ describe('Screenshot (plan 27, task H)', () => {
     expect(within(dialog).getByRole('button', { name: '4×' })).toBeEnabled()
   })
 
-  it('notes the cells the screen samples and what is loading (D5, D7)', () => {
+  it('notes the cells the screen samples and what is loading (D5, D7)', async () => {
     render(
       <ScreenshotButton
         screenshot={model(snapshot(), {}, { loadingLabels: ['Loading cell boundaries'] })}
         iconOnly
       />,
     )
-    const dialog = open()
+    const dialog = await open()
 
     expect(
       within(dialog).getByText(
@@ -188,7 +193,7 @@ describe('Screenshot (plan 27, task H)', () => {
         iconOnly={false}
       />,
     )
-    const dialog = open()
+    const dialog = await open()
 
     fireEvent.click(within(dialog).getByRole('button', { name: '4×' }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Legend' }))
@@ -218,7 +223,7 @@ describe('Screenshot (plan 27, task H)', () => {
         iconOnly={false}
       />,
     )
-    const dialog = open()
+    const dialog = await open()
     await within(dialog).findByText(/Reads 2 image tiles \(839 MB\)/)
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save PNG' }))
@@ -249,7 +254,7 @@ describe('Screenshot (plan 27, task H)', () => {
         }),
     )
     render(<ScreenshotButton screenshot={model(snapshot(), { draw })} iconOnly={false} />)
-    const dialog = open()
+    const dialog = await open()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save PNG' }))
     await vi.waitFor(() => {
@@ -277,9 +282,9 @@ describe('Screenshot (plan 27, task H)', () => {
     expect(within(dialog).getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 
-  it('says when the view has not drawn yet', () => {
+  it('says when the view has not drawn yet', async () => {
     render(<ScreenshotButton screenshot={model(null)} iconOnly={false} />)
-    const dialog = open()
+    const dialog = await open()
 
     expect(within(dialog).getByText(/The view has not drawn yet/)).toBeInTheDocument()
   })

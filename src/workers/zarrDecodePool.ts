@@ -1,4 +1,5 @@
 import type { TileCellSums } from '../data/tileCellMeasure'
+import { registerMemoryReporter } from '../data/memoryTelemetry'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
 import type { TileMeasure } from './tileDecodeMessages'
@@ -74,6 +75,11 @@ export class ZarrDecodePool {
   constructor(options: ZarrDecodePoolOptions = {}) {
     this.size = Math.max(1, options.size ?? defaultWorkerPoolSize())
     this.workerFactory = options.workerFactory ?? createDefaultZarrDecodeWorker
+  }
+
+  // Workers started and not ended.
+  get workerCount(): number {
+    return this.workers.length
   }
 
   // Whether a worker has failed, so that requests would be refused.
@@ -399,6 +405,12 @@ export class ZarrDecodePool {
 }
 
 let sharedPool: ZarrDecodePool | null | undefined
+
+registerMemoryReporter('Zarr decoders', () => ({
+  entries: 0,
+  workers: sharedPool?.workerCount ?? 0,
+  bytes: null,
+}))
 
 // Shared pool, or null where workers are unavailable (for example in tests),
 // in which case callers decode on the main thread.

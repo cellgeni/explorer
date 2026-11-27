@@ -10,6 +10,9 @@
   registered serial sections combined in one AnnData. The matrix is chunked
   two columns wide, as anndata chunks a large one, so z is in chunks of its
   own.
+- empty-category.v3.zarr: tiny.v3.zarr with consolidated metadata and an obs
+  column "sex" that is missing in every cell, so its categories array has no
+  values (shape [0]), as an all-NaN column in a sample sheet writes.
 
 All hold obsm `spatial`, `X_umap`, and `X_scvi`; only a listing of obsm finds
 `X_scvi`, as the viewer does not probe for it by name. The obs column
@@ -53,6 +56,11 @@ def tiny_anndata(x, depths=None):
         var=var,
         obsm={"spatial": spatial, "X_umap": umap, "X_scvi": scvi},
     )
+
+
+def with_empty_category(adata):
+    adata.obs["sex"] = pd.Categorical([None] * adata.n_obs, categories=pd.Index([], dtype=str))
+    return adata
 
 
 def matrix():
@@ -99,6 +107,12 @@ def main():
         tiny_anndata(sp.csr_matrix(matrix())),
         3,
         consolidated=False,
+    )
+    write(
+        HERE / "empty-category.v3.zarr",
+        with_empty_category(tiny_anndata(sp.csr_matrix(matrix()))),
+        3,
+        consolidated=True,
     )
     write(
         HERE / "stack.zarr",

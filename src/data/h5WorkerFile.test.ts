@@ -19,6 +19,7 @@ import {
   openH5WorkerFileFromUrl,
   type H5WorkerLike,
 } from './h5WorkerFile'
+import { readMemoryReports } from './memoryTelemetry'
 
 // Runs the real handler behind a structured-clone boundary, as a worker does:
 // transferred buffers are detached on the sending side.
@@ -149,6 +150,24 @@ describe('openH5WorkerFile', () => {
       ['TTGG-1', { geneNames: ['Actb', 'Gad1'], counts: [2, 3] }],
     ])
     file.close()
+  })
+
+  it('counts an open file under H5 files, with the memory its worker holds (O20)', async () => {
+    const h5Files = async () =>
+      (await readMemoryReports()).find((report) => report.name === 'H5 files')
+    const before = (await h5Files())?.workers ?? 0
+    const file = await openH5WorkerFile(await createSmallFile(), {
+      workerFactory: () => new CloningH5Worker(),
+    })
+
+    const open = await h5Files()
+    expect(open?.workers).toBe(before + 1)
+    expect(open?.entries).toBe(before + 1)
+    // At least h5wasm's WebAssembly memory, 16 MiB to start with.
+    expect(open?.bytes).toBeGreaterThanOrEqual(16 * 1024 * 1024)
+
+    file.close()
+    expect((await h5Files())?.workers).toBe(before)
   })
 
   it('reads Visium HD feature slices', async () => {
@@ -342,6 +361,7 @@ describe('openH5WorkerFile', () => {
       ok: true,
       op: 'stats',
       range: { size: 100, requests: 2, fetchedBytes: 50 },
+      memoryBytes: 1024,
     })
     await expect(stats).resolves.toEqual({ size: 100, requests: 2, fetchedBytes: 50 })
     expect(worker.posted).toEqual([

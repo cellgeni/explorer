@@ -1,7 +1,8 @@
-// `annotationUrl=` and Import URL read the whole file and parse it on the main
-// thread, so a link to a large file could stall or crash the tab. Parsing runs
-// at about 40 MB/s (2 million `cell_id,label` rows, 95 MB, in 2.5 s), so the
-// limit keeps a few million rows and refuses larger files before they are read.
+// `annotationUrl=` and Import URL read the whole file into the page, and parse
+// it in a worker (O18), so a link to a large file could still exhaust the
+// tab's memory. Parsing runs at about 40 MB/s (2 million `cell_id,label` rows,
+// 95 MB, in 2.5 s), so the limit keeps a few million rows and refuses larger
+// files before they are read.
 export const ANNOTATION_URL_MAX_BYTES = 100 * 1024 * 1024
 
 export class AnnotationUrlTooLargeError extends Error {

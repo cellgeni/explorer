@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { Button, Disclosure } from './ui'
+import { MemoryUsage } from './MemoryUsage'
+import type { MemoryReport } from '../data/memoryTelemetry'
 import { ReloadAppButton } from '../features/errors/ReloadAppButton'
 import {
   summarizeDatasetDiagnostics,
@@ -373,29 +376,39 @@ export function ActivityLog({
 }
 
 // The matrix warning and fallback notices as one closed item, since they
-// explain slower paths rather than ask for action.
+// explain slower paths rather than ask for action, and what the caches and
+// workers hold (O20), read only while it is open.
 export function DataAccessNotes({
   matrixState,
   notices,
+  readMemory,
 }: {
   readonly matrixState: CellFeatureMatrixCompatibilityNoticeState
   readonly notices: readonly FallbackNoticeEntry[]
+  readonly readMemory?: () => Promise<readonly MemoryReport[]>
 }) {
+  const [open, setOpen] = useState(false)
   const hasMatrixWarning = matrixState.status === 'ready' && !matrixState.hasCellMajorCsc
   const count = notices.length + (hasMatrixWarning ? 1 : 0)
-
-  if (count === 0) {
-    return null
-  }
 
   return (
     <section className="data-access-notes" aria-label="Data access notes">
       <Disclosure
-        title="Show or hide notes on how the data is read"
-        summary={`Data access notes (${count.toLocaleString()})`}
+        title="Show or hide notes on how the data is read, and the memory it holds"
+        summary={
+          count === 0
+            ? 'Data access notes'
+            : `Data access notes (${count.toLocaleString()})`
+        }
+        open={open}
+        onOpenChange={setOpen}
       >
         <CellFeatureMatrixCompatibilityNotice state={matrixState} />
         <FallbackNoticeSummary notices={notices} />
+        <MemoryUsage
+          active={open}
+          {...(readMemory === undefined ? {} : { read: readMemory })}
+        />
       </Disclosure>
     </section>
   )

@@ -9,10 +9,15 @@
 //
 //   --gene <symbol>      also profile colouring by this gene after the load
 //   --steps <keys>       then press these keys on the spatial view, one
-//                        profile each, e.g. "=,=,=,ArrowRight" (= zooms in)
+//                        profile each, e.g. "=,=,=,ArrowRight" (= zooms in);
+//                        a step "click:<name>" clicks the button of that
+//                        name instead, e.g. "click:8 µm" for a Visium HD bin
+//                        size
 //   --step-settle <s>    profile each step this long (default 2)
 //   --then <urls>        then open each of these datasets (comma-separated)
 //                        in turn from the dataset field, one profile each
+//   --then-gene <symbol> also colour each of those by this gene, with a
+//                        profile of its own
 //   --hash <params>      add these to the link's hash, e.g. cellBounds=0
 //   --until <selector>   CSS selector that marks the load as done (default:
 //                        the enabled gene search box, or the dataset field
@@ -22,6 +27,9 @@
 //   --requests <text>    summarise requests whose URL contains <text>
 //   --memory             report the JavaScript heaps of the page and of each
 //                        worker after every phase
+//   --caches             at the end, open Dataset info > Data access notes and
+//                        print the memory table, what each cache and worker
+//                        pool reports holding
 //   --gpu                draw with the GPU (Metal through ANGLE, macOS)
 //                        rather than SwiftShader
 //   --throttle <mbit,ms> limit bandwidth and add latency, e.g. 10,150
@@ -36,7 +44,8 @@ const OPEN_DATASET = '.shell-dataset-name'
 const SPATIAL_VIEW = 'Spatial viewer canvas area'
 // Ids for CDP messages sent to workers through the browser session.
 const targetMessageIds = { next: 1 }
-const EXPRESSION_STATUS = /Expression (overview|all cells|sample|exact region): [\d,]+/
+// Cells, spots or bins (geneControlsModel.ts's status copy).
+const EXPRESSION_STATUS = /Expression( overview| all \w+| sample| exact region)?: [\d,]+/
 const TIMEOUT_MS = 600_000
 const LONG_STRETCH_MS = 50
 
@@ -45,9 +54,11 @@ const { positional, options } = parseArgs(process.argv.slice(2))
 if (positional.length < 2 || options.help !== undefined) {
   console.log(
     'Usage: node scripts/profile-load.mjs <app-url>[,<app-url>...] <dataset-url> ' +
-      '[--gene S] [--steps KEYS] [--step-settle S] [--then URLS] [--hash PARAMS] ' +
+      '[--gene S] [--steps KEYS] [--step-settle S] [--then URLS] [--then-gene S] ' +
+      '[--hash PARAMS] ' +
       '[--until SELECTOR] [--runs N] ' +
-      '[--settle S] [--requests TEXT] [--memory] [--gpu] [--throttle MBIT,MS] ' +
+      '[--settle S] [--requests TEXT] [--memory] [--caches] [--gpu] ' +
+      '[--throttle MBIT,MS] ' +
       '[--raw PREFIX] [--json]',
   )
   process.exit(positional.length < 2 ? 1 : 0)
@@ -128,11 +139,13 @@ async function profileRun(run, appIndex, appUrl) {
     await page.waitForTimeout(settleMs)
     await report('load', loadSeconds, (await cdp.send('Profiler.stop')).profile)
 
-    if (options.gene !== undefined) {
+    // Colours the cells by `gene`, profiled until the expression status line
+    // appears.
+    const colourByGene = async (gene, phase) => {
       await cdp.send('Profiler.start')
       const geneStarted = Date.now()
-      await page.locator(GENE_SEARCH).fill(options.gene)
-      await page.getByRole('button', { name: options.gene, exact: true }).first().click()
+      await page.locator(GENE_SEARCH).fill(gene)
+      await page.getByRole('button', { name: gene, exact: true }).first().click()
       await page.waitForFunction(
         (source) =>
           new RegExp(source).test(
@@ -143,14 +156,13 @@ async function profileRun(run, appIndex, appUrl) {
       )
       const geneSeconds = (Date.now() - geneStarted) / 1000
       const status = await page.locator('.analysis-status').textContent()
-      await report(
-        `gene ${options.gene}`,
-        geneSeconds,
-        (await cdp.send('Profiler.stop')).profile,
-        {
-          status,
-        },
-      )
+      await report(phase, geneSeconds, (await cdp.send('Profiler.stop')).profile, {
+        status,
+      })
+    }
+
+    if (options.gene !== undefined) {
+      await colourByGene(options.gene, `gene ${options.gene}`)
     }
 
     // Each step is a key pressed on the focused spatial view (deck.gl's
@@ -163,7 +175,17 @@ async function profileRun(run, appIndex, appUrl) {
     for (const [index, key] of steps.entries()) {
       await cdp.send('Profiler.start')
       const stepStarted = Date.now()
-      await page.keyboard.press(key)
+
+      if (key.startsWith('click:')) {
+        await page
+          .getByRole('button', { name: key.slice('click:'.length), exact: true })
+          .click()
+        // Later keys go to the spatial view again.
+        await page.getByRole('img', { name: SPATIAL_VIEW }).focus()
+      } else {
+        await page.keyboard.press(key)
+      }
+
       await page.waitForTimeout(stepSettleMs)
       const status = await page
         .locator('.analysis-status')
@@ -207,10 +229,46 @@ async function profileRun(run, appIndex, appUrl) {
         thenSeconds,
         (await cdp.send('Profiler.stop')).profile,
       )
+
+      if (options['then-gene'] !== undefined) {
+        await colourByGene(
+          options['then-gene'],
+          `then ${index + 1} gene ${options['then-gene']}`,
+        )
+      }
+    }
+
+    // Read last: the drawer narrows the view, which redraws it.
+    if (options.caches !== undefined) {
+      const rows = await readMemoryTable(page)
+      console.log(
+        options.json === undefined
+          ? rows.map((row) => `  ${row.join(' | ')}`).join('\n')
+          : JSON.stringify({ app: appUrl, run, phase: 'caches', rows }),
+      )
     }
   } finally {
     await browser.close()
   }
+}
+
+// The rows of the memory table in Dataset info > Data access notes, heading
+// first, once the first reading is shown.
+async function readMemoryTable(page) {
+  await page.getByRole('button', { name: /^Dataset info/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Dataset info' })
+  const notes = dialog.locator('section.data-access-notes summary')
+  await notes.scrollIntoViewIfNeeded()
+  await notes.click()
+  const memory = dialog.getByRole('region', { name: 'Memory' })
+  await memory.locator('table').waitFor({ timeout: TIMEOUT_MS })
+  const rows = [[await memory.locator('p').first().innerText()]]
+
+  for (const row of await memory.locator('tr').all()) {
+    rows.push(await row.locator('th, td').allInnerTexts())
+  }
+
+  return rows
 }
 
 // Main-thread time by script (the built chunk's name without its hash),
@@ -490,7 +548,7 @@ function parseArgs(args) {
 
     if (!arg.startsWith('--')) {
       positional.push(arg)
-    } else if (['--json', '--help', '--memory', '--gpu'].includes(arg)) {
+    } else if (['--json', '--help', '--memory', '--caches', '--gpu'].includes(arg)) {
       options[arg.slice(2)] = true
     } else {
       options[arg.slice(2)] = args[index + 1]

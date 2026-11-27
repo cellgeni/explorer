@@ -1,3 +1,4 @@
+import { workerTally } from '../../data/memoryTelemetry'
 import { applyColumnRequest } from '../../workers/cellQueryCore'
 import type {
   CellQueryColumnRequest,
@@ -12,6 +13,9 @@ import {
   type CellQueryResult,
   type CellQuerySort,
 } from './cellQuery'
+
+// The session's worker, for the memory table (O20).
+const cellQueryWorkers = workerTally('Cell Query')
 
 // The Cell Query window's link to its columns (plan 23-D4): a worker of its
 // own per dataset, so mapping a million cell IDs to rows, matching and
@@ -81,6 +85,7 @@ export function createCellQuerySession(
   function startWorker(factory: CellQueryWorkerFactory): CellQueryWorkerLike | null {
     try {
       const started = factory()
+      cellQueryWorkers.add(started)
       started.onmessage = (event) => {
         handleResponse(event.data)
       }
@@ -115,6 +120,7 @@ export function createCellQuerySession(
     worker.onmessage = null
     worker.onerror = null
     worker.terminate()
+    cellQueryWorkers.delete(worker)
     worker = null
     const local = new CellQueryStore()
     store = local
@@ -222,6 +228,7 @@ export function createCellQuerySession(
         worker.onmessage = null
         worker.onerror = null
         worker.terminate()
+        cellQueryWorkers.delete(worker)
         worker = null
       }
       store = null

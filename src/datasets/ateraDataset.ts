@@ -197,6 +197,27 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     this.openImage = options.openImage ?? openImagePyramid
   }
 
+  // Drops what the dataset read, its zip's index and cell table's arrays
+  // included (O19). A later read opens what it needs again.
+  dispose(): void {
+    const table = this.tablePromise
+    this.tablePromise = null
+    void table?.then(
+      ({ table: cells }) => cells.dispose(),
+      () => undefined,
+    )
+    this.experimentPromise = null
+    this.overviewLoad.clear()
+    this.genesPromise = null
+    this.cscPromise = null
+    this.cellsPromise = null
+    this.nucleusGridPromise = null
+    this.imagePromise = null
+    this.transcriptReader = null
+    this.geneColumns.clear()
+    this.polygonTiles.clear()
+  }
+
   async meta(): Promise<DatasetMeta> {
     const [experiment, { table }] = await Promise.all([this.experiment(), this.table()])
     const tableMeta = await table.meta()

@@ -36,6 +36,13 @@ export function formatShape(shape: readonly number[]): string {
     : shape.map((size) => size.toLocaleString()).join(' × ')
 }
 
+// The Browse drawer's title for each of its views.
+export const STORE_STRUCTURE_DRAWER_TITLES = {
+  store: 'Store structure',
+  file: 'Parquet file',
+  h5: 'HDF5 file',
+} as const
+
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 
 export function formatBytes(bytes: number): string {

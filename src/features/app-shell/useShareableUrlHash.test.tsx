@@ -11,7 +11,9 @@ function ShareableUrlHashProbe({
   datasetUrl = 'https://example.test/output',
   geneSets,
   hiddenAnnotationIds,
+  leaveTo,
   linkOpening,
+  navigate,
   selectedGenes = ['Actb', 'Gad1'],
   onHistoryDatasetChange,
   onShareUrl,
@@ -21,7 +23,9 @@ function ShareableUrlHashProbe({
   readonly datasetUrl?: string
   readonly geneSets?: string
   readonly hiddenAnnotationIds?: readonly string[]
+  readonly leaveTo?: { readonly href: string; readonly datasetUrl: string } | null
   readonly linkOpening?: boolean
+  readonly navigate?: (href: string, replace: boolean) => void
   readonly selectedGenes?: readonly string[]
   readonly onHistoryDatasetChange?: () => void
   readonly onShareUrl?: (shareUrl: () => string) => void
@@ -29,6 +33,8 @@ function ShareableUrlHashProbe({
   const shareUrl = useShareableUrlHash({
     ...(onHistoryDatasetChange === undefined ? {} : { onHistoryDatasetChange }),
     ...(linkOpening === undefined ? {} : { linkOpening }),
+    ...(leaveTo === undefined ? {} : { leaveTo }),
+    ...(navigate === undefined ? {} : { navigate }),
     dataset: {
       annotationUrl: 'https://example.test/annotations/manual.csv',
       customImageOpacities: [0.35],
@@ -502,6 +508,65 @@ describe('useShareableUrlHash', () => {
       expect(window.location.hash).toBe(written)
     },
   )
+
+  describe('leaving for a collection a dataset address turned out to be', () => {
+    const COLLECTION_JSON = 'https://example.test/study/collection.json'
+    const leaveTo = {
+      href: `/?collection=${encodeURIComponent(COLLECTION_JSON)}`,
+      datasetUrl: COLLECTION_JSON,
+    }
+
+    it('replaces the link that named it, so Back does not lead here again', () => {
+      const link = `#xv=2&dataset=${encodeURIComponent(COLLECTION_JSON)}`
+      window.history.replaceState(null, '', `/${link}`)
+      const navigate = vi.fn()
+      const { rerender } = render(
+        <ShareableUrlHashProbe
+          datasetUrl={COLLECTION_JSON}
+          linkOpening
+          navigate={navigate}
+        />,
+      )
+
+      rerender(
+        <ShareableUrlHashProbe
+          datasetUrl={COLLECTION_JSON}
+          leaveTo={leaveTo}
+          linkOpening
+          navigate={navigate}
+        />,
+      )
+
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(leaveTo.href, true)
+    })
+
+    it('keeps the open dataset’s entry for Back, and writes nothing more', () => {
+      const navigate = vi.fn()
+      const { rerender } = render(
+        <ShareableUrlHashProbe datasetUrl="https://example.test/a" navigate={navigate} />,
+      )
+      act(() => {
+        vi.advanceTimersByTime(160)
+      })
+      const written = window.location.hash
+      expect(written).toContain('dataset=https%3A%2F%2Fexample.test%2Fa')
+
+      rerender(
+        <ShareableUrlHashProbe
+          datasetUrl="https://example.test/a"
+          leaveTo={leaveTo}
+          navigate={navigate}
+          selectedGenes={['Sox2']}
+        />,
+      )
+      act(() => {
+        vi.advanceTimersByTime(160)
+      })
+
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(leaveTo.href, false)
+      expect(window.location.hash).toBe(written)
+    })
+  })
 
   it('reloads when Back reaches another dataset, and writes nothing more', () => {
     const onHistoryDatasetChange = vi.fn()

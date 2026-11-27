@@ -41,37 +41,24 @@ Sequencing:
 Other gaps found in the review:
 
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
-      than the Xenium overview, SpatialData shapes and imported vector
-      segmentations, which have workers of their own (Visium HD positions and
-      barcode mappings; the positions decode for about 0.6 s in short tasks,
-      measured 2026-11-17), and the fetching and assembly in zarrita reads. The
-      AnnData table code also runs there, for both H5AD backends. On the
-      598,222-cell 460-plex zip that is making the cell IDs unique (about 240 ms
-      in one task, a `Map` of all 598,222), converting numeric columns to number
-      arrays (110–145 ms over 20 columns) and counting the distinct values of
-      string columns (about 110 ms); the CSR scan for a gene took 230–270 ms on
-      the SpatialData Visium table. The moves so far, with their measurements,
-      are under
+      than the Xenium overview, SpatialData shapes, imported vector
+      segmentations and, since O16 (2026-11-27), Visium HD positions and bin
+      mappings, which have workers of their own
+      ([Visium HD Tables Read In A Worker](phases/optimization-pass.md#visium-hd-tables-read-in-a-worker-2026-11-27)),
+      and the fetching and assembly in zarrita reads. The
+      AnnData table code also runs there, for both H5AD backends. Since O15
+      (2026-11-27) its passes are cheaper: on the 598,222-cell 460-plex zip a
+      load spends 0.33–0.38 s on making the cell IDs unique, counting string
+      columns' values and number columns, against 1.3 s, and the CSR scan for
+      a gene 0.22–0.26 s, against 0.69–0.70 s
+      ([AnnData Tables Read In Place](phases/optimization-pass.md#anndata-tables-read-in-place-2026-11-27)).
+      The moves so far, with their measurements, are under
       [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13).
       Not listed until 2026-11-16: an annotation file named by
       `annotationUrl=` (`customAnnotations.ts`) and an embedding's projection
-      CSV (`analysisEmbeddings.ts`) are parsed there too.
-- [ ] Per-URL caches that are never released (found 2026-11-16): one
-      h5wasm worker per matrix file (`h5MatrixCache` in `gex.ts`, which also
-      keeps `h5WorkerFile.ts`'s `FinalizationRegistry` from closing it), the
-      Feature Slice files (`visiumFeatureSlice.ts`), transcript Zarr metadata
-      (`transcriptZarr.ts`) and the TIFF loader's open files and pyramids
-      (`clearOpenTiffFiles` is called only by tests). Collections make this
-      matter more, since one tab can now open many datasets. Zip and
-      Icechunk stores were listed here too, but each keeps only the four used
-      last (`zarrZipStore.ts`, `icechunkStore.ts`), and the H5AD tissue image
-      blob URLs are shared per library and revoked when the dataset is
-      disposed (#301, 2026-11-22). The dataset instances themselves are
-      bounded since 2026-11-18 (`datasetCache.ts`): the viewer retains the
-      dataset it shows, a preview the one it reads, and of the rest the two
-      used last are kept; older ones are disposed, which closes a
-      `XeniumDataset`'s DuckDB client and an H5AD's file worker. These caches
-      could hang off the same retain.
+      CSV (`analysisEmbeddings.ts`) were parsed there too; since O18
+      (2026-11-27) a worker parses them
+      ([CSV Files Parsed In A Worker](phases/optimization-pass.md#csv-files-parsed-in-a-worker-2026-11-27)).
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
       annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](phases/11-dataset-manifest.md)).
@@ -228,7 +215,11 @@ Original-brief items with no outcome:
 - [ ] Memory ceiling with eviction telemetry beyond tile caches. Partly done:
       budgets scale with device memory, and the tile LRU (with eviction
       telemetry), the OME-Zarr chunk cache and the IndexedDB cache each evict
-      on their own. There is no app-wide ceiling.
+      on their own. Since O20 (2026-11-27) Data access notes shows what each
+      cache and worker pool holds
+      ([Memory Held, Counted](phases/optimization-pass.md#memory-held-counted-2026-11-27)).
+      There is no app-wide ceiling; one tile budget across channels in bytes
+      is proposed there.
 
 Testing:
 
@@ -352,15 +343,6 @@ Correctness and robustness:
       (`polygon_sets/1/method`) still turns any failure into "absent", and a
       failed read of its cell details (`cellDetails()`) is noted in the
       activity log but then treated as absent for the session.
-
-Rendering:
-
-- [ ] Every expression batch recolours every cell: `packCellPointColors` runs
-      over all cells (`ViewerCore.tsx`). Above 500,000 cells
-      (`GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT`) expression is read by
-      viewport, so on large Xenium datasets this runs on pan and zoom.
-      Patching only the cells in the old and new batch would avoid it (O3).
-      Outlines are no longer restyled per batch (O4, 2026-11-25).
 
 Code structure:
 

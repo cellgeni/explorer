@@ -56,6 +56,7 @@ describe('vite config', () => {
       'duckdb-vendor',
       'spatial-io-vendor',
       'codec-vendor',
+      'app',
     ])
   })
 

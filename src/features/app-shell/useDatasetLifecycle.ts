@@ -212,6 +212,7 @@ import {
   type DatasetReader,
 } from '../../datasets/datasetReader'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
+import { DatasetIsCollectionError } from '../../datasets/datasetManifest'
 import type { AnnDataVisiumSummary } from '../../datasets/h5adDataset'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
@@ -352,6 +353,11 @@ interface UseDatasetLifecycleCallbacks {
   readonly appendFallbackNotice: FallbackNotifier
   // A load commits: the dataset it opens replaces the one on screen.
   readonly onBeforeDatasetLoad?: (datasetUrl: string) => void
+  // The dataset address turned out to be a dataset collection, read at
+  // `collectionUrl`. Without this the load fails, saying to open it with
+  // collection=; with it the load reports nothing and stays shown as loading,
+  // for the page to open the collection instead.
+  readonly onDatasetIsCollection?: (collectionUrl: string, datasetUrl: string) => void
   readonly queueAutoContrast: QueueAutoContrast
   readonly recordTelemetry: (event: TelemetryEvent) => void
 }
@@ -579,6 +585,7 @@ export function useDatasetLifecycle({
     appendDebugEvent,
     appendFallbackNotice,
     onBeforeDatasetLoad,
+    onDatasetIsCollection,
     queueAutoContrast,
     recordTelemetry,
   },
@@ -2409,6 +2416,18 @@ export function useDatasetLifecycle({
         }
 
         if (!isCurrentDatasetLoad()) {
+          return
+        }
+
+        if (
+          error instanceof DatasetIsCollectionError &&
+          onDatasetIsCollection !== undefined
+        ) {
+          load.controller.abort()
+          appendDebugEvent(
+            `${shortDatasetLabel(requestedUrl)} is a dataset collection; opening it as one`,
+          )
+          onDatasetIsCollection(error.manifestUrl, requestedUrl)
           return
         }
 

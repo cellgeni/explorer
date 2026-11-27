@@ -40,13 +40,6 @@ export interface VisiumHdExpressionProfileDataset {
   ) => Promise<GexResult<SpatialElementId>>
 }
 
-export interface VisiumHdBarcodeMappingsDataset extends VisiumHdExpressionProfileDataset {
-  readonly barcodeMappings: (options: {
-    readonly maxRows?: number
-    readonly signal?: AbortSignal
-  }) => Promise<readonly VisiumHdBarcodeMapping[]>
-}
-
 export interface VisiumHdCellBarcodeMappingsDataset extends VisiumHdExpressionProfileDataset {
   readonly barcodeMappingsForCell: (
     cellId: SpatialElementId,
@@ -82,14 +75,6 @@ export function isVisiumHdExpressionProfileDataset(
   return hasFunction(dataset, 'matrix')
 }
 
-export function isVisiumHdBarcodeMappingsDataset(
-  dataset: unknown,
-): dataset is VisiumHdBarcodeMappingsDataset {
-  return (
-    isVisiumHdExpressionProfileDataset(dataset) && hasFunction(dataset, 'barcodeMappings')
-  )
-}
-
 export function isVisiumHdCellBarcodeMappingsDataset(
   dataset: unknown,
 ): dataset is VisiumHdCellBarcodeMappingsDataset {
@@ -114,21 +99,13 @@ export function isSpatialSegmentationDataset(
 export async function selectedVisiumHdCellMappings(
   dataset: unknown,
   cellId: SpatialElementId,
-  rowBudget: number | undefined,
   signal: AbortSignal,
 ): Promise<readonly VisiumHdBarcodeMapping[]> {
-  if (isVisiumHdCellBarcodeMappingsDataset(dataset)) {
-    return dataset.barcodeMappingsForCell(visiumHdSegmentationCellId(cellId), { signal })
-  }
-
-  if (!isVisiumHdBarcodeMappingsDataset(dataset)) {
+  if (!isVisiumHdCellBarcodeMappingsDataset(dataset)) {
     throw new Error('Loaded dataset does not expose Visium HD barcode mappings.')
   }
 
-  return dataset.barcodeMappings({
-    ...(rowBudget === undefined ? {} : { maxRows: rowBudget }),
-    signal,
-  })
+  return dataset.barcodeMappingsForCell(visiumHdSegmentationCellId(cellId), { signal })
 }
 
 export function selectedVisiumHdProfileBinSize(

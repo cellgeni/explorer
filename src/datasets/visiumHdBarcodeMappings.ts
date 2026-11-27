@@ -1,6 +1,7 @@
-import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
+import { asyncBufferFromUrl, parquetMetadataAsync } from 'hyparquet'
 import { coalescingAsyncBuffer } from '../data/coalescingAsyncBuffer'
 import { datasetFileUrlFor } from '../data/datasetFiles'
+import { readParquetColumns } from '../data/parquetColumns'
 import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
@@ -71,12 +72,12 @@ export type VisiumHdBarcodeMappingsSourceCache = Map<
 >
 
 export interface ReadVisiumHdBarcodeMappingsOptions {
-  // Rows the read may decode. Without `bins` that is the whole file.
+  // Rows the read may decode.
   readonly maxRows?: number
-  // Read only these bins' rows. Row groups whose barcode statistics rule out
+  // The bins whose rows are read. Row groups whose barcode statistics rule out
   // every bin are skipped; Space Ranger sorts the file by 2 µm barcode, so one
   // 16 µm bin needs about 3 of the reference's 1,123 row groups.
-  readonly bins?: VisiumHdBarcodeMappingBinSelection
+  readonly bins: VisiumHdBarcodeMappingBinSelection
   // Holds the file's size and footer per URL across bin reads.
   readonly sourceCache?: VisiumHdBarcodeMappingsSourceCache
   readonly file?: AsyncBuffer
@@ -88,6 +89,10 @@ export interface ReadVisiumHdBarcodeMappingsOptions {
   readonly byteRangeCache?: PersistentByteRangeCache | null
   // How the URL reads are merged and limited; see coalescingAsyncBuffer.
   readonly rangeRequests?: CoalescingAsyncBufferOptions
+  // Reads the bins' row ranges elsewhere, as visiumHdTablesWorker.ts does in a
+  // worker; used only when the read needs nothing else from this thread (a
+  // fetcher, byte-range cache, range options or compressors).
+  readonly readRangesInWorker?: VisiumHdBarcodeMappingRangesReader
 }
 
 export interface VisiumHdBarcodeMappingsReadObjectsOptions {
@@ -122,6 +127,8 @@ export class VisiumHdBarcodeMappingsBudgetExceededError extends Error {
   }
 }
 
+// The bins' rows of barcode_mappings.parquet. Nothing reads the whole file:
+// that read was removed with O16.
 export async function readVisiumHdBarcodeMappings(
   baseUrl: string,
   options: ReadVisiumHdBarcodeMappingsOptions,
@@ -132,22 +139,7 @@ export async function readVisiumHdBarcodeMappings(
       : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
   const url = datasetFileUrlFor(baseUrl, 'barcodeMappings')
 
-  if (options.bins !== undefined) {
-    return readVisiumHdBarcodeMappingsForBins(url, options.bins, maxRows, options)
-  }
-
-  const file = options.file ?? (await barcodeMappingsFileFromUrl(url, options)).file
-  const compressors =
-    options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
-  const rows = await (options.readObjects ?? readHyparquetObjects)({
-    file,
-    columns: VISIUM_HD_BARCODE_MAPPING_COLUMNS,
-    rowFormat: 'object',
-    ...(maxRows === undefined ? {} : { rowEnd: maxRows + 1 }),
-    compressors,
-  })
-
-  return parseVisiumHdBarcodeMappingRows(rows, maxRows === undefined ? {} : { maxRows })
+  return readVisiumHdBarcodeMappingsForBins(url, options.bins, maxRows, options)
 }
 
 async function readVisiumHdBarcodeMappingsForBins(
@@ -160,7 +152,7 @@ async function readVisiumHdBarcodeMappingsForBins(
     return []
   }
 
-  const { file, metadata } = await barcodeMappingsFileWithMetadata(url, options)
+  const { file, metadata, source } = await barcodeMappingsFileWithMetadata(url, options)
   const column = visiumHdBarcodeMappingBinColumn(bins.binSizeMicrometers)
   const ranges = visiumHdBarcodeMappingRowRanges(metadata, column, bins.binIds)
   const rowCount = ranges.reduce(
@@ -176,9 +168,34 @@ async function readVisiumHdBarcodeMappingsForBins(
     return []
   }
 
+  // Read as columns, with only the bins' rows made into objects, in a worker
+  // when nothing ties the read to this thread (O16).
+  if (options.readObjects === undefined) {
+    const request = { column, binIds: bins.binIds, ranges }
+    const readRangesInWorker =
+      options.fetcher === undefined &&
+      options.byteRangeCache === undefined &&
+      options.rangeRequests === undefined &&
+      options.compressors === undefined &&
+      options.loadCompressors === undefined
+        ? options.readRangesInWorker
+        : undefined
+
+    return source !== undefined && readRangesInWorker !== undefined
+      ? readRangesInWorker({ url, source, ...request }, options.signal)
+      : readVisiumHdBarcodeMappingRanges({
+          file,
+          metadata,
+          ...request,
+          compressors:
+            options.compressors ??
+            (await (options.loadCompressors ?? loadDefaultCompressors)()),
+        })
+  }
+
   const compressors =
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
-  const readObjects = options.readObjects ?? readHyparquetObjects
+  const readObjects = options.readObjects
   const binIds = new Set<unknown>(bins.binIds)
   const batches = await mapWithConcurrency(
     ranges,
@@ -199,6 +216,83 @@ async function readVisiumHdBarcodeMappingsForBins(
   )
 
   return parseVisiumHdBarcodeMappingRows(batches.flat())
+}
+
+// The bins' rows in `ranges`, read as columns: a range's other rows are never
+// made into objects.
+export async function readVisiumHdBarcodeMappingRanges(options: {
+  readonly file: AsyncBuffer
+  readonly metadata: FileMetaData
+  readonly column: string
+  readonly binIds: readonly string[]
+  readonly ranges: readonly VisiumHdBarcodeMappingRowRange[]
+  readonly compressors: Compressors
+}): Promise<readonly VisiumHdBarcodeMapping[]> {
+  const binIds = new Set<unknown>(options.binIds)
+  const batches = await mapWithConcurrency(
+    options.ranges,
+    VISIUM_HD_BARCODE_MAPPING_READ_CONCURRENCY,
+    async (range) => {
+      const columns = await readParquetColumns({
+        file: options.file,
+        metadata: options.metadata,
+        columns: VISIUM_HD_BARCODE_MAPPING_COLUMNS,
+        rowStart: range.rowStart,
+        rowEnd: range.rowEnd,
+        compressors: options.compressors,
+      })
+      const binColumn = columns[options.column] ?? []
+      const rows: Record<string, unknown>[] = []
+
+      for (let index = 0; index < binColumn.length; index += 1) {
+        if (binIds.has(binColumn[index])) {
+          rows.push(
+            Object.fromEntries(
+              VISIUM_HD_BARCODE_MAPPING_COLUMNS.map((name) => [
+                name,
+                columns[name]?.[index],
+              ]),
+            ),
+          )
+        }
+      }
+
+      return rows
+    },
+  )
+
+  return parseVisiumHdBarcodeMappingRows(batches.flat())
+}
+
+// A bin read run in a worker: the file is opened there from its size and
+// validator, with the footer parsed here.
+export interface VisiumHdBarcodeMappingRangesRequest {
+  readonly url: string
+  readonly source: VisiumHdBarcodeMappingsSource
+  readonly column: string
+  readonly binIds: readonly string[]
+  readonly ranges: readonly VisiumHdBarcodeMappingRowRange[]
+}
+
+export type VisiumHdBarcodeMappingRangesReader = (
+  request: VisiumHdBarcodeMappingRangesRequest,
+  signal: AbortSignal | undefined,
+) => Promise<readonly VisiumHdBarcodeMapping[]>
+
+// The worker's side of a VisiumHdBarcodeMappingRangesRequest.
+export async function readVisiumHdBarcodeMappingRangesFromSource(
+  request: VisiumHdBarcodeMappingRangesRequest,
+): Promise<readonly VisiumHdBarcodeMapping[]> {
+  const { file } = await barcodeMappingsFileFromUrl(request.url, {}, request.source)
+
+  return readVisiumHdBarcodeMappingRanges({
+    file,
+    metadata: request.source.metadata,
+    column: request.column,
+    binIds: request.binIds,
+    ranges: request.ranges,
+    compressors: await loadDefaultCompressors(),
+  })
 }
 
 // Row ranges holding the row groups that may contain one of `binIds` in
@@ -366,7 +460,11 @@ type BarcodeMappingsFileOptions = Pick<
 async function barcodeMappingsFileWithMetadata(
   url: string,
   options: ReadVisiumHdBarcodeMappingsOptions,
-): Promise<{ readonly file: AsyncBuffer; readonly metadata: FileMetaData }> {
+): Promise<{
+  readonly file: AsyncBuffer
+  readonly metadata: FileMetaData
+  readonly source?: VisiumHdBarcodeMappingsSource
+}> {
   if (options.file !== undefined) {
     return { file: options.file, metadata: await parquetMetadataAsync(options.file) }
   }
@@ -382,7 +480,7 @@ async function barcodeMappingsFileWithMetadata(
         )
   const { file } = await barcodeMappingsFileFromUrl(url, options, source)
 
-  return { file, metadata: source.metadata }
+  return { file, metadata: source.metadata, source }
 }
 
 async function readBarcodeMappingsSource(
@@ -430,20 +528,6 @@ async function barcodeMappingsFileFromUrl(
     }),
     validator,
   }
-}
-
-async function readHyparquetObjects(
-  options: VisiumHdBarcodeMappingsReadObjectsOptions,
-): Promise<readonly Record<string, unknown>[]> {
-  return (await parquetReadObjects({
-    file: options.file,
-    ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
-    columns: [...options.columns],
-    rowFormat: options.rowFormat,
-    ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
-    ...(options.rowStart === undefined ? {} : { rowStart: options.rowStart }),
-    ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
-  })) as readonly Record<string, unknown>[]
 }
 
 async function loadDefaultCompressors(): Promise<Compressors> {

@@ -1,13 +1,13 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import {
-  AnnotationFileFormatError,
   customAnnotationImportOnMap,
   customCellMetadataFilePrefix,
   IMPORTED_COLUMN_CLASS_LIMIT,
-  parseCustomAnnotationImport,
   skippedColumnsText,
   type ContinuousCellMetadataTrack,
+  type CustomAnnotationImport,
 } from '../../data/customAnnotations'
+import { csvTablesInWorker } from '../../data/csvTablesWorker'
 import {
   ALL_ANNOTATION_GROUP_ID,
   NO_ANNOTATION_GROUP_ID,
@@ -325,7 +325,7 @@ export function useAnnotationWorkflow({
   )
 
   const importCustomAnnotationText = useCallback(
-    (
+    async (
       text: string,
       sourceName: string,
       sourceLabel: string,
@@ -335,14 +335,42 @@ export function useAnnotationWorkflow({
         switchColorMode = true,
         shownAnnotationIds: linkShownAnnotationIds = [],
       }: LinkHiddenAnnotationOptions = {},
-    ): { readonly annotationPrefix: string; readonly metadataPrefix: string } => {
+    ): Promise<{
+      readonly annotationPrefix: string
+      readonly metadataPrefix: string
+    } | null> => {
+      const requestId = loadRequestIdRef.current
       const importUrl = loadState.status === 'ready' ? loadState.url : datasetUrl
       if (importedFileNamesRef.current.url !== importUrl) {
         importedFileNamesRef.current = { url: importUrl, names: new Map() }
       }
       const importedNames = importedFileNamesRef.current.names
       const idName = importedFileIdName(sourceName, importedNames)
-      const parsed = parseCustomAnnotationImport(text, sourceName, idName)
+      // Held while the file is parsed, so a file of a name that slugs alike,
+      // imported meanwhile, is numbered apart from it.
+      const reserved = !importedNames.has(slug(idName))
+      importedNames.set(slug(idName), sourceName)
+      const release = () => {
+        if (reserved && importedNames.get(slug(idName)) === sourceName) {
+          importedNames.delete(slug(idName))
+        }
+      }
+      let parsed: CustomAnnotationImport
+
+      try {
+        // In a worker (O18): a million rows held the main thread for 0.7 s.
+        parsed = await csvTablesInWorker.annotationImport(text, sourceName, idName)
+      } catch (error) {
+        release()
+        throw error
+      }
+
+      // Another dataset opened while the file was parsed.
+      if (loadRequestIdRef.current !== requestId) {
+        release()
+        return null
+      }
+
       const skippedColumns = parsed.skippedColumns ?? []
       const cellCheck = checkImportedCellIds(
         parsed.annotations,
@@ -351,6 +379,7 @@ export function useAnnotationWorkflow({
       )
 
       if (cellCheck.total > 0 && cellCheck.missing === cellCheck.total) {
+        release()
         throw new ImportedCellsNotFoundError(
           cellCheck.total === 1
             ? 'The imported cell is not on the map.'
@@ -367,7 +396,6 @@ export function useAnnotationWorkflow({
 
       const importedPrefix = customAnnotationFilePrefix(idName)
       const importedMetadataPrefix = customCellMetadataFilePrefix(idName)
-      importedNames.set(slug(idName), sourceName)
       // A file of the URL's name replaces its labels.
       setUrlImport((current) =>
         current?.annotationPrefix === importedPrefix ? null : current,
@@ -466,6 +494,7 @@ export function useAnnotationWorkflow({
       appendDebugEvent,
       datasetCellIds,
       datasetUrl,
+      loadRequestIdRef,
       loadState,
       setAnnotationColors,
       setHiddenAnnotationIds,
@@ -484,7 +513,11 @@ export function useAnnotationWorkflow({
       }
 
       try {
-        importCustomAnnotationText(await file.text(), file.name, 'Imported annotations')
+        await importCustomAnnotationText(
+          await file.text(),
+          file.name,
+          'Imported annotations',
+        )
       } catch (error) {
         setImportNotice(null)
         setImportError({
@@ -520,12 +553,17 @@ export function useAnnotationWorkflow({
           return false
         }
 
-        const prefixes = importCustomAnnotationText(
+        const prefixes = await importCustomAnnotationText(
           text,
           sourceName,
           'Imported URL annotations',
           linkHidden,
         )
+
+        if (prefixes === null || loadRequestIdRef.current !== requestId) {
+          return false
+        }
+
         if (loadState.status === 'ready') {
           setUrlImport({ datasetUrl: loadState.url, url: url.trim(), ...prefixes })
         }
@@ -859,7 +897,8 @@ function annotationImportError(error: unknown): StructuredLoadError {
     }
   }
 
-  if (error instanceof AnnotationFileFormatError) {
+  // By name: a file parsed in the worker fails with a plain Error of this name.
+  if (error instanceof Error && error.name === 'AnnotationFileFormatError') {
     return {
       source: 'Annotations',
       code: 'unsupported',

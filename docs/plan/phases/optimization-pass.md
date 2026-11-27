@@ -216,7 +216,7 @@ M0, measuring:
 
 M1, interaction:
 
-- [ ] **O3. Patch colours per expression batch.** (M) Keep a base colour
+- [x] **O3. Patch colours per expression batch.** (M) Keep a base colour
       array per cells and colouriser, and one for cells without expression.
       For a batch, copy the right one and write only the batch's cells,
       through the cell index ViewerCore already builds; the layer's fill
@@ -225,6 +225,8 @@ M1, interaction:
   - A fast-check test: the patched arrays equal the full pass for random
     cells, batches and colour modes.
   - Measure S3.
+  - Built in [#478](https://github.com/cellgeni/explorer/pull/478):
+    [Expression Colours Written Per Batch](#expression-colours-written-per-batch-2026-11-27).
 - [x] **O4. Colour outlines without rebuilding them.** (M) ViewerCore takes
       the unstyled outlines and applies expression colours as colour
       attributes only. The geometry, the cell filter and the tessellation
@@ -358,31 +360,39 @@ M2, requests:
 
 M3, main thread:
 
-- [ ] **O15. AnnData table code, in place.** (S–M) `uniqueNames` returns
+- [x] **O15. AnnData table code, in place.** (S–M) `uniqueNames` returns
       early when no name repeats; `h5adMatrixForCells` keeps its row and
       gene maps in the cache; `sparseVectorCell` stops allocating per cell
       (`h5adDataset.ts:4897`); numeric columns stay typed arrays where
       their callers allow; distinct values are counted when the annotation
       list asks for them.
   - Measure S6, and the 460-plex zip through the mirror (S9).
-- [ ] **O16. Visium HD positions and barcode mappings in a worker.** (M) As
+  - Built in [#480](https://github.com/cellgeni/explorer/pull/480):
+    [AnnData Tables Read In Place](#anndata-tables-read-in-place-2026-11-27).
+- [x] **O16. Visium HD positions and barcode mappings in a worker.** (M) As
       for the Xenium overview: columns from a worker, not one object per
       row. Remove the whole-file mapping read nothing calls
       (`visiumHdBarcodeMappings.ts:124-150`). Look at the 2 µm
       `barcodes.tsv.gz` parse (`visiumHdBarcodes.ts:38-145`) too.
-- [ ] **O17. A gene's CSR scan off the main thread.** (M) For an H5AD read
+  - Built in [#484](https://github.com/cellgeni/explorer/pull/484):
+    [Visium HD Tables Read In A Worker](#visium-hd-tables-read-in-a-worker-2026-11-27).
+- [x] **O17. A gene's CSR scan off the main thread.** (M) For an H5AD read
       by the H5 worker, use its `matrix-cells` request
       (`h5FileMessages.ts:110`) rather than reading the matrix into the
       page (`h5adDataset.ts:4097`, `:4205`). For AnnData Zarr, decide after
       O15's numbers.
-- [ ] **O18. Large CSV files in a worker.** (S) Time both parses at a
+  - Built in [#485](https://github.com/cellgeni/explorer/pull/485):
+    [A CSR Matrix Kept In The H5 Worker](#a-csr-matrix-kept-in-the-h5-worker-2026-11-27).
+- [x] **O18. Large CSV files in a worker.** (S) Time both parses at a
       million rows, and move them to a worker if either blocks for more
       than 200 ms. The two `parseCsvRows` read quotes and delimiters
       differently, so merging them is not part of this task.
+  - Built in [#486](https://github.com/cellgeni/explorer/pull/486):
+    [CSV Files Parsed In A Worker](#csv-files-parsed-in-a-worker-2026-11-27).
 
 M4, memory:
 
-- [ ] **O19. Release what a dataset opened.** (L) A registry in
+- [x] **O19. Release what a dataset opened.** (L) A registry in
       `datasetCache.ts` of resources opened for a dataset URL, released when
       no viewer, preview or cache holds that URL any more. It covers the
       caches kept for the session above and the TIFF files. Visium HD,
@@ -391,22 +401,30 @@ M4, memory:
       (`visiumFeatureSlice.ts:56`, `:196-219`).
   - A test: releasing the last holder ends the workers.
   - Measure S8.
-- [ ] **O20. Memory telemetry.** (M) Each cache reports its bytes, entries
+  - Built in [#487](https://github.com/cellgeni/explorer/pull/487):
+    [Dataset Resources Released With Them](#dataset-resources-released-with-them-2026-11-27).
+- [x] **O20. Memory telemetry.** (M) Each cache reports its bytes, entries
       and workers, and Data access notes shows the total. A ceiling is
       decided from these numbers
       ([Answered Questions](#answered-questions)). Candidates: one tile
       budget across channels, a DuckDB `memory_limit`, and a cap on H5
       workers.
+  - Built in [#488](https://github.com/cellgeni/explorer/pull/488):
+    [Memory Held, Counted](#memory-held-counted-2026-11-27). The ceiling
+    proposed there, one tile budget in bytes across channels, waits for a
+    decision.
 
 M5, start-up:
 
-- [ ] **O21. Load panels when they open.** (S–M) Cell Query, Browse Store
+- [x] **O21. Load panels when they open.** (S–M) Cell Query, Browse Store
       and Browse File, Plots and Screenshot load on first use, with the
       message that a lazy chunk already shows after a deploy.
   - A test keeps them out of the entry chunk, as
     `tests/config/viteConfig.test.ts` keeps `h5wasm` out of the vendor
     groups.
   - Measure S1.
+  - Built in [#489](https://github.com/cellgeni/explorer/pull/489):
+    [Panels Loaded On First Use](#panels-loaded-on-first-use-2026-11-27).
 
 ### Baseline (2026-11-25)
 
@@ -1643,6 +1661,526 @@ with transcripts on), three alternating runs each:
 
 On an HTTP/2 host it might help; that was not measured.
 
+## Expression Colours Written Per Batch (2026-11-27)
+
+Task O3. Each expression read made the cell points' colours twice, once when
+it started and once when it ended (`geneExpressionActive`), and each time
+`packCellPointColors` styled every cell with a lookup of its ID in the batch,
+then `cellPointLayerColors` made the layer's fill and line colours from all
+of them. On the synthetic 1.4M-cell folder that was 56–96 ms of each zoomed-in
+view's main-thread time, for batches of 15–214 cells.
+
+- **A batch writes only its cells** (`expressionCellPointColors`,
+  `src/rendering/cellPointStyle.ts`). ViewerCore keeps the cells' colours
+  without expression; a batch copies them, or an array of every cell in the
+  zero colour once unmatched cells are styled, and writes its own cells
+  over the copy, found by the cell index (`cellIndexById`).
+- **The layer's colours** are written the same way: the base's fill and
+  line colours are kept per opacity (`cachedCellPointLayerColors`), and a
+  batch's copy recomputes only its cells.
+- **The first batch takes the full pass.** V8 keeps a string's hash once it
+  is first used as a Map key, and on 1.4 million cells that was most of the
+  cost of building the cell index: 220–250 ms from IDs never looked up,
+  60–90 ms after a full pass. Building it for the first batch made the
+  first colouring 60–80 ms slower, so the index is built by the second
+  batch, unless a hover, outlines or Cell Query built it first.
+- **Still the full pass:** expression matched by bin position, and cells
+  that share an ID, which a write by ID cannot match.
+- **Memory:** the two base arrays and their layer colours, about 30 MB on
+  1.4 million cells.
+
+Measured with unminified production builds of main (`c1566d9`) and the
+branch, alternating, three runs each, with GPU drawing, on the synthetic
+folder coloured by `M03a`, then five zoom steps and a pan (S3, outlines
+off; S4, outlines on). Colour work is the time in the colour passes and the
+layer colours, from CPU profiles; on the branch it includes building the
+cell index.
+
+| Step                        | Main: colour work | Branch: colour work | Main: busy | Branch: busy | Main: longest | Branch: longest |
+| --------------------------- | ----------------- | ------------------- | ---------- | ------------ | ------------- | --------------- |
+| S3, colour by `M03a`        | 186–208 ms        | 179–252 ms          | 408–683 ms | 551–895 ms   | 288–323 ms    | 307–419 ms      |
+| S3, step 3 (214 cells read) | 73–80 ms          | 91–105 ms           | 232–246 ms | 248–274 ms   | 81–92 ms      | 117–138 ms      |
+| S3, step 4 (78 cells)       | 57–96 ms          | 2–4 ms              | 179–222 ms | 154–182 ms   | 60–67 ms      | 0–61 ms         |
+| S3, step 5 (15 cells)       | 56–63 ms          | 0–28 ms             | 186–221 ms | 113–171 ms   | 57–80 ms      | 0–56 ms         |
+| S4, step 3, outlines first  | 159–191 ms        | 84–88 ms            | 664–754 ms | 541–584 ms   | 460–550 ms    | 336–367 ms      |
+| S4, step 4                  | 61–65 ms          | 4–15 ms             | 371–420 ms | 313–363 ms   | 112–137 ms    | 101–129 ms      |
+| S4, step 5                  | 55–62 ms          | 4–16 ms             | 248–271 ms | 211–250 ms   | 62–97 ms      | 0–52 ms         |
+
+- **The first colouring** takes one full pass on both builds, 170–250 ms
+  of colour work; its busy time varies with shader compiles and garbage
+  collection on both.
+- **Step 3 builds the cell index** on the branch, 61–74 ms, so its colour
+  work is 18–25 ms more than main's in S3. With outlines on (S4), main
+  built the same index for the outlines at that step (80–114 ms, included
+  above), and the branch builds it once.
+- **Later steps** write their batch over a copy: 0–28 ms rather than 55–96
+  ms of colour work.
+- **The same colours.** Both builds gave the same expression lines, and
+  the property test below compares every array with the full pass.
+
+Tests: `src/rendering/cellPointStyle.property.test.ts` checks, for random
+cells, batches, colour modes, bin sizes and opacities, that the colours and
+the layer's fill and line colours equal the full pass's, and that a batch
+after the first styles no cell.
+
+## AnnData Tables Read In Place (2026-11-27)
+
+Task O15. CPU profiles of the 1M-cell H5AD (S6) and of the 460-plex zip
+through its mirror (S9), on the base of this task's PR, put the table's
+main-thread work in four places:
+
+- **Colouring by a gene** read every selected cell through the matrix's
+  per-cell path (`h5adMatrixForCells`). It built a Map of every cell ID and
+  a Set and a Map per cell, and returned each cell's genes as arrays, which
+  `geneExpression` then added up. That was 0.84–0.99 s on S6 and 0.69–0.70 s
+  on the 460-plex.
+- **Counting the distinct values** of string obs columns took 0.90–0.98 s on
+  the 460-plex: its 598,222 `segmentation_method` labels hold two values,
+  and a Set hashes a string the first time it is used as a key. Compared
+  with the label before, the same labels took 14 ms.
+- **Number columns** were copied into number arrays, 67–145 ms a load.
+- **Making the cell IDs unique** (`uniqueNames`), 0.23–0.28 s a load. Almost
+  all of it is the Set of every ID, which only says whether any repeats.
+
+What changed (`src/datasets/h5adDataset.ts`):
+
+- **A gene's counts are summed row by row** (`h5adExpressionCounts`).
+  `geneExpression` takes the selection as table rows, so it needs no ID
+  lookups, and a CSR matrix, in memory or read by range, or a dense one in
+  memory, is read straight into a sum per row (`CsrRowSums`). The sums keep
+  the per-cell path's rules: a column stored twice in a row keeps its last
+  value, and genes are added in the order asked. Other layouts, and a read
+  of every gene, still take the per-cell path.
+- **The per-cell path** (`matrix()`, Cell Query and the Cell card) keeps its
+  maps of cell rows and gene columns per table rather than building them
+  for each read, and its CSR rows reuse one Set and one Map rather than
+  making two per cell.
+- **Distinct values** are compared first with the 16 values already seen,
+  and only then put in a Set (`DistinctLabels`).
+- **Number columns** stay `Float64Array`s: a column read as one is kept, and
+  others are copied once, with a loop for 64-bit integers.
+  `Float64Array.from(values, Number)` took twice as long as the number
+  arrays on the 460-plex.
+- **`uniqueNames`** returns the names as they are when none repeats, which
+  skips its second Set and its pass over the names. The Set that finds out
+  is left, and is most of the time.
+
+Measured with unminified production builds of the base (#478) and the
+branch, alternating, three runs each, with GPU drawing: S6, then coloured by
+`M03a`; and the 460-plex served from a local mirror of its EBI zip, coloured
+by `GFAP`.
+
+| Step                       | Base: busy     | Branch: busy   | Base: longest  | Branch: longest | Base: table work | Branch: table work |
+| -------------------------- | -------------- | -------------- | -------------- | --------------- | ---------------- | ------------------ |
+| S6, load                   | 1,176–1,278 ms | 1,034–1,143 ms | 367–473 ms     | 347–376 ms      | 315–349 ms       | 191–269 ms         |
+| S6, colour by `M03a`       | 1,328–1,657 ms | 306–370 ms     | 1,290–1,616 ms | 285–343 ms      | 843–986 ms       | 113–130 ms         |
+| 460-plex, load             | 2,999–3,511 ms | 1,988–2,268 ms | 888–1,088 ms   | 343–364 ms      | 1,318–1,360 ms   | 330–381 ms         |
+| 460-plex, colour by `GFAP` | 3,277–3,571 ms | 2,050–2,502 ms | 1,078–1,266 ms | 1,040–1,230 ms  | 689–702 ms       | 217–260 ms         |
+
+Table work is the time in the functions above, from CPU profiles: on a load,
+counting labels, `uniqueNames` and the number columns; on a colouring, the
+matrix read.
+
+- **S6's colouring** is one stretch of 0.29–0.34 s rather than 1.3–1.6 s;
+  the expression line shows 0.36–0.50 s after the click, against 1.39–1.85
+  s, and the page holds 0.9 GB rather than 1.2–1.3 GB.
+- **The 460-plex's colouring** still has a stretch of 1.0–1.2 s: deck.gl
+  normalising the overlay's attributes for its 571,617 expressing cells
+  (`_normalizeValue`, about 0.4 s) and garbage collection. Not this task's.
+- **The same expression lines** on both builds: 28,988 positive cells across
+  1,000,000, and 571,617 across 598,222.
+- **For O17:** the CSR scan for a gene now takes 0.11–0.13 s on S6 and
+  0.22–0.26 s on the 460-plex. Moving it to the H5 worker would save that
+  much of one stretch.
+
+Tests: `src/datasets/h5adExpressionCounts.property.test.ts` checks, for
+random CSR tables (columns stored twice, NaN and negative values, 32- and
+64-bit floats) and gene lists (repeated and missing genes), that the counts
+equal the per-cell path's. `src/datasets/h5adObsColumns.test.ts` checks the
+distinct-value counts around 16 values and the 10,000 limit, and that
+number columns, 64-bit integers included, keep their values as typed
+arrays.
+
+## Visium HD Tables Read In A Worker (2026-11-27)
+
+Task O16. To measure at the reference run's size without hosted data,
+`scripts/make_scale_data.py --what visium-hd` now writes a Space Ranger 4
+folder: 3,740,816 bins under tissue at 2 µm, 233,814 at 8 µm and 58,453 at
+16 µm, with a 91 MB `barcode_mappings.parquet` (see
+[Profiling](../../profiling.md#synthetic-data-at-scale)). CPU profiles of
+the base of this task's PR put three long tasks on the main thread:
+
+- **The load** decoded each tier's `tissue_positions.parquet` (700,569 rows
+  at 8 µm) into one object per row with hyparquet: one stretch of 0.4–0.7 s,
+  most of it in hyparquet's string decoding.
+- **A bin's card** (Enter on the view) read the bin's row groups of
+  `barcode_mappings.parquet` as objects and kept the bin's rows: one
+  stretch of 0.67–0.81 s.
+- **Zooming to the 2 µm bins** parsed the 3.7 million lines of
+  `barcodes.tsv.gz`: one stretch of about 1 s, 0.56 s of it the parse.
+
+What changed:
+
+- **A worker reads the three tables** (`src/datasets/visiumHdTablesWorker.ts`,
+  `src/workers/visiumHdTables.worker.ts`). It fetches and decodes the file,
+  and sends back the positions' columns and the barcodes' rows and columns
+  as transferred typed arrays, with their barcode strings. As with the other
+  table workers, a read stays on the main thread when its caller passes a
+  fetcher, a file, a row reader, compressors or a byte-range cache, where
+  there is no `Worker`, and when the worker fails to start.
+- **The positions are read as columns** (`readParquetColumns`, moved to
+  `src/data/parquetColumns.ts` from the Xenium cells reader), not one object
+  per row, on either thread.
+- **A bin read gets the file's footer on the main thread**, once per
+  dataset as before, and passes it to the worker with the row ranges to
+  read. The worker reads those rows as columns and makes objects of the
+  bin's rows only.
+- **The whole-file mapping read is gone**, with the dataset method and the
+  row budget control that led to it; `readVisiumHdBarcodeMappings` now
+  requires the bins.
+
+Measured with unminified production builds of the base (#480) and the
+branch, alternating, three runs each, with GPU drawing, on the synthetic
+folder served locally: the load, then the 2 µm button and seven zoom steps
+(the seventh draws the 2 µm bins); and the load, then Enter.
+
+| Step                      | Base: busy     | Branch: busy | Base: longest  | Branch: longest | Base: page | Branch: page |
+| ------------------------- | -------------- | ------------ | -------------- | --------------- | ---------- | ------------ |
+| Load                      | 850–944 ms     | 325–388 ms   | 405–710 ms     | 150–156 ms      | 46–51 MB   | 96–97 MB     |
+| Bin card (Enter)          | 759–911 ms     | 85–149 ms    | 670–812 ms     | under 50 ms     | 193–205 MB | 104–105 MB   |
+| Zoom step that draws 2 µm | 1,059–1,099 ms | 396–421 ms   | 1,009–1,040 ms | 332–340 ms      | 485–521 MB | 336–340 MB   |
+
+- **The load** is ready in 0.35–0.39 s rather than 0.66–0.87 s. The page
+  holds more just after it only until the next collection: 47–49 MB by the
+  fifth zoom step, against 52–75 MB on the base.
+- **The 2 µm step** still has a stretch of 0.33–0.34 s: receiving the 3.7
+  million barcode strings (57 ms), making the overview (37 ms), and the
+  view's tile index of the bins (`gridCellTileIndex`, about 100 ms) with
+  garbage collection. The tile index is not this task's.
+- **The same requests** on both builds: 53 (5.6 MB) for the load, 9
+  (14.2 MB) for the card, and 2 (9.2 MB) for the 2 µm barcodes.
+
+Tests: `src/datasets/visiumHdTablesWorker.test.ts` runs the worker's
+handler across a structured clone against fixtures in
+`src/test/fixtures/visium-hd/` (a `tissue_positions.parquet` in three row
+groups was added): the worker's positions, bin mappings and barcodes match
+the main thread's, typed arrays are transferred, errors keep their names,
+and reads with a fetcher or byte-range cache stay on the main thread.
+
+## A CSR Matrix Kept In The H5 Worker (2026-11-27)
+
+Task O17. After O15 a gene's colouring of S6 scanned the 1M-cell CSR `/X`
+on the main thread in 57 ms, inside one stretch of 0.19–0.21 s. `/X` was read
+whole by the H5 file worker and sent to the page, which held its arrays.
+The worker's `matrix-cells` request reads a 10x `/matrix` by barcode, so it
+did not fit; three new requests do.
+
+What changed:
+
+- **The worker keeps a CSR `/X`** that it would have sent whole
+  (`csr-keep`, `src/workers/h5FileCore.ts`), and the page's matrix becomes
+  `csr-worker`, with only `indptr` in the page.
+- **A gene's counts** are summed there (`csr-row-sums`), with the page's
+  rules: `CsrRowSums` moved to `src/data/csrRowSums.ts` for both.
+- **Plots' and the Python console's gene values** are scanned there
+  (`csr-gene-values`, with `geneValuesFromCsr`).
+- **A cell's genes** (Cell card, Cell Query) are read as slices, as for a
+  matrix read by range; the worker answers reads of the kept paths from its
+  arrays, without h5wasm.
+- CSC and dense matrices, layers and `raw` are unchanged: a CSC gene is a
+  slice, and layers and `raw` are already read by range.
+
+Measured with unminified production builds of the base (#484) and the
+branch, alternating, three runs each, with GPU drawing: S6, then coloured
+by `M03a`. Profiling starts the colouring 3 s after the load; with a 10 s
+wait the page's collection of the load's garbage happens first, as it would
+before most clicks.
+
+| Step                              | Base: busy | Branch: busy | Base: longest | Branch: longest |
+| --------------------------------- | ---------- | ------------ | ------------- | --------------- |
+| Load                              | 896–922 ms | 821–871 ms   | 311–333 ms    | 170–290 ms      |
+| Colour by `M03a`, 3 s after load  | 208–219 ms | 211–247 ms   | 195–201 ms    | 152–169 ms      |
+| Colour by `M03a`, 10 s after load | 209–223 ms | 155–195 ms   | 193–206 ms    | 94–129 ms       |
+
+| Memory after colouring | Base   | Branch     |
+| ---------------------- | ------ | ---------- |
+| Page                   | 890 MB | 595–610 MB |
+| H5 file worker         | 148 MB | 470–476 MB |
+
+- **The scan** is 5 ms of page time rather than 57 ms. Three seconds after
+  the load, the branch's colouring also collects the load's garbage (54–73
+  ms), which the base had collected during its longer load.
+- **The expression line** shows as soon: 0.22–0.25 s after the click,
+  against 0.24–0.26 s, with the same 28,988 positive cells.
+- **Memory moves** to the worker rather than growing: 1.04 GB in all after
+  colouring on the base, 1.07 GB on the branch. The worker's WebAssembly
+  heap, grown to decode `/X`, is not given back on either build.
+- **AnnData Zarr is left as it is.** Its `X` is read in chunks, through a
+  zip on the 460-plex, and its 0.22–0.26 s scan comes in batches as the
+  chunks arrive; the colouring's long stretch there is deck.gl's
+  (see [AnnData Tables Read In Place](#anndata-tables-read-in-place-2026-11-27)).
+  Moving it would mean reading the store in a worker.
+
+Tests: `src/datasets/h5adDataset.test.ts` reads a CSR H5AD by range through
+the in-process worker and checks a gene's counts, gene values, the cells'
+genes and the estimate, and that the page asked the worker to keep `/X` and
+never read `/X/data` or `/X/indices` whole.
+
+## CSV Files Parsed In A Worker (2026-11-27)
+
+Task O18. At a million rows, in Node, an embedding's projection parsed in
+0.46–0.66 s (`parseAnalysisEmbeddingCsv`, 32 MB) and an annotation file in
+1.18–1.32 s (`parseCustomAnnotationImport`, 40 MB), both well over the
+task's 200 ms. In the app, on the base of this task's PR:
+
+- **Loading the synthetic Xenium folder's UMAP** (1.4 million rows, 42 MB,
+  written for this measurement) was one stretch of 0.54–0.91 s, 0.32 s of
+  it the parse.
+- **Opening S6 with a 1M-row file in `annotationUrl=`** (`cell_id`, a
+  20-class `cluster` and a numeric `score`, 31 MB) held the main thread for
+  1.23–1.25 s at once, 0.70 s of it the parse.
+
+What changed:
+
+- **A worker parses both** (`src/data/csvTablesWorker.ts`,
+  `src/workers/csvTables.worker.ts`), with the parsers unchanged. A worker
+  is started for each file and exits once it has answered; where there is
+  no `Worker`, or it fails to start, the parse runs on the main thread.
+- **It sends columns back**: a projection's IDs and two `Float64Array`s, and
+  each imported track's IDs and values, which the page makes into objects.
+  In Node, receiving a million `{ cellId, value }` objects took 0.22–0.24 s
+  on the main thread, and columns with the objects made from them 22–40 ms.
+- **An annotation import is asynchronous**: it is dropped if another dataset
+  opens while the file is parsed, and holds its file's name meanwhile, so a
+  file whose name slugs alike is numbered apart. A parse error keeps its
+  name, which the import's error message is chosen by.
+- The embedding loader takes the parser as an option; the app passes the
+  worker's, so the worker does not import the module that starts it.
+
+Measured with unminified production builds of the base (#485) and the
+branch, alternating, three runs each, with GPU drawing.
+
+| Step                                    | Base: busy     | Branch: busy   | Base: longest  | Branch: longest |
+| --------------------------------------- | -------------- | -------------- | -------------- | --------------- |
+| S6 load with a 1M-row `annotationUrl=`  | 2,147–2,265 ms | 1,646–1,670 ms | 1,228–1,252 ms | 574–587 ms      |
+| Xenium, Load Embeddings (1.4M-row UMAP) | 1,004–1,079 ms | 567–596 ms     | 538–911 ms     | 341–425 ms      |
+
+- **Receiving** costs 25–29 ms of page time, and making the points 34 ms.
+- **What is left is not parsing.** The import's stretch is mostly checking
+  the file's IDs against the dataset's (`checkImportedCellIds`, 0.33 s for a
+  million look-ups) and colouring by the new classes. The embedding's is
+  mostly a Set of the 1.4 million point IDs that the status line makes
+  (`embeddingPointIds`, 0.20 s).
+- The page holds 778 MB after the import, against 967–972 MB, and 721–738
+  MB after the embedding, against 919–933 MB.
+
+Tests: `src/data/csvTablesWorker.test.ts` runs the worker's handler across a
+structured clone: the projection's columns make the main thread's points,
+missing headers are named, the import (with a formula-guarded label and an
+empty value) equals the main thread's, a format error keeps its name, a
+failed worker falls back, and an abort ends the worker.
+
+## Dataset Resources Released With Them (2026-11-27)
+
+Task O19. On the base of this task's PR (#486):
+
+- **S8 as defined** opens Xenium folders and H5AD files without colouring
+  them, and ended with 9 workers on both builds. Those datasets' own
+  workers were already bounded: a disposed Xenium dataset closes its
+  DuckDB client and an H5AD its file worker, and the decode pools are
+  shared.
+- **What stayed open** were the caches kept by file URL outside the
+  dataset objects. In a variant of S8, ten datasets in turn (four copies of
+  the synthetic Visium HD folder, four Xenium folders and two H5AD files),
+  each coloured by `M03a`, every Visium HD copy kept its `feature_slice.h5`
+  open in an H5 worker for the session: four at the end, 151 MB on a 20 MB
+  synthetic file. On a real run each holds up to 128 MiB of blocks and its
+  barcode index.
+
+What changed:
+
+- **A registry** in `datasetCache.ts` tells listeners when a dataset URL
+  stops being held: no viewer or preview retains it, and no dataset cache
+  has it. The per-file caches register with `releaseWithDatasets`
+  (`src/data/datasetResources.ts`): `gex.ts`'s H5 matrix workers, Zarr
+  matrices and cell-ID arrays, the Feature Slice workers, transcript Zarr
+  metadata, and the TIFF loader's open files, pyramids and NDPI files.
+  When a dataset is released, its entries for the files it could read go,
+  and their workers close, unless a dataset still held reads them too.
+- **A dataset reads** the files under its folder or its manifest's root,
+  the files its manifest names, and the image a collection pairs with it.
+  Files no dataset reads, such as an imported segmentation's image, stay
+  until their cache's own limit drops them.
+- **`dispose()`** for Visium HD (overviews, bin tables, segmentation
+  indexes), SpatialData (its table and element caches), MERSCOPE and Atera
+  (their tables). A standard Visium dataset is an H5AD one, which had it.
+- **The full-file Feature Slice read goes**, with its byte budget and its
+  load error message: only tests used it.
+- The synthetic data script writes `feature_slice.h5`, so Visium HD can be
+  coloured, and `profile-load.mjs` gains `--then-gene`.
+
+Measured with unminified production builds of the base and the branch,
+alternating, three runs each, with GPU drawing. At the end of the Visium HD
+variant:
+
+| After ten datasets, each coloured | Base           | Branch         |
+| --------------------------------- | -------------- | -------------- |
+| H5 file workers                   | 4, 151 MB      | 2, 83–89 MB    |
+| All workers                       | 12, 373–378 MB | 10, 315–363 MB |
+| Page                              | 274–327 MB     | 278–402 MB     |
+
+- **The two left** are those of the two Visium HD datasets the dataset
+  cache keeps besides the one shown (`heldDatasetUrls()` on a dev build),
+  which reopen without reading their files again.
+- **Loads and colouring take as long** at every step, within the runs'
+  spread: a Visium HD load 188–220 ms busy against 203–215 ms.
+- **S8 as defined** is unchanged: 9 workers, 663–693 MB of them, and a page
+  of 1.25–1.33 GB after the tenth dataset, against 678–693 MB and
+  1.25–1.35 GB. The page's memory varies with when it was last collected.
+
+Tests: `src/data/datasetResources.test.ts` checks that the Feature Slice
+worker ends when the last of two holders releases its dataset and opens
+again on the next read, that a file stays while a cached dataset or a
+parent folder's dataset can read it, and that a manifest's root and files
+count as the dataset's.
+
+## Memory Held, Counted (2026-11-27)
+
+Task O20. Before it, the only counts were the tile cache's evictions and
+Chrome's main-thread heap; workers, WebAssembly memory and decoded tiles
+were not counted anywhere.
+
+What changed:
+
+- **A registry** (`src/data/memoryTelemetry.ts`): each cache and worker pool
+  registers a reporter that gives its items, workers and bytes.
+  - Image tiles count 4 bytes a pixel of their decoded bitmaps.
+  - Zarr chunk caches and inflated zip entries count their bytes.
+  - An H5 file's worker answers for itself (`stats` now carries
+    `memoryBytes`): h5wasm's WebAssembly memory, and the range blocks and
+    CSR arrays it keeps.
+  - A DuckDB client answers on a connection of its own with its buffer
+    manager's memory (`duckdb_memory()`).
+  - The decode pools, Cell Query, Plots, short-lived workers and the
+    dataset instances give counts only.
+  - Instances are held weakly, so one dropped without a close step leaves
+    the count once collected. A worker busy with a long read is left out
+    after 2 s.
+- **Data access notes** always shows, and while it is open reads the
+  reporters every 5 s into a table, with the page's JavaScript heap. Nothing
+  is read while it is closed.
+- `profile-load.mjs --caches` prints the table after the last phase.
+
+**Cost.** On the four-channel case below, reading takes 3.4–4.9 ms of
+main-thread time over 20 s with the notes open, and none with them closed.
+Loading and colouring the synthetic Xenium folder were unchanged: six runs
+each, alternating, in both orders. Busy time while colouring was 399–518 ms
+on the base (#487) and 449–541 ms on the branch, with the same app code
+(202–228 ms).
+
+What the caches hold, measured on the synthetic data with GPU drawing:
+
+| At the end of                                    | Page heap | Caches and workers, measured | Largest                         |
+| ------------------------------------------------ | --------- | ---------------------------- | ------------------------------- |
+| Xenium load, coloured by `M03a`                  | 684 MB    | 58 MB, 7 workers             | DuckDB 45 MB; 3 tiles, 13 MB    |
+| S4: outlines, five zoom steps and a pan          | 1.04 GB   | 191 MB, 9 workers            | 28 tiles, 117 MB; DuckDB 74 MB  |
+| Four image channels on, three zoom steps, a pan  | 960 MB    | 433 MB, 9 workers            | 76 tiles, 319 MB; DuckDB 114 MB |
+| 1M-cell H5AD, coloured                           | 597 MB    | 611 MB, 1 worker             | H5 file 611 MB                  |
+| Ten datasets with Visium HD, each coloured (O19) | 331 MB    | 67 MB, 10 workers            | 2 H5 files, 47 MB               |
+
+What the numbers show:
+
+- **Most memory is the datasets' own**, in the page heap: cells, outlines,
+  overviews and expression. No cache holds it, and only the dataset cache's
+  limit (the one shown and two others) bounds it.
+- **Image tiles are the cache that grows with use.** A 1024² tile is 4 MiB
+  decoded, and each channel's budget is a count of tiles set when it opens:
+  on the balanced profile 120 (480 MiB) for the first, then 60, 40 and 30.
+  Four channels turned on one by one reached 319 MB in three zoom steps, and
+  can hold 250 tiles, 1 GiB.
+- **DuckDB** held 45–114 MB, in two clients once outlines were read.
+- **An H5 file's worker** holds what the dataset needs: for the 1M-cell H5AD,
+  its matrix, kept there since O17. Since O19 these workers end with their
+  datasets.
+- **CDP's worker figures undercount WebAssembly memory**: 480 MB for that
+  H5AD worker, against 611 MB of linear memory and kept arrays, and 12 MB of
+  buffers for a Feature Slice worker whose h5wasm memory starts at 16 MiB.
+
+**Proposed ceiling:** one tile budget across channels in bytes, the balanced
+profile's 480 MiB shared by the channels shown, rather than a count of tiles
+set for each as it opens. DuckDB stayed under 120 MB, so a `memory_limit`
+would not bite. A cap on H5 workers would not either: since O19 they end
+with their datasets, and what they hold is what the dataset needs. To be
+decided before it is built.
+
+Tests:
+
+- `src/data/memoryTelemetry.test.ts`: reporters and totals; a busy worker's
+  bytes left out after the timeout, and a reporter that throws; a reporter
+  replaced by name; instances counted until deleted; worker tallies.
+- `src/components/AppStatusPanels.test.tsx`: Data access notes reads only
+  while open, and every 5 s, and shows rows only for what holds something.
+- `src/data/h5WorkerFile.test.ts`: an open file counts under H5 files with
+  its worker's memory, and not once closed.
+- `src/workers/h5FileCore.test.ts`: `stats` reports more than the blocks
+  read.
+
+## Panels Loaded On First Use (2026-11-27)
+
+Task O21. On the base of this task's PR (#488), the entry chunk was
+1,206 kB minified (363 kB gzip), and `index.html` preloaded it with 45
+other files. Cell Query, Plots, the Browse drawer (Browse Store and Browse
+File) and the Screenshot form were in it, although none shows until asked
+for.
+
+What changed:
+
+- **The four load the first time they are shown**: Cell Query and Plots
+  when their window first opens, the Browse drawer when it first opens, the
+  Screenshot form when the popover first opens. Each stays mounted after,
+  as before.
+- **`LazyPanel`** (`src/components/LazyPanel.tsx`) shows "Loading …" while
+  a panel's chunk loads. If the chunk is gone, as after a deploy, it says
+  the app was updated, with Reload, inside the panel rather than over the
+  whole app (`staleChunk.ts`); an error of the panel's own offers Retry.
+- **One `app` chunk** (`vite.config.ts`) for the app's own modules that the
+  entry imports statically. With the panels lazy, Rolldown put each module
+  they share with the entry in a chunk of its own, which `index.html`
+  preloads: 59 files, and a start screen 0.2 s slower at 150 ms a request
+  than the base. The group puts them, and the many small shared chunks the
+  base already had, in one.
+
+Measured S1 (the start screen at 10 Mbit/s and 150 ms a request, minified
+builds, three runs each, alternating):
+
+| Build                       | Time        | Requests | Busy (ms) | Longest (ms) | JavaScript preloaded  |
+| --------------------------- | ----------- | -------- | --------- | ------------ | --------------------- |
+| Base                        | 2.03–2.05 s | 48       | 127–141   | 94–97        | 46 files, 987 kB gzip |
+| Panels lazy, no `app` group | 2.21–2.27 s | 61       | 107–148   | 74–95        | 59 files, 976 kB gzip |
+| Panels lazy and `app` group | 1.25–1.27 s | 8        | 93–100    | 78–80        | 6 files, 953 kB gzip  |
+
+- **The panels' own chunks** are 67 kB minified, 21 kB gzip: Browse 36 kB,
+  Cell Query 17 kB, Plots 7.5 kB and Screenshot 5.6 kB. Most of their code,
+  the models App holds, stays at start.
+- **Most of the time saved is requests**: 40 fewer round trips of 150 ms on
+  6 connections.
+- **Loading and colouring a dataset** take as long: the synthetic Xenium
+  folder loaded with 838–879 ms of main-thread time against 842–937 ms, and
+  coloured in 0.66–0.73 s against 0.71–0.76 s.
+
+Tests:
+
+- `tests/config/lazyPanels.test.ts` walks the static imports from
+  `src/main.tsx`, leaving out type-only imports and `import()`. The windows
+  that load the panels are reached and the panels are not. The `app` group
+  takes `src` modules that the entry needs, and no package.
+- `src/components/LazyPanel.test.tsx` covers the loading line, the
+  app-updated message with Reload when the import fails as after a deploy,
+  Retry after an error of the panel's own, and `useOpenedOnce`.
+- Checked in the built app: each panel's chunk is fetched only when it
+  opens; with the Plots chunk deleted, the Plots window says the app was
+  updated, with Reload, and the rest of the app works.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1793,6 +2331,15 @@ Found by the 2026-11-16 review:
 
 Closed by the pass's tasks:
 
+- [x] Every expression batch recoloured every cell: `packCellPointColors`
+      ran over all cells (`ViewerCore.tsx`), twice per read, and above
+      500,000 cells expression is read by viewport, so on large Xenium
+      datasets it ran on pan and zoom (O3 and O4). Outlines are coloured
+      without being rebuilt since O4 (2026-11-25), and a batch after the
+      first writes only its cells since O3 (2026-11-27): 0–28 ms rather
+      than 55–96 ms a zoomed-in view on 1.4 million cells
+      ([#478](https://github.com/cellgeni/explorer/pull/478))
+      ([Expression Colours Written Per Batch](#expression-colours-written-per-batch-2026-11-27)).
 - [x] The Xenium demo blocked the main thread for up to 4 s at a time in the
       first 30 s after load (O5, 2026-11-26). CPU profiles on 2026-11-12 put
       it on the load: hyparquet decoding `cells.parquet` (in a worker since
@@ -1841,3 +2388,11 @@ Closed by the pass's tasks:
       test image makes no requests rather than 114
       ([#460](https://github.com/cellgeni/explorer/pull/460))
       ([OME-Zarr Shard Ranges Kept Across Loads](#ome-zarr-shard-ranges-kept-across-loads-2026-11-26)).
+- [x] Per-URL caches that were never released (found 2026-11-16): one
+      h5wasm worker per matrix file (`gex.ts`) and per Feature Slice file
+      (`visiumFeatureSlice.ts`), transcript Zarr metadata and the TIFF
+      loader's open files (O19, 2026-11-27). They now go with the datasets
+      that read them, once no viewer, preview or dataset cache holds those:
+      after ten datasets, each coloured, 2 Feature Slice workers stay rather
+      than 4 ([#487](https://github.com/cellgeni/explorer/pull/487))
+      ([Dataset Resources Released With Them](#dataset-resources-released-with-them-2026-11-27)).

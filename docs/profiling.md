@@ -40,12 +40,14 @@ Other options:
 | Option                   | Effect                                                                                                   |
 | ------------------------ | -------------------------------------------------------------------------------------------------------- |
 | `--runs <n>`             | Repeat each app URL n times                                                                              |
-| `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, with one profile per key              |
+| `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, or click a button, one profile each   |
 | `--step-settle <s>`      | Profile each step this many seconds (default 2)                                                          |
 | `--then <urls>`          | Then open each of these datasets (comma-separated) in turn from the dataset field, with one profile each |
+| `--then-gene <symbol>`   | Also colour each of the `--then` datasets by this gene, with a profile of its own                        |
 | `--hash <params>`        | Add these parameters to the link's hash, for example `cellBounds=0` to start with cell outlines off      |
 | `--requests <text>`      | Count each phase's requests whose URL contains `<text>`, their megabytes, and the slowest five           |
 | `--memory`               | After each phase, report the JavaScript heap and ArrayBuffer memory of the page and of each live worker  |
+| `--caches`               | At the end, open Data access notes and print its memory table: what each cache and worker pool holds     |
 | `--gpu`                  | Draw with the Mac's GPU (Metal through ANGLE) instead of SwiftShader                                     |
 | `--throttle <mbit>,<ms>` | Limit the bandwidth to `<mbit>` megabits per second and add `<ms>` of latency to every request           |
 | `--raw <prefix>`         | Save each profile as `.cpuprofile`, which Chrome DevTools' Performance panel can open                    |
@@ -62,11 +64,26 @@ example, `--gene SNAP25 --steps "=,=,=,=,=,ArrowRight"` colours the cells by
 SNAP25, zooms in five times and pans once, with a profile for each step and
 the expression status line after it.
 
+A step `click:<name>` clicks the button with exactly that name instead, then
+puts the focus back on the spatial view, so keys after it still zoom. For a
+Visium HD folder, `--steps "click:2 µm,=,=,=,=,=,=,="` picks the 2 µm bins and
+zooms in until they are drawn; `--steps Enter` opens the card of the bin at
+the centre of the view, which reads its rows of `barcode_mappings.parquet`.
+
 `--memory` reads CDP's `Runtime.getHeapUsage` from the page and from every
 worker alive at the end of the phase. For each it prints the JavaScript heap
 and the memory behind its ArrayBuffers, which includes WebAssembly memory.
 GPU memory is not counted. A worker that ends before it is read is counted
-as ended.
+as ended. CDP's worker figures leave out part of a worker's WebAssembly
+memory: an H5 file worker, whose h5wasm memory starts at 16 MiB, can show
+12 MB of buffers.
+
+`--caches` reads the app's own count instead, after the last phase, since the
+Dataset info drawer it opens narrows the view. Each cache and worker pool
+reports its items, workers and bytes (`src/data/memoryTelemetry.ts`); an H5
+file's worker reports h5wasm's whole WebAssembly memory, DuckDB its buffer
+manager's memory, and decoded image tiles 4 bytes a pixel, which neither
+CDP figure counts.
 
 ## Compare Builds
 
@@ -204,8 +221,27 @@ Then open `http://127.0.0.1:4199/xenium/` or
   - With more cells or genes per cell, `X` passes 300 MiB and is read gene by
     gene instead.
 
-Both are drawn from one seeded model of a tissue: cells on a jittered 10 µm
-grid, in 20 clusters that are patches of the slide.
+With `--what visium-hd` (or `--what xenium,h5ad,visium-hd`), the script also
+writes **`visium-hd/`**, a Space Ranger 4 Visium HD folder at the size of the
+reference run, about 260 MB:
+
+- A grid of 3,350 × 3,350 bins of 2 µm (`--visium-hd-side`), with a disc of
+  tissue a third of its area: 3,740,816 bins under tissue at 2 µm, 233,814
+  at 8 µm and 58,453 at 16 µm.
+- For each bin size, `tissue_positions.parquet` with every bin of the grid,
+  as Space Ranger writes it, the scalefactors, grey tissue images, and the
+  filtered matrix as H5 and `features.tsv.gz`; at 2 µm, `barcodes.tsv.gz`,
+  from which the viewer reads that tier.
+- `barcode_mappings.parquet`, sorted by 2 µm barcode in row groups of about
+  a million rows, with square cells of 5 × 5 bins.
+- `feature_slice.h5`, 20 MB: the 2 µm counts of each gene, from which the
+  viewer colours bins of every size by a gene.
+
+Open it as `http://127.0.0.1:4199/visium-hd/`.
+
+The Xenium folder and the H5AD file are drawn from one seeded model of a
+tissue: cells on a jittered 10 µm grid, in 20 clusters that are patches of
+the slide.
 
 - **Marker genes:** each cluster has five, `M01a` to `M20e`, expressed by
   most of its cells, so each is in a few percent of all cells.
