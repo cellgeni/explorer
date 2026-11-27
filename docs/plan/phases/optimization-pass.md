@@ -403,12 +403,16 @@ M4, memory:
   - Measure S8.
   - Built in [#487](https://github.com/cellgeni/explorer/pull/487):
     [Dataset Resources Released With Them](#dataset-resources-released-with-them-2026-11-27).
-- [ ] **O20. Memory telemetry.** (M) Each cache reports its bytes, entries
+- [x] **O20. Memory telemetry.** (M) Each cache reports its bytes, entries
       and workers, and Data access notes shows the total. A ceiling is
       decided from these numbers
       ([Answered Questions](#answered-questions)). Candidates: one tile
       budget across channels, a DuckDB `memory_limit`, and a cap on H5
       workers.
+  - Built in [#488](https://github.com/cellgeni/explorer/pull/488):
+    [Memory Held, Counted](#memory-held-counted-2026-11-27). The ceiling
+    proposed there, one tile budget in bytes across channels, waits for a
+    decision.
 
 M5, start-up:
 
@@ -2037,6 +2041,87 @@ worker ends when the last of two holders releases its dataset and opens
 again on the next read, that a file stays while a cached dataset or a
 parent folder's dataset can read it, and that a manifest's root and files
 count as the dataset's.
+
+## Memory Held, Counted (2026-11-27)
+
+Task O20. Before it, the only counts were the tile cache's evictions and
+Chrome's main-thread heap; workers, WebAssembly memory and decoded tiles
+were not counted anywhere.
+
+What changed:
+
+- **A registry** (`src/data/memoryTelemetry.ts`): each cache and worker pool
+  registers a reporter that gives its items, workers and bytes.
+  - Image tiles count 4 bytes a pixel of their decoded bitmaps.
+  - Zarr chunk caches and inflated zip entries count their bytes.
+  - An H5 file's worker answers for itself (`stats` now carries
+    `memoryBytes`): h5wasm's WebAssembly memory, and the range blocks and
+    CSR arrays it keeps.
+  - A DuckDB client answers on a connection of its own with its buffer
+    manager's memory (`duckdb_memory()`).
+  - The decode pools, Cell Query, Plots, short-lived workers and the
+    dataset instances give counts only.
+  - Instances are held weakly, so one dropped without a close step leaves
+    the count once collected. A worker busy with a long read is left out
+    after 2 s.
+- **Data access notes** always shows, and while it is open reads the
+  reporters every 5 s into a table, with the page's JavaScript heap. Nothing
+  is read while it is closed.
+- `profile-load.mjs --caches` prints the table after the last phase.
+
+**Cost.** On the four-channel case below, reading takes 3.4–4.9 ms of
+main-thread time over 20 s with the notes open, and none with them closed.
+Loading and colouring the synthetic Xenium folder were unchanged: six runs
+each, alternating, in both orders. Busy time while colouring was 399–518 ms
+on the base (#487) and 449–541 ms on the branch, with the same app code
+(202–228 ms).
+
+What the caches hold, measured on the synthetic data with GPU drawing:
+
+| At the end of                                    | Page heap | Caches and workers, measured | Largest                         |
+| ------------------------------------------------ | --------- | ---------------------------- | ------------------------------- |
+| Xenium load, coloured by `M03a`                  | 684 MB    | 58 MB, 7 workers             | DuckDB 45 MB; 3 tiles, 13 MB    |
+| S4: outlines, five zoom steps and a pan          | 1.04 GB   | 191 MB, 9 workers            | 28 tiles, 117 MB; DuckDB 74 MB  |
+| Four image channels on, three zoom steps, a pan  | 960 MB    | 433 MB, 9 workers            | 76 tiles, 319 MB; DuckDB 114 MB |
+| 1M-cell H5AD, coloured                           | 597 MB    | 611 MB, 1 worker             | H5 file 611 MB                  |
+| Ten datasets with Visium HD, each coloured (O19) | 331 MB    | 67 MB, 10 workers            | 2 H5 files, 47 MB               |
+
+What the numbers show:
+
+- **Most memory is the datasets' own**, in the page heap: cells, outlines,
+  overviews and expression. No cache holds it, and only the dataset cache's
+  limit (the one shown and two others) bounds it.
+- **Image tiles are the cache that grows with use.** A 1024² tile is 4 MiB
+  decoded, and each channel's budget is a count of tiles set when it opens:
+  on the balanced profile 120 (480 MiB) for the first, then 60, 40 and 30.
+  Four channels turned on one by one reached 319 MB in three zoom steps, and
+  can hold 250 tiles, 1 GiB.
+- **DuckDB** held 45–114 MB, in two clients once outlines were read.
+- **An H5 file's worker** holds what the dataset needs: for the 1M-cell H5AD,
+  its matrix, kept there since O17. Since O19 these workers end with their
+  datasets.
+- **CDP's worker figures undercount WebAssembly memory**: 480 MB for that
+  H5AD worker, against 611 MB of linear memory and kept arrays, and 12 MB of
+  buffers for a Feature Slice worker whose h5wasm memory starts at 16 MiB.
+
+**Proposed ceiling:** one tile budget across channels in bytes, the balanced
+profile's 480 MiB shared by the channels shown, rather than a count of tiles
+set for each as it opens. DuckDB stayed under 120 MB, so a `memory_limit`
+would not bite. A cap on H5 workers would not either: since O19 they end
+with their datasets, and what they hold is what the dataset needs. To be
+decided before it is built.
+
+Tests:
+
+- `src/data/memoryTelemetry.test.ts`: reporters and totals; a busy worker's
+  bytes left out after the timeout, and a reporter that throws; a reporter
+  replaced by name; instances counted until deleted; worker tallies.
+- `src/components/AppStatusPanels.test.tsx`: Data access notes reads only
+  while open, and every 5 s, and shows rows only for what holds something.
+- `src/data/h5WorkerFile.test.ts`: an open file counts under H5 files with
+  its worker's memory, and not once closed.
+- `src/workers/h5FileCore.test.ts`: `stats` reports more than the blocks
+  read.
 
 ## Closed Open Items
 

@@ -286,8 +286,22 @@ export function createH5FileHandler(
           return
         }
         case 'stats': {
+          const current = expectOpen()
+          let keptBytes = 0
+
+          for (const array of keptArrays.values()) keptBytes += array.byteLength
+
           respond(
-            { id: request.id, ok: true, op: 'stats', range: rangeStats(expectOpen()) },
+            {
+              id: request.id,
+              ok: true,
+              op: 'stats',
+              range: rangeStats(current),
+              memoryBytes:
+                (await current.h5wasm.ready).HEAPU8.buffer.byteLength +
+                (current.range?.cache.heldBytes ?? 0) +
+                keptBytes,
+            },
             [],
           )
           return

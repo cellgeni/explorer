@@ -47,6 +47,7 @@ Other options:
 | `--hash <params>`        | Add these parameters to the link's hash, for example `cellBounds=0` to start with cell outlines off      |
 | `--requests <text>`      | Count each phase's requests whose URL contains `<text>`, their megabytes, and the slowest five           |
 | `--memory`               | After each phase, report the JavaScript heap and ArrayBuffer memory of the page and of each live worker  |
+| `--caches`               | At the end, open Data access notes and print its memory table: what each cache and worker pool holds     |
 | `--gpu`                  | Draw with the Mac's GPU (Metal through ANGLE) instead of SwiftShader                                     |
 | `--throttle <mbit>,<ms>` | Limit the bandwidth to `<mbit>` megabits per second and add `<ms>` of latency to every request           |
 | `--raw <prefix>`         | Save each profile as `.cpuprofile`, which Chrome DevTools' Performance panel can open                    |
@@ -73,7 +74,16 @@ the centre of the view, which reads its rows of `barcode_mappings.parquet`.
 worker alive at the end of the phase. For each it prints the JavaScript heap
 and the memory behind its ArrayBuffers, which includes WebAssembly memory.
 GPU memory is not counted. A worker that ends before it is read is counted
-as ended.
+as ended. CDP's worker figures leave out part of a worker's WebAssembly
+memory: an H5 file worker, whose h5wasm memory starts at 16 MiB, can show
+12 MB of buffers.
+
+`--caches` reads the app's own count instead, after the last phase, since the
+Dataset info drawer it opens narrows the view. Each cache and worker pool
+reports its items, workers and bytes (`src/data/memoryTelemetry.ts`); an H5
+file's worker reports h5wasm's whole WebAssembly memory, DuckDB its buffer
+manager's memory, and decoded image tiles 4 bytes a pixel, which neither
+CDP figure counts.
 
 ## Compare Builds
 

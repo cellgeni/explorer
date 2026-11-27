@@ -18,6 +18,11 @@ import type {
 } from '../workers/h5FileMessages'
 import type { H5FileHandler, H5FileHandlerOptions } from '../workers/h5FileCore'
 import { abortError } from '../utils/abort'
+import {
+  LiveInstances,
+  registerMemoryReporter,
+  sumReportedBytes,
+} from './memoryTelemetry'
 
 // An HDF5 file opened with h5wasm in its own worker, so copying it into
 // h5wasm's file system and decoding its datasets stay off the main thread.
@@ -400,6 +405,22 @@ function createH5WorkerFile(
   return file
 }
 
+// Every open file's worker, for the memory table (O20). A worker asked while
+// it reads answers after the read.
+const liveConnections = new LiveInstances<H5WorkerConnection>()
+registerMemoryReporter('H5 files', () => {
+  const connections = [...liveConnections]
+
+  return {
+    entries: connections.length,
+    workers: connections.length,
+    bytes:
+      connections.length === 0
+        ? 0
+        : sumReportedBytes(connections.map((connection) => connection.memoryBytes())),
+  }
+})
+
 interface QueuedRequest {
   readonly message: (id: number) => H5FileWorkerRequest
   readonly transfer: Transferable[]
@@ -419,9 +440,12 @@ class H5WorkerConnection {
   private sent: { readonly id: number; request: QueuedRequest | null } | null = null
   private nextRequestId = 1
   private failure: Error | null = null
+  // One memory question at a time, however often the table asks.
+  private memoryRequest: Promise<number | null> | null = null
 
   constructor(worker: H5WorkerLike) {
     this.worker = worker
+    liveConnections.add(this)
     worker.onmessage = (event) => {
       const response = event.data
       const sent = this.sent
@@ -509,6 +533,21 @@ class H5WorkerConnection {
     this.worker.terminate()
   }
 
+  // What the worker holds for its file (`H5FileStatsResponse`), or null if
+  // it has failed.
+  memoryBytes(): Promise<number | null> {
+    this.memoryRequest ??= this.request((id) => ({ id, op: 'stats' }), [])
+      .then(
+        (response) => (response.op === 'stats' ? response.memoryBytes : null),
+        () => null,
+      )
+      .finally(() => {
+        this.memoryRequest = null
+      })
+
+    return this.memoryRequest
+  }
+
   private sendNext(): void {
     if (this.sent !== null || this.failure !== null) {
       return
@@ -535,6 +574,7 @@ class H5WorkerConnection {
 
   private fail(error: Error): void {
     this.failure ??= error
+    liveConnections.delete(this)
     const sent = this.sent?.request ?? null
     this.sent = null
     sent?.reject(error)

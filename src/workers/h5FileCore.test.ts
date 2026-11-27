@@ -596,16 +596,18 @@ describe('createH5FileHandler', () => {
       const stats = await harness.send({ op: 'stats' })
 
       expect(reads.length).toBeGreaterThan(readsAtOpen)
+      const fetchedBytes = reads.reduce((sum, [start, end]) => sum + end - start, 0)
       expect(stats.response).toEqual({
         id: 3,
         ok: true,
         op: 'stats',
-        range: {
-          size: bytes.byteLength,
-          requests: reads.length,
-          fetchedBytes: reads.reduce((sum, [start, end]) => sum + end - start, 0),
-        },
+        range: { size: bytes.byteLength, requests: reads.length, fetchedBytes },
+        memoryBytes: expect.any(Number),
       })
+      // h5wasm's memory and the blocks it read, which it keeps (O20).
+      expect((stats.response as { memoryBytes: number }).memoryBytes).toBeGreaterThan(
+        fetchedBytes,
+      )
     } finally {
       vi.unstubAllGlobals()
     }

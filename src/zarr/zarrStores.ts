@@ -1,5 +1,6 @@
 import * as zarr from 'zarrita'
 import { fetchWithRetry } from '../data/fetchRetry'
+import { LiveInstances, registerMemoryReporter } from '../data/memoryTelemetry'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import { ZarrRangeCache } from './zarrRangeCache'
 
@@ -357,6 +358,20 @@ export function isZarrMetadataKey(key: string): boolean {
   )
 }
 
+// Every store's chunk cache, for the memory table (O20).
+const liveChunkCaches = new LiveInstances<ByteLimitedCache>()
+registerMemoryReporter('Zarr chunks', () => {
+  let entries = 0
+  let bytes = 0
+
+  for (const cache of liveChunkCaches) {
+    entries += cache.size
+    bytes += cache.heldBytes
+  }
+
+  return { entries, workers: 0, bytes }
+})
+
 class ByteLimitedCache {
   private readonly entries = new Map<string, Uint8Array>()
   private readonly maxBytes: number
@@ -364,6 +379,15 @@ class ByteLimitedCache {
 
   constructor(maxBytes: number) {
     this.maxBytes = maxBytes
+    liveChunkCaches.add(this)
+  }
+
+  get size(): number {
+    return this.entries.size
+  }
+
+  get heldBytes(): number {
+    return this.byteLength
   }
 
   get(key: string): Uint8Array | undefined {

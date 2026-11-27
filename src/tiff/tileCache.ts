@@ -9,6 +9,7 @@ import type {
 } from '../data/imagePyramid'
 import type { TileBitmapDecoder } from '../workers/tileDecodePool'
 import { abortError, isAbortError, throwIfAborted } from '../utils/abort'
+import { LiveInstances, registerMemoryReporter } from '../data/memoryTelemetry'
 
 export interface TileSource {
   tileBounds(level: number, col: number, row: number): BBox
@@ -96,6 +97,22 @@ interface CachedTileKey {
   readonly key: string
 }
 
+// Every tile cache, for the memory table (O20): a decoded tile is an RGBA
+// bitmap, 4 bytes a pixel.
+const liveTileCaches = new LiveInstances<TileCache>()
+registerMemoryReporter('Image tiles', () => {
+  let entries = 0
+  let pixels = 0
+
+  for (const cache of liveTileCaches) {
+    const held = cache.heldTiles()
+    entries += held.tiles
+    pixels += held.pixels
+  }
+
+  return { entries, workers: 0, bytes: pixels * 4 }
+})
+
 export class TileCache {
   private readonly cache = new Map<string, TileCacheEntry>()
   private readonly order: string[] = []
@@ -119,6 +136,7 @@ export class TileCache {
     this.displayWindow = options.displayWindow
     this.color = options.color
     this.alphaFromIntensity = options.alphaFromIntensity
+    liveTileCaches.add(this)
   }
 
   key(level: number, col: number, row: number): string {
@@ -225,6 +243,21 @@ export class TileCache {
     }
 
     return pixels
+  }
+
+  // The decoded tiles held, and their bitmaps' pixels.
+  heldTiles(): { readonly tiles: number; readonly pixels: number } {
+    let tiles = 0
+    let pixels = 0
+
+    for (const entry of this.cache.values()) {
+      if (entry.state === 'ready') {
+        tiles += 1
+        pixels += entry.bitmap.width * entry.bitmap.height
+      }
+    }
+
+    return { tiles, pixels }
   }
 
   clear(): void {
