@@ -367,7 +367,7 @@ M3, main thread:
       their callers allow; distinct values are counted when the annotation
       list asks for them.
   - Measure S6, and the 460-plex zip through the mirror (S9).
-  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+  - Built in [#480](https://github.com/cellgeni/explorer/pull/480):
     [AnnData Tables Read In Place](#anndata-tables-read-in-place-2026-11-27).
 - [ ] **O16. Visium HD positions and barcode mappings in a worker.** (M) As
       for the Xenium overview: columns from a worker, not one object per
