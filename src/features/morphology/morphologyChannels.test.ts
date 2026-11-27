@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import {
   type MorphologyChannelSetting,
+  changedMorphologyChannelColors,
   channelsToAutoContrastOnLoad,
   createMorphologyChannelSettings,
   defaultEnabledChannelIds,
@@ -103,6 +104,7 @@ describe('morphologyChannels', () => {
         id: 'c0',
         enabled: true,
         color: [88, 144, 255],
+        defaultColor: [88, 144, 255],
         contrastMin: 0,
         contrastMax: 828,
         contrastSet: true,
@@ -111,6 +113,7 @@ describe('morphologyChannels', () => {
         id: 'c1',
         enabled: false,
         color: [32, 166, 122],
+        defaultColor: [32, 166, 122],
         contrastMin: 0,
         contrastMax: 65_535,
       },
@@ -141,6 +144,35 @@ describe('morphologyChannels', () => {
         missing: {},
       }),
     ).toEqual(['missing'])
+  })
+
+  it("opens with a link's colours and gives the link the colours changed since", () => {
+    const channels = testChannels(3)
+    const image = { channelLoaders: channels } as unknown as MorphologyImage
+    const settings = createMorphologyChannelSettings(image, {
+      channelDefaults: { c0: { color: [88, 144, 255] }, c1: { color: [32, 166, 122] } },
+      channelColors: { c1: [255, 0, 255], c2: [0, 255, 255] },
+    })
+
+    expect(settings.map((setting) => setting.color)).toEqual([
+      [88, 144, 255],
+      [255, 0, 255],
+      [0, 255, 255],
+    ])
+    // Changed from the manifest's colour, or the image's own without one.
+    expect(changedMorphologyChannelColors(channels, settings)).toEqual({
+      c1: [255, 0, 255],
+      c2: [0, 255, 255],
+    })
+    // Set back to the colour the channel opens with, it is left out.
+    expect(
+      changedMorphologyChannelColors(
+        channels,
+        settings.map((setting) =>
+          setting.id === 'c1' ? { ...setting, color: [32, 166, 122] as const } : setting,
+        ),
+      ),
+    ).toEqual({ c2: [0, 255, 255] })
   })
 
   it("puts a collection's channel settings over the dataset manifest's", () => {

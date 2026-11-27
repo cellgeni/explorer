@@ -12,6 +12,10 @@ export interface MorphologyChannelSetting {
   // The dataset manifest or collection set the window, so it is not
   // auto-contrasted when the image loads or the channel is turned on.
   readonly contrastSet?: true
+  // The colour the dataset manifest or collection sets, which the channel
+  // opens with in place of the image's own. A link writes the colours that
+  // differ from it, or from the image's own without it.
+  readonly defaultColor?: readonly [number, number, number]
 }
 
 // Channel colours and windows a dataset manifest or collection sets, by
@@ -41,7 +45,13 @@ export function morphologyPatchLabel(
 interface CreateMorphologyChannelSettingsOptions {
   readonly enabledChannelIds?: readonly string[]
   readonly channelDefaults?: MorphologyChannelDefaults
+  // A link's colours, by channel ID, over the defaults.
+  readonly channelColors?: MorphologyChannelColors
 }
+
+export type MorphologyChannelColors = Readonly<
+  Record<string, readonly [number, number, number]>
+>
 
 export function createMorphologyChannelSettings(
   image: MorphologyImage,
@@ -59,12 +69,15 @@ export function createMorphologyChannelSettingsFromChannels(
 
   return channels.map((channel, index) => {
     const defaults = channelDefaultsFor(channel, options.channelDefaults)
+    const defaultColor = defaults?.color
 
     return {
       id: channel.info.id,
       enabled:
         enabledChannelIds === null ? index === 0 : enabledChannelIds.has(channel.info.id),
-      color: defaults?.color ?? channel.info.color,
+      color:
+        options.channelColors?.[channel.info.id] ?? defaultColor ?? channel.info.color,
+      ...(defaultColor === undefined ? {} : { defaultColor }),
       ...(defaults?.contrast === undefined
         ? {
             contrastMin: channel.info.contrast.min,
@@ -94,6 +107,29 @@ function channelDefaultsFor(
     defaults[channel.info.id] ??
     Object.entries(defaults).find(([key]) => key.toLowerCase() === name)?.[1]
   )
+}
+
+// The colours a link carries: those of the channels whose colour is not the
+// one they open with.
+export function changedMorphologyChannelColors(
+  channels: readonly MorphologyImageChannel[],
+  settings: readonly MorphologyChannelSetting[],
+): MorphologyChannelColors {
+  const changed: Record<string, readonly [number, number, number]> = {}
+
+  for (const channel of channels) {
+    const setting = settings.find((candidate) => candidate.id === channel.info.id)
+    const defaultColor = setting?.defaultColor ?? channel.info.color
+
+    if (
+      setting !== undefined &&
+      setting.color.some((component, index) => component !== defaultColor[index])
+    ) {
+      changed[channel.info.id] = setting.color
+    }
+  }
+
+  return changed
 }
 
 // The names and IDs of the settings that match no channel.

@@ -350,8 +350,8 @@ manifest.
   that dataset's own manifest defaults.
 - `channelSettings` applies to every dataset opened from the collection, and
   to the panels beside it, so sections stained alike show their channels in
-  the same colours and compare on one window. A link carries no channel
-  colours or windows, so it keeps them too. For a channel both name, the
+  the same colours and compare on one window. A link keeps them too, as it
+  carries only the colours changed from them. For a channel both name, the
   collection's setting replaces the dataset manifest's.
 - A link that names a dataset as well as the collection is a shared view, so
   the link's settings apply instead.

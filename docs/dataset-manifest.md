@@ -454,8 +454,8 @@ How defaults combine with other settings:
   setting is optional. A channel with a window is not auto-contrasted when
   the image loads or when it is turned on; its `Auto` button still is. The
   settings apply every time the image loads, from a link too: a link records
-  which channels are on, not their colours or windows. Names that match no
-  channel are listed in the log.
+  only the colours changed from them (`channelColors`), and no windows. Names
+  that match no channel are listed in the log.
 - Opacities, `transcripts` and `geneRange` are app-wide controls: they keep
   their value when another dataset without these defaults is loaded next, so
   sections compare on one scale. A link for a dataset whose manifest sets a

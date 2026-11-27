@@ -164,6 +164,31 @@ describe('shareableState', () => {
     expect(parseShareableState(hash).morphologyEnabledChannelIds).toEqual([])
   })
 
+  it('round-trips changed channel colours by channel ID', () => {
+    const hash = formatShareableState({
+      morphologyChannelColors: { 'Channel:0': [255, 0, 255], 'a,b': [32, 166, 122] },
+    })
+
+    expect(new URLSearchParams(hash.slice(1)).get('channelColors')).toBe(
+      'Channel:0:ff00ff,a%2Cb:20a67a',
+    )
+    expect(parseShareableState(hash).morphologyChannelColors).toEqual({
+      'Channel:0': [255, 0, 255],
+      'a,b': [32, 166, 122],
+    })
+    expect(formatShareableState({ morphologyChannelColors: {} })).not.toContain(
+      'channelColors',
+    )
+    // Malformed entries are skipped.
+    expect(
+      parseShareableState('#channelColors=Channel:1:00FF00,ff0000,Channel:2:red,:abcdef')
+        .morphologyChannelColors,
+    ).toEqual({ 'Channel:1': [0, 255, 0] })
+    expect(parseShareableState('#channelColors=red')).not.toHaveProperty(
+      'morphologyChannelColors',
+    )
+  })
+
   it('round-trips no custom image layers, in place of a manifest’s', () => {
     const hash = formatShareableState({
       datasetUrl: 'https://example.test/output',

@@ -200,6 +200,7 @@ import {
   viewerLegendSections,
 } from './features/app-shell/viewerLegendModel'
 import { viewerSelectionHighlight } from './features/app-shell/viewerSelectionHighlight'
+import { changedMorphologyChannelColors } from './features/morphology/morphologyChannels'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import {
@@ -2178,6 +2179,25 @@ export function App({ dependencies }: AppProps = {}) {
     baseMorphologyChannelIds,
     linkImageOpening,
     morphologyChannelSettings,
+  ])
+  // The channel colours changed from those the image opened with; the link's
+  // own while its image opens.
+  const shareableMorphologyChannelColors = useMemo(() => {
+    if (morphologyImage !== null && morphologyChannelSettings.length > 0) {
+      const changed = changedMorphologyChannelColors(
+        morphologyImage.channelLoaders,
+        morphologyChannelSettings,
+      )
+
+      return Object.keys(changed).length === 0 ? undefined : changed
+    }
+
+    return linkImageOpening ? initialShareableState.morphologyChannelColors : undefined
+  }, [
+    initialShareableState.morphologyChannelColors,
+    linkImageOpening,
+    morphologyChannelSettings,
+    morphologyImage,
   ])
   const shareableMorphologyZPlane =
     morphologyImage?.zStack?.zPlane ??
@@ -4658,6 +4678,7 @@ export function App({ dependencies }: AppProps = {}) {
       imageOpacity: imageLayerOpacity,
       measurementUnit,
       morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
+      morphologyChannelColors: shareableMorphologyChannelColors,
       morphologyZPlane: shareableMorphologyZPlane,
       morphologyTimePoint: shareableMorphologyTimePoint,
       imageView: shareableImageView,

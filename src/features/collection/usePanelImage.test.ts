@@ -110,6 +110,7 @@ describe('startingSettings', () => {
         id: 'Channel:1',
         enabled: false,
         color: [32, 166, 122],
+        defaultColor: [32, 166, 122],
         contrastMin: 0,
         contrastMax: 1_440,
         contrastSet: true,
