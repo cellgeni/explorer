@@ -381,7 +381,7 @@ M3, main thread:
       (`h5FileMessages.ts:110`) rather than reading the matrix into the
       page (`h5adDataset.ts:4097`, `:4205`). For AnnData Zarr, decide after
       O15's numbers.
-  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+  - Built in [#485](https://github.com/cellgeni/explorer/pull/485):
     [A CSR Matrix Kept In The H5 Worker](#a-csr-matrix-kept-in-the-h5-worker-2026-11-27).
 - [ ] **O18. Large CSV files in a worker.** (S) Time both parses at a
       million rows, and move them to a worker if either blocks for more
