@@ -197,15 +197,24 @@ another dataset opens, unless the collection keeps it as a section (D3).
   in the link, and a link's panel image. The e2e on a local OME-Zarr
   fixture is still to write.
 
-### M3. The Same Image Beside (S–M)
+### M3. The Same Image Beside (S–M) — built 2026-11-27
 
 - C1. Panels of the open dataset: `shownPanels` keeps a panel whose URL is
-  the open dataset, with or without a collection; no `Open` on it.
-- C2. `Show beside` in the Image section; the panel takes the main view's
-  `MorphologyImage` and its channel settings.
+  the open dataset, with or without a collection (named by `openFallback`
+  without one), as many times as asked, linked by default; no `Open` on it.
+  Its regions are named "{label}, beside", "{label}, beside 2". Panels are
+  now told apart by object, not URL (`withPanel`, `withoutPanel`), and an
+  unlinked panel's reported view is keyed by its link object.
+- C2. `Show beside` (`Show beside again`) in the Image section, 2D only;
+  the panel takes the main view's `MorphologyImage` or flat image (through
+  a ref, so a new plane does not reload it) and starts from its channel
+  settings.
 - C3. Cells from the open dataset's preview store when there is no
   collection.
-- C4. Tests and docs.
+- C4. The link writes `compare=` and the rest with or without a collection;
+  the open dataset's own panels go when another dataset opens outside the
+  collection flow. Tests: model, App (image without a collection, channels
+  apart, a numbered second panel); docs.
 
 ### Docs
 

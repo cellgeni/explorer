@@ -323,6 +323,11 @@ export function collectionEntryFor(
   return collection.datasets.find((entry) => entryUrlKey(entry.url) === key)
 }
 
+// Whether two addresses name one dataset, as the browser reads them.
+export function sameDatasetUrl(a: string, b: string): boolean {
+  return entryUrlKey(a) === entryUrlKey(b)
+}
+
 // An address as the browser reads it, so spellings of one address (a space
 // or `%20`, a host in capitals) find one entry.
 function entryUrlKey(url: string): string {

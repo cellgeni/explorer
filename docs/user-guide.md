@@ -747,6 +747,13 @@ For an SVS slide, the info drawer's Slide images section shows the slide's
 label, its macro (a photograph of the whole glass slide), and its thumbnail;
 `Open` beside each opens it on its own in a new tab.
 
+To compare channels of one image side by side, choose `Show beside` in the
+Image section: the image opens again in a panel beside the main view, linked
+to it, and its channels button chooses that panel's channels, colours and
+windows, while the main view keeps its own. Up to three panels can show at
+once, and `Share` keeps them. This works for any dataset with an image, with
+or without a collection.
+
 For image-only sources, use the Image section for image channels and custom
 image layers, the Box and Lasso selection tools (with the New shape card) for
 box or lasso shapes, and the Annotations section for GeoJSON shape

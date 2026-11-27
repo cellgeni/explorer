@@ -211,7 +211,9 @@ With sections shown beside the open dataset, `.viewer-tiles` splits the canvas
 into one tile per viewer: two in a row, three in a row, or 2 by 2, stacked
 under 860 px. The main view keeps its overlays (legend, minimap, zoom
 buttons, scale bar) in its own tile, with its dataset's name in a pill at the
-top centre. Each panel (`LinkedSections`, a `region` named after the section)
+top centre. Each panel (`LinkedSections`, a `region` named after the section; a panel of
+the open dataset itself, from the Image section's `Show beside`, is named
+"{label}, beside", then "{label}, beside 2", and has no `Open`)
 has a pill at its top centre with the name, its top or highest score,
 `Show the image of {label}` (picture, `aria-pressed`; not on a section
 without cells, which shows its image at once), `Channels of {label}` (three
@@ -425,21 +427,22 @@ Enter on the checkbox, the keyboard's route.
 
 ### Image
 
-| Control                           | Type                                                                       | Range / default                                          | Notes                                                                                  |
-| --------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `Dataset image opacity`           | Slider 0–100%, step 5                                                      | 100%                                                     | With channel controls present, opacity is applied per channel                          |
-| `Z plane`                         | Slider over the planes; shows "plane / count · depth"                      | Middle plane or `defaultZ`                               | When the dataset image is an OME-TIFF or OME-Zarr z-stack                              |
-| `Time point`                      | Slider over the time points; shows "point / count · time"                  | `defaultT`, else the first                               | When the dataset image is an OME-Zarr with a `t` axis; the time when `t` has a unit    |
-| `Play time points`                | Icon button left of `Time point`; `Pause time points` while playing        | Paused                                                   | 2D only. Each time point shows once whole; stops on a slider move, 3D or a screenshot  |
-| `Speed`                           | Select: 1, 2, 5, 10 or 20 per second                                       | 5 per second                                             | Under `Time point` in 2D; a slow time point waits, and none is skipped                 |
-| `Loop`                            | Checkbox                                                                   | On                                                       | Under `Time point` in 2D; off stops at the last time point                             |
-| `View`                            | Segmented: 2D, 3D                                                          | 2D                                                       | OME-Zarr z-stacks. 3D shows the [3D view](#3d-view) over the canvas; `imageView`       |
-| `Tissue image`                    | Select: High-res, Low-res, None                                            | High-res if present, else Low-res                        | Visium. Lists the images the dataset can place; switches in place; `vimg`              |
-| `Stain`, `Plane`                  | Selects: the `.vzg` stains and None; the stain's z planes with their sizes | DAPI at the middle plane when at most 100 MiB, else None | MERSCOPE with a `.vzg`. Each image is read whole; a change reloads the dataset; `mimg` |
-| `Morphology`                      | Select: 2D (all stains), 3D DAPI stack                                     | 2D                                                       | Atera with both images. A change reloads the dataset; the stack gets `Z plane`; `aimg` |
-| Image channels                    | `MorphologyChannelControls`                                                | See below                                                | When the image has channels                                                            |
-| `Custom image URL` + `Load Layer` | URL form                                                                   |                                                          | Once a dataset is ready                                                                |
-| Custom layer rows                 | Name, channel count, `x` remove, opacity slider (100%)                     |                                                          | Per loaded custom layer                                                                |
+| Control                           | Type                                                                       | Range / default                                          | Notes                                                                                                                        |
+| --------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `Dataset image opacity`           | Slider 0–100%, step 5                                                      | 100%                                                     | With channel controls present, opacity is applied per channel                                                                |
+| `Z plane`                         | Slider over the planes; shows "plane / count · depth"                      | Middle plane or `defaultZ`                               | When the dataset image is an OME-TIFF or OME-Zarr z-stack                                                                    |
+| `Time point`                      | Slider over the time points; shows "point / count · time"                  | `defaultT`, else the first                               | When the dataset image is an OME-Zarr with a `t` axis; the time when `t` has a unit                                          |
+| `Play time points`                | Icon button left of `Time point`; `Pause time points` while playing        | Paused                                                   | 2D only. Each time point shows once whole; stops on a slider move, 3D or a screenshot                                        |
+| `Speed`                           | Select: 1, 2, 5, 10 or 20 per second                                       | 5 per second                                             | Under `Time point` in 2D; a slow time point waits, and none is skipped                                                       |
+| `Loop`                            | Checkbox                                                                   | On                                                       | Under `Time point` in 2D; off stops at the last time point                                                                   |
+| `View`                            | Segmented: 2D, 3D                                                          | 2D                                                       | OME-Zarr z-stacks. 3D shows the [3D view](#3d-view) over the canvas; `imageView`                                             |
+| `Show beside`                     | Button (two columns); `Show beside again` once shown                       |                                                          | 2D with an image. A [panel](#sections-side-by-side) of this image, linked, with its own channels; disabled with three panels |
+| `Tissue image`                    | Select: High-res, Low-res, None                                            | High-res if present, else Low-res                        | Visium. Lists the images the dataset can place; switches in place; `vimg`                                                    |
+| `Stain`, `Plane`                  | Selects: the `.vzg` stains and None; the stain's z planes with their sizes | DAPI at the middle plane when at most 100 MiB, else None | MERSCOPE with a `.vzg`. Each image is read whole; a change reloads the dataset; `mimg`                                       |
+| `Morphology`                      | Select: 2D (all stains), 3D DAPI stack                                     | 2D                                                       | Atera with both images. A change reloads the dataset; the stack gets `Z plane`; `aimg`                                       |
+| Image channels                    | `MorphologyChannelControls`                                                | See below                                                | When the image has channels                                                                                                  |
+| `Custom image URL` + `Load Layer` | URL form                                                                   |                                                          | Once a dataset is ready                                                                                                      |
+| Custom layer rows                 | Name, channel count, `x` remove, opacity slider (100%)                     |                                                          | Per loaded custom layer                                                                                                      |
 
 #### Image Channel Controls
 

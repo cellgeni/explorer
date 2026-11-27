@@ -493,6 +493,12 @@ viewers sit side by side, three in a row, four in a 2 by 2 grid; under
   and window for channels of the same name, so sections compare on one
   scale, and auto-windows the others. A section without cells, such as an
   image, shows its image at once.
+- **The open dataset beside itself.** The Image section's `Show beside`
+  opens the open dataset's own image in a panel, linked, with channels of
+  its own, to compare channel sets of one image. It takes the image the
+  main view has open rather than reading it again. It works with or without
+  a collection, and closes when another dataset opens outside the
+  collection.
 - **What a panel does not show.** Cell boundaries, transcripts and the tools
   (selection, Magic Lens, measuring, cards) are the main view's only. To use
   them on a section, choose `Open` in its panel: it swaps places with the

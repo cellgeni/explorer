@@ -2256,6 +2256,19 @@ test("has no accessibility violations in an image's channel controls @smoke", as
     await collectAxeFindings(page, `image channel controls, ${width} px`, findings)
   }
 
+  // The image again in a panel beside the main view, with its own channels
+  // in a popover (plan 30-D8).
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/#dataset=${encodeURIComponent(slide)}`)
+  const layers = page.getByRole('complementary', { name: 'Layers' })
+  const section = layers.getByRole('heading', { level: 3 }).getByTitle(/ Image$/)
+  if ((await section.getAttribute('aria-expanded')) !== 'true') await section.click()
+  await layers.getByRole('button', { name: 'Show beside' }).click()
+  const panel = page.getByRole('region', { name: /, beside$/ })
+  await panel.getByRole('button', { name: /^Channels of / }).click()
+  await expect(panel.getByRole('dialog', { name: /^Image of / })).toBeVisible()
+  await collectAxeFindings(page, 'image beside, channels popover', findings)
+
   expectAxeFindingsMatchBaseline(findings)
 })
 

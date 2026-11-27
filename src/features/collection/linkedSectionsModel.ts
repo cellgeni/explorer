@@ -2,16 +2,19 @@ import type { LinkedViewState } from '../../components/linkedView'
 import type { ShareablePanelImage, ShareablePanelLink } from '../../data/shareableState'
 import {
   collectionEntryFor,
+  sameDatasetUrl,
   type DatasetCollection,
   type DatasetCollectionEntry,
 } from '../../datasets/datasetCollection'
 
 // Sections side by side: the open dataset and up to MAX_LINKED_SECTIONS more
-// of its collection, each in a panel beside the main view. A panel is linked
-// to the main view, panning and zooming with it at an offset, or has a view
-// of its own. Sections registered to the open dataset (one
-// coordinateSystem) open linked, others unlinked. The link names them with
-// compare=, and each one's link with compareLink=.
+// panels beside the main view, each another dataset of its collection or the
+// open dataset itself, for its image with other channels (plan 30-D8). A
+// panel is linked to the main view, panning and zooming with it at an offset,
+// or has a view of its own. Sections registered to the open dataset (one
+// coordinateSystem), and the open dataset itself, open linked; others
+// unlinked. The link names them with compare=, and each one's link with
+// compareLink=.
 
 // Four viewers at once: the open dataset and three panels, in a 2 by 2 grid.
 export const MAX_LINKED_SECTIONS = 3
@@ -33,6 +36,12 @@ export type PanelLink =
 
 export const LINKED: PanelLink = { linked: true, offset: NO_OFFSET }
 export const UNLINKED: PanelLink = { linked: false, view: null }
+
+// An unlinked panel's link is its own object: the app keys where it has moved
+// to by it.
+function unlinked(): PanelLink {
+  return { linked: false, view: null }
+}
 
 // What a panel shows of its section's image (plan 30-D4): the image under
 // its cells, the image alone, or none (its cells only).
@@ -84,7 +93,7 @@ export function defaultPanelLink(
   openEntry: DatasetCollectionEntry | undefined,
   entry: DatasetCollectionEntry,
 ): PanelLink {
-  return isRegistered(openEntry, entry) ? LINKED : UNLINKED
+  return isRegistered(openEntry, entry) ? LINKED : unlinked()
 }
 
 // Each panel resolved, kept for as long as the panel is, so a panel keeps its
@@ -95,25 +104,40 @@ const resolvedPanels = new WeakMap<
 >()
 
 // The panels shown beside the open dataset: those of compare= that can be,
-// in their order, up to the limit, each with its link.
+// in their order, up to the limit, each with its link. A panel of the open
+// dataset itself (its image beside, D8) is shown with or without a
+// collection, as many times as asked; `openFallback` names it without one.
+// Another dataset of the collection is shown once.
 export function shownPanels(
   collection: DatasetCollection | null,
   openUrl: string | null,
   panels: readonly ComparePanel[],
+  openFallback: DatasetCollectionEntry | null = null,
 ): readonly ShownPanel[] {
-  if (collection === null || panels.length === 0) return []
+  if (openUrl === null || panels.length === 0) return []
 
-  const openEntry = collectionEntryFor(collection, openUrl)
+  const openEntry =
+    collection === null ? undefined : collectionEntryFor(collection, openUrl)
+  const ownEntry = openEntry ?? openFallback
   const shown: ShownPanel[] = []
 
   for (const panel of panels) {
-    const entry = collectionEntryFor(collection, panel.url)
+    if (shown.length >= MAX_LINKED_SECTIONS) break
+
+    if (sameDatasetUrl(panel.url, openUrl)) {
+      if (ownEntry !== null) {
+        shown.push({ entry: ownEntry, panel: resolvedPanel(panel, ownEntry, true) })
+      }
+      continue
+    }
+
+    const entry =
+      collection === null ? undefined : collectionEntryFor(collection, panel.url)
 
     if (
       entry !== undefined &&
       !shown.some((item) => item.entry === entry) &&
-      canShowBeside(openEntry, entry) &&
-      shown.length < MAX_LINKED_SECTIONS
+      canShowBeside(openEntry, entry)
     ) {
       shown.push({
         entry,
@@ -123,6 +147,11 @@ export function shownPanels(
   }
 
   return shown
+}
+
+// Whether a shown panel is of the open dataset itself.
+export function isOwnPanel(shown: ShownPanel, openUrl: string | null): boolean {
+  return openUrl !== null && sameDatasetUrl(shown.entry.url, openUrl)
 }
 
 function resolvedPanel(
@@ -144,7 +173,7 @@ function resolvedPanel(
   const resolved: ResolvedPanel = {
     ...panel,
     url: entry.url,
-    link: panel.link ?? (registered ? LINKED : UNLINKED),
+    link: panel.link ?? (registered ? LINKED : unlinked()),
   }
   resolvedPanels.set(panel, { url: entry.url, registered, panel: resolved })
   return resolved
@@ -160,7 +189,7 @@ export function toggledPanels(
   const panels = shown.map((item) => item.panel)
 
   if (shown.some((item) => item.entry === entry)) {
-    return panels.filter((panel) => panel.url !== entry.url)
+    return shown.filter((item) => item.entry !== entry).map((item) => item.panel)
   }
 
   const openEntry =
@@ -172,22 +201,35 @@ export function toggledPanels(
   )
 }
 
-// Sets one shown panel's link.
-export function withPanelLink(
+// The open dataset's image beside the main view, once more: linked, at the
+// main view's channels (D8).
+export function withOwnPanel(
   shown: readonly ShownPanel[],
-  url: string,
-  link: PanelLink,
+  openUrl: string,
 ): readonly ComparePanel[] {
-  return withPanel(shown, url, { link })
+  return [
+    ...shown.map((item) => item.panel),
+    { url: openUrl, link: LINKED, image: 'cells' as const },
+  ].slice(0, MAX_LINKED_SECTIONS)
 }
 
 // Changes one shown panel: its image, its channels or its link.
 export function withPanel(
   shown: readonly ShownPanel[],
-  url: string,
+  panel: ResolvedPanel,
   patch: Partial<Omit<ResolvedPanel, 'url'>>,
 ): readonly ComparePanel[] {
-  return shown.map(({ panel }) => (panel.url === url ? { ...panel, ...patch } : panel))
+  return shown.map((item) =>
+    item.panel === panel ? { ...item.panel, ...patch } : item.panel,
+  )
+}
+
+// Closes one shown panel.
+export function withoutPanel(
+  shown: readonly ShownPanel[],
+  panel: ResolvedPanel,
+): readonly ComparePanel[] {
+  return shown.filter((item) => item.panel !== panel).map((item) => item.panel)
 }
 
 // Whether opening `nextUrl` in place of the open dataset keeps the view: both
@@ -386,7 +428,7 @@ function panelLinkFromShareable(link: ShareablePanelLink | null): PanelLink | nu
   }
 
   return x === undefined || y === undefined || zoom === undefined
-    ? UNLINKED
+    ? unlinked()
     : { linked: false, view: { target: [x, y], zoom } }
 }
 
@@ -402,7 +444,9 @@ export function compareLinksForLink(
   const links = panels.map((panel) => {
     const entry =
       collection === null ? undefined : collectionEntryFor(collection, panel.url)
-    const registered = entry !== undefined && isRegistered(openEntry, entry)
+    const registered =
+      (openUrl !== null && sameDatasetUrl(panel.url, openUrl)) ||
+      (entry !== undefined && isRegistered(openEntry, entry))
 
     return isDefaultLink(panel.link, registered) ? null : shareablePanelLink(panel.link)
   })

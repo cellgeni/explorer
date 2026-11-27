@@ -15,7 +15,9 @@ import {
   shownPanelView,
   toggledPanels,
   UNLINKED,
-  withPanelLink,
+  withOwnPanel,
+  withoutPanel,
+  withPanel,
   type ComparePanel,
   type PanelLink,
 } from './linkedSectionsModel'
@@ -66,21 +68,22 @@ describe('sections side by side', () => {
 
   it('links registered sections and leaves the others fitted to themselves', () => {
     expect(defaultPanelLink(entry(S1), entry(S2))).toBe(LINKED)
-    expect(defaultPanelLink(entry(S1), entry(P2))).toBe(UNLINKED)
-    expect(defaultPanelLink(entry(ATLAS), entry(S1))).toBe(UNLINKED)
+    expect(defaultPanelLink(entry(S1), entry(P2))).toEqual(UNLINKED)
+    expect(defaultPanelLink(entry(ATLAS), entry(S1))).toEqual(UNLINKED)
   })
 
   it('shows the compare= sections that can be, in order, up to the limit', () => {
     expect(
       shownUrls([
         panel(S3),
-        panel(P2),
-        panel(S1),
         panel('https://elsewhere.test/x'),
+        panel(P2),
         panel(S3),
         panel(S2),
       ]),
     ).toEqual([S3, P2, S2])
+    // The open dataset's own panel (its image beside) counts as one.
+    expect(shownUrls([panel(S3), panel(S1), panel(S2), panel(S4)])).toEqual([S3, S1, S2])
     expect(shownUrls([S2, S3, S4, S5].map((url) => panel(url)))).toEqual(
       [S2, S3, S4].slice(0, MAX_LINKED_SECTIONS),
     )
@@ -125,13 +128,51 @@ describe('sections side by side', () => {
     ).toEqual([S2, S3, S4])
   })
 
-  it('sets one panel’s link', () => {
+  it('sets one panel’s link, or closes it, by the panel', () => {
     const shown = shownPanels(COLLECTION, S1, [panel(S2, LINKED), panel(S3, LINKED)])
+    const unlinked: PanelLink = { linked: false, view: null }
 
-    expect(withPanelLink(shown, S3, UNLINKED)).toEqual([
+    expect(withPanel(shown, shown[1]!.panel, { link: unlinked })).toEqual([
       { url: S2, link: LINKED },
-      { url: S3, link: UNLINKED },
+      { url: S3, link: unlinked },
     ])
+    expect(withoutPanel(shown, shown[0]!.panel)).toEqual([{ url: S3, link: LINKED }])
+  })
+
+  it('shows the open dataset itself beside it, with or without a collection', () => {
+    const own = {
+      path: 'x',
+      url: 'https://example.test/qptiff/slide.qptiff',
+      name: 'Slide',
+    }
+    const withOwn = withOwnPanel([], own.url)
+
+    expect(withOwn).toEqual([{ url: own.url, link: LINKED, image: 'cells' }])
+    // Without a collection, only its own panels, as often as asked.
+    const twice = shownPanels(null, own.url, [...withOwn, ...withOwn], own)
+    expect(twice.map((item) => [item.entry, item.panel.link])).toEqual([
+      [own, LINKED],
+      [own, LINKED],
+    ])
+    expect(shownPanels(null, own.url, withOwn, null)).toEqual([])
+    // In a collection, beside its sections, linked whether registered or not.
+    const shown = shownPanels(COLLECTION, ATLAS, [panel(ATLAS), panel(S2)])
+    expect(shown.map((item) => [item.entry.url, item.panel.link.linked])).toEqual([
+      [ATLAS, true],
+      [S2, false],
+    ])
+    // Linked with no offset is its default, so the link has no compareLink=.
+    expect(compareLinksForLink(COLLECTION, ATLAS, [shown[0]!.panel])).toBeUndefined()
+    expect(
+      withOwnPanel(
+        shownPanels(
+          COLLECTION,
+          S1,
+          [S2, S3, S4].map((url) => panel(url)),
+        ),
+        S1,
+      ),
+    ).toHaveLength(MAX_LINKED_SECTIONS)
   })
 
   it('shows a linked panel at its offset and moves the main view by it', () => {

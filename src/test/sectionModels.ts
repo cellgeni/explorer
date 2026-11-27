@@ -51,6 +51,7 @@ export function testImageSectionModel(
   const { customLayers, ...rest } = overrides
 
   return {
+    beside: null,
     opacity: 1,
     onOpacityPercentChange: vi.fn(),
     zStack: undefined,

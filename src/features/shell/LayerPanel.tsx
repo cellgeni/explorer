@@ -29,6 +29,7 @@ import {
 import type { DatasetViewOptionsModel } from '../sections/datasetInfoModel'
 import {
   CustomImageLayers,
+  ImageBesideControl,
   ImageChannelControls,
   ImageOpacityControl,
   ImageTimePointControl,
@@ -352,6 +353,7 @@ function ImageSection({
         <ImageTimePointControl image={image} />
         <ImageVolumeViewControl image={image} />
       </div>
+      <ImageBesideControl image={image} />
       <VisiumTissueImageSelect visium={viewOptions.visium} />
       <MerscopeImageSelect merscope={viewOptions.merscope} />
       <AteraImageSelect atera={viewOptions.atera} />

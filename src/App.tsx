@@ -151,13 +151,15 @@ import {
   panelsAfterOpening,
   shownPanels,
   toggledPanels,
+  MAX_LINKED_SECTIONS,
+  withOwnPanel,
+  withoutPanel,
   withPanel,
-  withPanelLink,
   type ComparePanel,
   type PanelLink,
   type ResolvedPanel,
 } from './features/collection/linkedSectionsModel'
-import { loadPanelImage } from './features/collection/panelImage'
+import { loadPanelImage, type PanelImage } from './features/collection/panelImage'
 import type {
   MainImageChannels,
   PanelImageLoaders,
@@ -173,6 +175,7 @@ import type {
 } from './components/viewerCoreTypes'
 import {
   collectionEntryFor,
+  sameDatasetUrl,
   type DatasetCollectionEntry,
 } from './datasets/datasetCollection'
 import {
@@ -545,13 +548,10 @@ export function App({ dependencies }: AppProps = {}) {
       initialShareableState.compareChannels,
     ),
   )
-  // Where each unlinked panel has moved to, for the address: its link, and
+  // Where each unlinked panel has moved to, for the address, by its link:
   // its view once it rests.
   const [panelViewReports, setPanelViewReports] = useState<
-    ReadonlyMap<
-      string,
-      { readonly link: PanelLink; readonly view: LinkedViewState | null }
-    >
+    ReadonlyMap<PanelLink, LinkedViewState | null>
   >(() => new Map())
   const [linkedViewChannel] = useState(() => new LinkedViewChannel())
   // The collection whose open dataset's serial sections are stacked in 3D
@@ -994,40 +994,82 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const readyCollection =
     datasetCollection.state.status === 'ready' ? datasetCollection.state.collection : null
+  // The open dataset as its own panels name it without a collection.
+  const ownPanelEntry = useMemo(
+    (): DatasetCollectionEntry | null =>
+      loadedDatasetUrl === null
+        ? null
+        : {
+            path: loadedDatasetUrl,
+            url: loadedDatasetUrl,
+            ...(loadedDatasetName === null ? {} : { name: loadedDatasetName }),
+          },
+    [loadedDatasetName, loadedDatasetUrl],
+  )
   const linkedSections = useMemo(
-    () => shownPanels(readyCollection, loadedDatasetUrl, comparePanels),
-    [comparePanels, loadedDatasetUrl, readyCollection],
+    () => shownPanels(readyCollection, loadedDatasetUrl, comparePanels, ownPanelEntry),
+    [comparePanels, loadedDatasetUrl, ownPanelEntry, readyCollection],
   )
   const linkedSectionEntries = useMemo(
     () => linkedSections.map(({ entry }) => entry),
     [linkedSections],
   )
   const handlePanelViewReport = useCallback(
-    (url: string, view: LinkedViewState | null) => {
-      const panel = linkedSections.find((item) => item.panel.url === url)?.panel
-      if (panel === undefined) return
-
-      setPanelViewReports((current) =>
-        new Map(current).set(url, { link: panel.link, view }),
-      )
+    (link: PanelLink, view: LinkedViewState | null) => {
+      setPanelViewReports((current) => {
+        const next = new Map(current)
+        // Only the links of panels still shown are kept.
+        for (const key of next.keys()) {
+          if (!linkedSections.some((item) => item.panel.link === key)) next.delete(key)
+        }
+        return next.set(link, view)
+      })
     },
     [linkedSections],
   )
   const handlePanelChange = useCallback(
-    (url: string, patch: Pick<Partial<ResolvedPanel>, 'image' | 'channels'>) => {
-      setComparePanels(withPanel(linkedSections, url, patch))
+    (panel: ResolvedPanel, patch: Pick<Partial<ResolvedPanel>, 'image' | 'channels'>) => {
+      setComparePanels(withPanel(linkedSections, panel, patch))
     },
     [linkedSections],
   )
+  // The main view's image, for the open dataset's own panels, which show it
+  // rather than read it again (plan 30-D8). A ref, so a new plane or image
+  // does not reload every panel's.
+  const mainPanelImageRef = useRef<{
+    readonly url: string | null
+    readonly image: PanelImage | null
+  }>({ url: null, image: null })
+  useEffect(() => {
+    mainPanelImageRef.current = {
+      url: loadedDatasetUrl,
+      image:
+        morphologyImage !== null
+          ? {
+              kind: 'pyramid',
+              image: morphologyImage,
+              enabledChannelIds: undefined,
+              autoContrast: false,
+            }
+          : flatMorphologyImage !== null
+            ? { kind: 'flat', image: flatMorphologyImage }
+            : null,
+    }
+  }, [flatMorphologyImage, loadedDatasetUrl, morphologyImage])
   // A panel reads its section's image as the main view would (plan 30-D4).
   const panelImageLoaders = useMemo(
     (): PanelImageLoaders => ({
-      loadPanelImage: (url, signal) =>
-        loadPanelImage(
-          url,
-          { detectSpatialDataset, getSpatialDataset, loadMorphologyImage },
-          signal,
-        ),
+      loadPanelImage: (url, signal) => {
+        const main = mainPanelImageRef.current
+
+        return main.url !== null && main.image !== null && sameDatasetUrl(url, main.url)
+          ? Promise.resolve(main.image)
+          : loadPanelImage(
+              url,
+              { detectSpatialDataset, getSpatialDataset, loadMorphologyImage },
+              signal,
+            )
+      },
       retainDataset,
       computeAutoChannelContrast,
     }),
@@ -1052,13 +1094,18 @@ export function App({ dependencies }: AppProps = {}) {
   // The panels as they are now: an unlinked one at the view it has moved to.
   const currentPanels = linkedSections.map((shown) => {
     const { panel } = shown
-    const report = panelViewReports.get(panel.url)
 
-    return report === undefined || report.link !== panel.link || panel.link.linked
+    return panel.link.linked || !panelViewReports.has(panel.link)
       ? shown
       : {
           entry: shown.entry,
-          panel: { ...panel, link: { linked: false as const, view: report.view } },
+          panel: {
+            ...panel,
+            link: {
+              linked: false as const,
+              view: panelViewReports.get(panel.link) ?? null,
+            },
+          },
         }
   })
   const stackedSections = useMemo(
@@ -1077,28 +1124,23 @@ export function App({ dependencies }: AppProps = {}) {
     (readyCollection === null || loadedDatasetUrl === null || stackedSections.length > 0)
       ? '3d'
       : undefined
-  // Until the collection is read and its dataset open, the link's compare=
-  // stays as it was.
-  const linkCompareUrls =
-    readyCollection === null || loadedDatasetUrl === null
-      ? comparePanels.map((panel) => panel.url)
-      : currentPanels.map(({ panel }) => panel.url)
-  const linkCompareLinks =
-    readyCollection === null || loadedDatasetUrl === null
-      ? initialShareableState.compareLinks
-      : compareLinksForLink(
-          readyCollection,
-          loadedDatasetUrl,
-          currentPanels.map(({ panel }) => panel),
-        )
-  const linkCompareImages =
-    readyCollection === null || loadedDatasetUrl === null
-      ? initialShareableState.compareImages
-      : compareImagesForLink(currentPanels.map(({ panel }) => panel))
-  const linkCompareChannels =
-    readyCollection === null || loadedDatasetUrl === null
-      ? initialShareableState.compareChannels
-      : compareChannelsForLink(currentPanels.map(({ panel }) => panel))
+  // Until its dataset is open, and the collection read if there is one, the
+  // link's compare= stays as it was.
+  const panelsSettled =
+    loadedDatasetUrl !== null && datasetCollection.state.status !== 'loading'
+  const linkPanels = currentPanels.map(({ panel }) => panel)
+  const linkCompareUrls = panelsSettled
+    ? linkPanels.map((panel) => panel.url)
+    : comparePanels.map((panel) => panel.url)
+  const linkCompareLinks = panelsSettled
+    ? compareLinksForLink(readyCollection, loadedDatasetUrl, linkPanels)
+    : initialShareableState.compareLinks
+  const linkCompareImages = panelsSettled
+    ? compareImagesForLink(linkPanels)
+    : initialShareableState.compareImages
+  const linkCompareChannels = panelsSettled
+    ? compareChannelsForLink(linkPanels)
+    : initialShareableState.compareChannels
   // A link's view is for the dataset it names. Once another dataset loads,
   // datasets open fitted to their extent again.
   const [linkViewApplies, setLinkViewApplies] = useState(
@@ -3213,6 +3255,12 @@ export function App({ dependencies }: AppProps = {}) {
         }
       } else {
         setCarriedView(null)
+        // The open dataset's own panels go with it.
+        if (loadedDatasetUrl !== null && !sameDatasetUrl(datasetUrl, loadedDatasetUrl)) {
+          setComparePanels((current) =>
+            current.filter((panel) => !sameDatasetUrl(panel.url, loadedDatasetUrl)),
+          )
+        }
       }
       setGeometricAnnotations([])
       setGeometricAnnotationImportMessage(null)
@@ -3222,6 +3270,7 @@ export function App({ dependencies }: AppProps = {}) {
       clearVisiumHdExpressionProfileState,
       clearVisiumHdRoiState,
       linkViewOpened,
+      loadedDatasetUrl,
       setComparePanels,
       setFallbackNotices,
       setGeometricAnnotationImportMessage,
@@ -4533,12 +4582,14 @@ export function App({ dependencies }: AppProps = {}) {
             collectionUrl: datasetCollection.state.url,
             collectionView: collectionViewForLink(collectionView),
             collectionPreviewSize: collectionPreviewSizeForLink(collectionPreviewSize),
-            compareUrls: linkCompareUrls,
-            compareLinks: linkCompareLinks,
-            compareImages: linkCompareImages,
-            compareChannels: linkCompareChannels,
             sectionView: linkSectionView,
           }),
+      // The panels beside the main view: sections of the collection, or the
+      // open dataset's image again, with or without one.
+      compareUrls: linkCompareUrls,
+      compareLinks: linkCompareLinks,
+      compareImages: linkCompareImages,
+      compareChannels: linkCompareChannels,
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L), and its reader.
       datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
@@ -4978,6 +5029,18 @@ export function App({ dependencies }: AppProps = {}) {
     () => openTrackValues(loadedDatasetUrl),
     [loadedDatasetUrl, openTrackValues],
   )
+  // The open dataset's cells for its own panels, without a collection, whose
+  // store reads them otherwise.
+  const ownPanelsStore = useOpenDatasetPreviewStore({
+    url: readyCollection === null && linkedSections.length > 0 ? loadedDatasetUrl : null,
+    loaders: collectionPreviewLoaders,
+    genes: collectionPreviewGenes,
+    scoreMode: geneExpressionScoreMode,
+    annotationGroupId: collectionPreviewAnnotations?.groupId ?? null,
+    metadataTrackId: collectionPreviewMetadata?.id ?? null,
+    openTrack: cellViewOpenTrack,
+    paused: isLoading,
+  })
   const cellViewStore = useOpenDatasetPreviewStore({
     url: cellViewShown ? loadedDatasetUrl : null,
     loaders: collectionPreviewLoaders,
@@ -5092,6 +5155,20 @@ export function App({ dependencies }: AppProps = {}) {
     volumeViewAvailable,
     volumeViewOpen: volumeViewShown,
     setVolumeViewOpen,
+    beside:
+      loadedDatasetUrl === null ||
+      (morphologyImage === null && flatMorphologyImage === null)
+        ? null
+        : {
+            shown: linkedSections.filter(({ entry }) =>
+              sameDatasetUrl(entry.url, loadedDatasetUrl),
+            ).length,
+            full: linkedSections.length >= MAX_LINKED_SECTIONS,
+            onShow: () => {
+              setComparePanels(withOwnPanel(linkedSections, loadedDatasetUrl))
+              appendDebugEvent('Image shown beside the main view')
+            },
+          },
   })
   const cellsSection = useCellsSectionModel({
     analysisHeaderCopy,
@@ -5980,20 +6057,19 @@ export function App({ dependencies }: AppProps = {}) {
         {linkedSections.length === 0 ? null : (
           <LinkedSections
             panels={linkedSections}
-            store={collectionPreviewStore}
+            store={readyCollection === null ? ownPanelsStore : collectionPreviewStore}
             channel={linkedViewChannel}
+            openUrl={loadedDatasetUrl}
             coloring={sectionColoring}
             cellPointScale={cellPointScale}
             pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
             hoverTooltips={showHoverTooltips}
             onOpen={handleSelectCollectionEntry}
-            onClose={(entry) => {
-              setComparePanels(
-                toggledPanels(readyCollection, loadedDatasetUrl, linkedSections, entry),
-              )
+            onClose={(panel) => {
+              setComparePanels(withoutPanel(linkedSections, panel))
             }}
-            onLinkChange={(url, link) => {
-              setComparePanels(withPanelLink(linkedSections, url, link))
+            onLinkChange={(panel, link) => {
+              setComparePanels(withPanel(linkedSections, panel, { link }))
             }}
             onViewReport={handlePanelViewReport}
             onPanelChange={handlePanelChange}

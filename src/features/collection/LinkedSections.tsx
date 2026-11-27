@@ -46,6 +46,7 @@ import {
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
 import type { CollectionBarAnnotations } from './CollectionBar'
+import { sameDatasetUrl } from '../../datasets/datasetCollection'
 import { collectionEntryLabel } from './collectionModel'
 import type { PreviewBounds, PreviewMetadataTrack } from './collectionPreviewData'
 import type { PreviewOverlay } from './collectionPreviewRaster'
@@ -108,16 +109,20 @@ interface LinkedSectionsProps {
   readonly pointSizeFullViewScale: number
   // Settings › Hover tooltips.
   readonly hoverTooltips: boolean
+  // The open dataset, whose own panels (its image beside, plan 30-D8) have
+  // no Open.
+  readonly openUrl?: string | null
   // Opens the section in the main view, in place of the open dataset.
   readonly onOpen: (entry: DatasetCollectionEntry) => void
-  readonly onClose: (entry: DatasetCollectionEntry) => void
+  readonly onClose: (panel: ResolvedPanel) => void
   // Links or unlinks a panel, or resets its offset.
-  readonly onLinkChange: (url: string, link: PanelLink) => void
-  // An unlinked panel's view, once it has stopped moving, for the address.
-  readonly onViewReport: (url: string, view: LinkedViewState | null) => void
+  readonly onLinkChange: (panel: ResolvedPanel, link: PanelLink) => void
+  // An unlinked panel's view, once it has stopped moving, for the address:
+  // by the link it has moved under.
+  readonly onViewReport: (link: PanelLink, view: LinkedViewState | null) => void
   // Shows or hides a panel's image or cells, or records its shown channels.
   readonly onPanelChange?: (
-    url: string,
+    panel: ResolvedPanel,
     patch: Pick<Partial<ResolvedPanel>, 'image' | 'channels'>,
   ) => void
   // Reads a panel's image; without them, panels show cells only.
@@ -159,6 +164,7 @@ export function LinkedSections({
   onPanelChange = NO_PANEL_CHANGE,
   imageLoaders = null,
   mainChannels = null,
+  openUrl = null,
 }: LinkedSectionsProps) {
   useCollectionPreviewUpdates(store)
   const classColors =
@@ -173,37 +179,56 @@ export function LinkedSections({
   const shownColoring =
     metadata === coloring.metadata ? coloring : { ...coloring, metadata }
 
+  // The open dataset's own panels are told apart by a number after the
+  // first, as their regions need names of their own.
+  let ownCount = 0
+
   return (
     <>
-      {panels.map(({ entry, panel }) => (
-        <LinkedSectionPanel
-          key={entry.url}
-          entry={entry}
-          link={panel.link}
-          image={panel.image ?? null}
-          channels={panel.channels ?? null}
-          preview={store?.entry(entry.url) ?? null}
-          channel={channel}
-          coloring={shownColoring}
-          classColors={classColors}
-          cellPointScale={cellPointScale}
-          pointSizeFullViewScale={pointSizeFullViewScale}
-          hoverTooltips={hoverTooltips}
-          onOpen={onOpen}
-          onClose={onClose}
-          onLinkChange={onLinkChange}
-          onViewReport={onViewReport}
-          onPanelChange={onPanelChange}
-          imageLoaders={imageLoaders}
-          mainChannels={mainChannels}
-        />
-      ))}
+      {panels.map(({ entry, panel }) => {
+        const own = openUrl !== null && sameDatasetUrl(entry.url, openUrl)
+        const ownNumber = own ? ++ownCount : 0
+        const label = collectionEntryLabel(entry)
+
+        return (
+          <LinkedSectionPanel
+            key={own ? `own:${ownNumber}` : entry.url}
+            entry={entry}
+            panel={panel}
+            label={
+              own ? `${label}, beside${ownNumber > 1 ? ` ${ownNumber}` : ''}` : label
+            }
+            isOwn={own}
+            link={panel.link}
+            image={panel.image ?? null}
+            channels={panel.channels ?? null}
+            preview={store?.entry(entry.url) ?? null}
+            channel={channel}
+            coloring={shownColoring}
+            classColors={classColors}
+            cellPointScale={cellPointScale}
+            pointSizeFullViewScale={pointSizeFullViewScale}
+            hoverTooltips={hoverTooltips}
+            onOpen={onOpen}
+            onClose={onClose}
+            onLinkChange={onLinkChange}
+            onViewReport={onViewReport}
+            onPanelChange={onPanelChange}
+            imageLoaders={imageLoaders}
+            mainChannels={mainChannels}
+          />
+        )
+      })}
     </>
   )
 }
 
 interface LinkedSectionPanelProps {
   readonly entry: DatasetCollectionEntry
+  readonly panel: ResolvedPanel
+  readonly label: string
+  // A panel of the open dataset itself.
+  readonly isOwn: boolean
   readonly link: PanelLink
   readonly image: PanelImageMode
   readonly channels: readonly string[] | null
@@ -215,9 +240,9 @@ interface LinkedSectionPanelProps {
   readonly pointSizeFullViewScale: number
   readonly hoverTooltips: boolean
   readonly onOpen: (entry: DatasetCollectionEntry) => void
-  readonly onClose: (entry: DatasetCollectionEntry) => void
-  readonly onLinkChange: (url: string, link: PanelLink) => void
-  readonly onViewReport: (url: string, view: LinkedViewState | null) => void
+  readonly onClose: (panel: ResolvedPanel) => void
+  readonly onLinkChange: (panel: ResolvedPanel, link: PanelLink) => void
+  readonly onViewReport: (link: PanelLink, view: LinkedViewState | null) => void
   readonly onPanelChange: NonNullable<LinkedSectionsProps['onPanelChange']>
   readonly imageLoaders: PanelImageLoaders | null
   readonly mainChannels: MainImageChannels | null
@@ -231,6 +256,9 @@ interface PanelHover {
 
 function LinkedSectionPanel({
   entry,
+  panel,
+  label,
+  isOwn,
   link,
   image,
   channels,
@@ -249,7 +277,6 @@ function LinkedSectionPanel({
   imageLoaders,
   mainChannels,
 }: LinkedSectionPanelProps) {
-  const label = collectionEntryLabel(entry)
   const source = useId()
   const panelRef = useRef<HTMLElement>(null)
   useFocusHandOff(panelRef)
@@ -315,8 +342,8 @@ function LinkedSectionPanel({
   useEffect(() => {
     if (shownChannelsKey === null || shownChannelsKey === JSON.stringify(channels)) return
 
-    onPanelChange(entry.url, { channels: JSON.parse(shownChannelsKey) as string[] })
-  }, [channels, entry.url, onPanelChange, shownChannelsKey])
+    onPanelChange(panel, { channels: JSON.parse(shownChannelsKey) as string[] })
+  }, [channels, onPanelChange, panel, shownChannelsKey])
   // Where the image lies, to fit a section without cells to it.
   const imageBounds = useMemo((): PreviewBounds | null => {
     if (cells !== null) return null
@@ -420,13 +447,13 @@ function LinkedSectionPanel({
 
     const timer = setTimeout(() => {
       reportedRef.current = ownView
-      onViewReport(entry.url, ownView)
+      onViewReport(link, ownView)
     }, VIEW_REPORT_DELAY_MS)
 
     return () => {
       clearTimeout(timer)
     }
-  }, [entry.url, link.linked, onViewReport, ownView])
+  }, [link, onViewReport, ownView])
   // What the panel shows now: its view, else fitted to its section.
   const currentView = (): LinkedViewState | null =>
     shownView ??
@@ -437,9 +464,9 @@ function LinkedSectionPanel({
     const view = currentView()
 
     if (link.linked) {
-      onLinkChange(entry.url, { linked: false, view })
+      onLinkChange(panel, { linked: false, view })
     } else {
-      onLinkChange(entry.url, {
+      onLinkChange(panel, {
         linked: true,
         offset:
           view === null || mainView === null ? NO_OFFSET : offsetBetween(view, mainView),
@@ -550,7 +577,7 @@ function LinkedSectionPanel({
             aria-pressed={imageMode !== null}
             icon={<ImageIcon />}
             onClick={() => {
-              onPanelChange(entry.url, { image: imageMode === null ? 'cells' : null })
+              onPanelChange(panel, { image: imageMode === null ? 'cells' : null })
             }}
           />
         )}
@@ -569,7 +596,7 @@ function LinkedSectionPanel({
                 label="Cells"
                 checked={showsCells}
                 onChange={(checked) => {
-                  onPanelChange(entry.url, { image: checked ? 'cells' : 'only' })
+                  onPanelChange(panel, { image: checked ? 'cells' : 'only' })
                 }}
               />
             )}
@@ -608,7 +635,7 @@ function LinkedSectionPanel({
             disabled={!hasOffset(link.offset)}
             icon={<TargetIcon />}
             onClick={() => {
-              onLinkChange(entry.url, LINKED)
+              onLinkChange(panel, LINKED)
             }}
           />
         ) : (
@@ -623,22 +650,24 @@ function LinkedSectionPanel({
             }}
           />
         )}
-        <Button
-          className="viewer-tile-action"
-          variant="ghost"
-          title={`Open ${label} in the main view, with the image and every tool; the open dataset takes its place here`}
-          onClick={() => {
-            onOpen(entry)
-          }}
-        >
-          Open
-        </Button>
+        {isOwn ? null : (
+          <Button
+            className="viewer-tile-action"
+            variant="ghost"
+            title={`Open ${label} in the main view, with every tool; the open dataset takes its place here`}
+            onClick={() => {
+              onOpen(entry)
+            }}
+          >
+            Open
+          </Button>
+        )}
         <IconButton
           className="viewer-tile-action"
           title={`Close ${label}`}
           icon={<CloseIcon />}
           onClick={() => {
-            onClose(entry)
+            onClose(panel)
           }}
         />
       </div>

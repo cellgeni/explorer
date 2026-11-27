@@ -1345,6 +1345,91 @@ describe('App with a dataset collection', () => {
   })
 })
 
+describe('App with an image beside itself', () => {
+  const IMAGE_URL = 'https://example.test/slides/tonsil.ome.zarr'
+
+  beforeEach(() => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(IMAGE_URL)}`,
+    )
+  })
+
+  it('shows the open image again beside the main view, with its own channels', async () => {
+    const loader = imageLoaderFixture(IMAGE_URL)
+    const dataset = {
+      meta: vi.fn(async () => ({
+        platform: 'image' as const,
+        units: loader.units,
+        extent: {
+          minX: micrometers(0),
+          maxX: micrometers(80),
+          minY: micrometers(0),
+          maxY: micrometers(40),
+        },
+        capabilities: {
+          transcripts: false,
+          cellBoundaries: false,
+          pyramidImage: true,
+          multiChannel: true,
+        },
+        channels: loader.channels,
+      })),
+      image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+    }
+
+    render(
+      <TestApp
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'image' as const,
+          baseUrl: IMAGE_URL,
+          imageUrl: IMAGE_URL,
+          checked: [],
+        }))}
+        getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
+        computeAutoChannelContrast={vi.fn(async () => ({
+          min: 0,
+          max: 255,
+          histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+        }))}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(dataset.image).toHaveBeenCalledTimes(1)
+    })
+    openControls('image')
+    fireEvent.click(await screen.findByRole('button', { name: 'Show beside' }))
+
+    // The same image, linked, from the loaders the main view has open.
+    const panel = await screen.findByRole('region', { name: /, beside$/ })
+    expect(
+      within(panel).getByRole('button', { name: /^Link .* to the main view$/ }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(within(panel).queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
+    fireEvent.click(await within(panel).findByRole('button', { name: /^Channels of / }))
+    const popover = within(panel).getByRole('dialog', { name: /^Image of / })
+    expect(within(popover).getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+    expect(dataset.image).toHaveBeenCalledTimes(1)
+
+    // Its channels are its own.
+    fireEvent.click(within(popover).getByRole('checkbox', { name: 'DAPI' }))
+    const layers = screen.getByRole('complementary', { name: 'Layers' })
+    expect(within(layers).getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+    await waitFor(() => {
+      const hash = new URLSearchParams(window.location.hash.slice(1))
+      expect(hash.getAll('compare')).toEqual([IMAGE_URL])
+      expect(hash.getAll('compareImage')).toEqual(['1'])
+      expect(hash.getAll('compareChannels')).toEqual(['-'])
+    })
+
+    // Another copy is numbered.
+    fireEvent.click(screen.getByRole('button', { name: 'Show beside again' }))
+    expect(await screen.findByRole('region', { name: /, beside 2$/ })).toBeInTheDocument()
+  })
+})
+
 function imageLoaderFixture(url: string): ImagePyramidLoader {
   return {
     url,
@@ -1354,6 +1439,12 @@ function imageLoaderFixture(url: string): ImagePyramidLoader {
     tileHeight: imagePixels(256),
     numLevels: 1,
     tilesForLevel: () => [{ col: 0, row: 0 }],
+    tileBounds: () => ({
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(80),
+      maxY: micrometers(40),
+    }),
     units: {
       dataUnit: 'micrometer',
       imageUnit: 'pixel',
