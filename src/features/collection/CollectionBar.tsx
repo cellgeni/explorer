@@ -10,6 +10,7 @@ import {
 import {
   CloseIcon,
   CollapseIcon,
+  DownloadIcon,
   ExpandIcon,
   IconButton,
   ImageIcon,
@@ -79,6 +80,12 @@ export interface CollectionBarPreviewSize {
   readonly onChange: (size: number) => void
 }
 
+// Whether every preview is read, those in view first, or only those in view.
+export interface CollectionBarPreviewReading {
+  readonly all: boolean
+  readonly onChange: (all: boolean) => void
+}
+
 // Sections shown side by side with the open dataset.
 export interface CollectionBarBeside {
   readonly shown: readonly DatasetCollectionEntry[]
@@ -117,6 +124,8 @@ interface CollectionBarProps {
   readonly previews?: CollectionBarPreviews
   // Without it, the grid's previews keep their default size.
   readonly previewSize?: CollectionBarPreviewSize
+  // Without it, every preview is read, those in view first.
+  readonly previewReading?: CollectionBarPreviewReading
   // Without it, no section can be shown beside the open one.
   readonly beside?: CollectionBarBeside
   // Without it, the open dataset's sections cannot be stacked.
@@ -139,6 +148,7 @@ export function CollectionBar({
   onViewChange,
   previews,
   previewSize,
+  previewReading,
   beside,
   stack,
 }: CollectionBarProps) {
@@ -182,7 +192,19 @@ export function CollectionBar({
   const genes =
     annotations === null && metadata === null ? (previews?.genes ?? NO_GENES) : NO_GENES
 
-  // Only the previews in view, and a little beyond, are read.
+  const readAll = previewReading?.all ?? true
+
+  // The previews in view, and a little beyond, are read first, then the rest
+  // unless only those in view are asked for.
+  useEffect(() => {
+    if (store === null) return
+
+    store.setReadAll(readAll)
+    return () => {
+      store.setReadAll(false)
+    }
+  }, [readAll, store])
+
   useEffect(() => {
     const container = groupsRef.current
     if (store === null || container === null) return
@@ -278,6 +300,25 @@ export function CollectionBar({
                   onViewChange(showPreviews ? 'names' : 'row')
                 }}
               />
+              {previewReading === undefined ? null : (
+                <IconButton
+                  className="collection-bar-action"
+                  title={
+                    !previewsShown
+                      ? 'Read every preview: turn Previews on to read them'
+                      : previewReading.all
+                        ? 'Read every preview: those in view first, then the rest, two at a time. Click to read only the previews in view'
+                        : 'Read every preview: off. Only the previews in view, and those just beyond, are read. Click to read every preview, those in view first'
+                  }
+                  aria-label="Read every preview"
+                  aria-pressed={previewReading.all}
+                  disabled={!previewsShown}
+                  icon={<DownloadIcon />}
+                  onClick={() => {
+                    previewReading.onChange(!previewReading.all)
+                  }}
+                />
+              )}
               {stack === undefined ? null : (
                 <IconButton
                   className="collection-bar-action"

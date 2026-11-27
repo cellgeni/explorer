@@ -17,10 +17,9 @@ import {
 // The previews of a collection's datasets. Each dataset's cell positions are
 // read once; the scores for the selected genes, the classes of the selected
 // annotation set, or the values of the selected metadata track, are read
-// again when the selection changes. Only
-// datasets in view in the bar, and those shown side by side, are read, a few
-// at a time, the side by side ones first; none start while the main view
-// loads a dataset.
+// again when the selection changes. The datasets shown side by side are read
+// first, then those in view in the bar, then, while the bar shows previews,
+// the rest, a few at a time; none start while the main view loads a dataset.
 
 export interface PreviewEntry {
   readonly cells: PreviewCells | null
@@ -56,6 +55,9 @@ export interface OpenTrackValues {
 }
 
 export const PREVIEW_CONCURRENCY = 4
+// Reads of previews out of view leave the other slots to those that come
+// into view, and to the main view's reads.
+export const PREVIEW_BACKGROUND_CONCURRENCY = 2
 
 const EMPTY_ENTRY: PreviewEntry = {
   cells: null,
@@ -71,6 +73,7 @@ export class CollectionPreviewStore {
   private readonly urls: readonly string[]
   private readonly loaders: CollectionPreviewLoaders
   private readonly concurrency: number
+  private readonly backgroundConcurrency: number
   // The datasets are open in the main view: see openPreviewSource.
   private readonly open: boolean
   private readonly sources = new Map<string, Promise<PreviewSource>>()
@@ -81,6 +84,8 @@ export class CollectionPreviewStore {
   private readonly visible = new Set<string>()
   // Shown side by side with the main view, so read whether in the bar or not.
   private linked: readonly string[] = []
+  // Previews out of view are read too, after those in view.
+  private readAll = false
   private readonly listeners = new Set<() => void>()
   // Cell positions do not depend on the genes, so only stopping stops them.
   private lifetime = new AbortController()
@@ -119,11 +124,17 @@ export class CollectionPreviewStore {
   constructor(
     urls: readonly string[],
     loaders: CollectionPreviewLoaders,
-    options: { readonly concurrency?: number; readonly open?: boolean } = {},
+    options: {
+      readonly concurrency?: number
+      readonly backgroundConcurrency?: number
+      readonly open?: boolean
+    } = {},
   ) {
     this.urls = urls
     this.loaders = loaders
     this.concurrency = options.concurrency ?? PREVIEW_CONCURRENCY
+    this.backgroundConcurrency =
+      options.backgroundConcurrency ?? PREVIEW_BACKGROUND_CONCURRENCY
     this.open = options.open ?? false
   }
 
@@ -256,6 +267,13 @@ export class CollectionPreviewStore {
     this.pump()
   }
 
+  setReadAll(readAll: boolean): void {
+    if (readAll === this.readAll) return
+
+    this.readAll = readAll
+    this.pump()
+  }
+
   setPaused(paused: boolean): void {
     if (paused === this.paused) return
 
@@ -303,18 +321,29 @@ export class CollectionPreviewStore {
       : undefined
   }
 
+  private shown(url: string): boolean {
+    return this.visible.has(url) || this.linked.includes(url)
+  }
+
   private pump(): void {
     if (this.stopped || this.paused) return
 
-    for (const url of [...this.linked, ...this.urls]) {
+    const queue = [
+      ...this.linked,
+      ...this.urls.filter((url) => this.visible.has(url)),
+      ...(this.readAll ? this.urls.filter((url) => !this.shown(url)) : []),
+    ]
+    let background = [...this.running.keys()].filter((url) => !this.shown(url)).length
+
+    for (const url of queue) {
       if (this.running.size >= this.concurrency) return
-      if (
-        (this.visible.has(url) || this.linked.includes(url)) &&
-        !this.running.has(url) &&
-        this.needsWork(url)
-      ) {
-        void this.run(url)
+      if (this.running.has(url) || !this.needsWork(url)) continue
+      if (!this.shown(url)) {
+        // The rest of the queue is out of view too.
+        if (background >= this.backgroundConcurrency) return
+        background += 1
       }
+      void this.run(url)
     }
   }
 

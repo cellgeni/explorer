@@ -133,6 +133,8 @@ import {
   collectionSwitchOpening,
   collectionViewForLink,
   collectionViewFromLink,
+  readAllCollectionPreviews,
+  writeReadAllCollectionPreviews,
   type CollectionDatasetOpening,
   type CollectionView,
 } from './features/collection/collectionModel'
@@ -545,6 +547,10 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const [collectionPreviewSize, setCollectionPreviewSize] = useState(() =>
     collectionPreviewSizeFromLink(initialShareableState),
+  )
+  // Not in the link: see readAllCollectionPreviews.
+  const [collectionPreviewsReadAll, setCollectionPreviewsReadAll] = useState(() =>
+    readAllCollectionPreviews(),
   )
   // Sections of the collection shown beside the open dataset (compare=), each
   // linked to the main view or not (compareLink=), and the view the linked
@@ -6202,6 +6208,13 @@ export function App({ dependencies }: AppProps = {}) {
               previewSize={{
                 value: collectionPreviewSize,
                 onChange: setCollectionPreviewSize,
+              }}
+              previewReading={{
+                all: collectionPreviewsReadAll,
+                onChange: (all) => {
+                  setCollectionPreviewsReadAll(all)
+                  writeReadAllCollectionPreviews(all)
+                },
               }}
               previews={{
                 store: collectionPreviewStore,

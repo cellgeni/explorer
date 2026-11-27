@@ -225,6 +225,16 @@ export function CollapseIcon() {
   )
 }
 
+// An arrow into a tray, for reading every preview of a collection.
+export function DownloadIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M8 2.5v7.5M5 7l3 3 3-3" />
+      <path d="M2.5 10.5v3h11v-3" />
+    </svg>
+  )
+}
+
 export function ImageIcon() {
   return (
     <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">

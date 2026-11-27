@@ -130,7 +130,7 @@ afterEach(() => {
 })
 
 describe('CollectionPreviewStore', () => {
-  it('reads only previews in view, a few at a time, and not while paused', async () => {
+  it('reads previews in view, a few at a time, and not while paused', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore(URLS, fake.loaders, { concurrency: 2 })
     store.setPaused(true)
@@ -195,6 +195,44 @@ describe('CollectionPreviewStore', () => {
     store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
     await flush()
     expect(fake.expressions.map((call) => call.url)).toEqual([A])
+  })
+
+  it('reads the previews out of view after those in view, when asked', async () => {
+    const fake = fakeDatasets()
+    const D = 'https://example.test/d.zarr'
+    const E = 'https://example.test/e.zarr'
+    store = new CollectionPreviewStore([A, B, C, D, E], fake.loaders, {
+      concurrency: 4,
+      backgroundConcurrency: 2,
+    })
+    store.setVisible(D, true)
+    store.start()
+    await flush()
+    expect(fake.overviewCalls).toEqual([D])
+
+    // The rest in order, two at a time.
+    store.setReadAll(true)
+    await flush()
+    expect(fake.overviewCalls).toEqual([D, A, B])
+
+    // One that comes into view takes a slot they leave.
+    store.setVisible(E, true)
+    await flush()
+    expect(fake.overviewCalls).toEqual([D, A, B, E])
+
+    fake.finishOverview(A)
+    await flush()
+    expect(fake.overviewCalls).toEqual([D, A, B, E, C])
+
+    for (const url of [B, C, D, E]) fake.finishOverview(url)
+    await flush()
+    expect(store.entry(C).cells).not.toBeNull()
+
+    // No longer asked: new genes are read for those in view only.
+    store.setReadAll(false)
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(fake.expressions.map((call) => call.url)).toEqual([D, E])
   })
 
   it('reads the genes for each preview', async () => {

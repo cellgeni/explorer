@@ -62,6 +62,42 @@ export function collectionPreviewSizeForLink(size: number): number | undefined {
   return size === DEFAULT_COLLECTION_PREVIEW_SIZE ? undefined : size
 }
 
+// Whether the bar reads every preview, those in view first, or only those in
+// view (Read every preview). Kept in this browser rather than the link, since
+// it suits the connection, not the collection. Storage can be missing or
+// refuse, which only means the choice is not remembered.
+export const COLLECTION_PREVIEW_READING_KEY = 'explorer.collection.previewReading'
+
+function defaultStorage(): Storage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+// Every preview unless the viewer chose those in view only.
+export function readAllCollectionPreviews(
+  storage: Pick<Storage, 'getItem'> | null = defaultStorage(),
+): boolean {
+  try {
+    return storage?.getItem(COLLECTION_PREVIEW_READING_KEY) !== 'in-view'
+  } catch {
+    return true
+  }
+}
+
+export function writeReadAllCollectionPreviews(
+  readAll: boolean,
+  storage: Pick<Storage, 'setItem'> | null = defaultStorage(),
+): void {
+  try {
+    storage?.setItem(COLLECTION_PREVIEW_READING_KEY, readAll ? 'all' : 'in-view')
+  } catch {
+    // The choice lasts as long as the page.
+  }
+}
+
 // How a collection dataset opens: the state its load restores, like a shared
 // link's. Version 2, so the colour mode is taken as written.
 export interface CollectionDatasetOpening {
