@@ -34,6 +34,7 @@ import {
   AnnDataH5adDataset,
   type AnnDataObsAccess,
   type GeneReadNote,
+  type GeneSearchColumns,
   type H5adLoadProgressReporter,
 } from './h5adDataset'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
@@ -629,6 +630,30 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     options: { readonly signal?: AbortSignal } = {},
   ): Promise<ReadonlyMap<string, string>> {
     return (await this.tableOrNull())?.geneAliases(options) ?? new Map()
+  }
+
+  async geneSearchColumns(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<GeneSearchColumns> {
+    return (
+      (await this.tableOrNull())?.geneSearchColumns(options) ?? {
+        columns: [],
+        column: null,
+      }
+    )
+  }
+
+  async geneSearchAliases(
+    column: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ReadonlyMap<string, string>> {
+    const table = await this.tableOrNull()
+
+    if (table === null) {
+      throw new Error('The SpatialData store has no table to search.')
+    }
+
+    return table.geneSearchAliases(column, options)
   }
 
   async cells(

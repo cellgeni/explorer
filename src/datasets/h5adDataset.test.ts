@@ -1210,6 +1210,89 @@ describe('AnnDataH5adDataset', () => {
 
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh'])
     await expect(dataset.geneAliases()).resolves.toEqual(new Map())
+    await expect(dataset.geneSearchColumns()).resolves.toEqual({
+      columns: [],
+      column: null,
+    })
+  })
+
+  it('offers the var index and text columns to the gene search', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/cellxgene-columns.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', {
+          featureNames: TINY_FEATURE_NAMES,
+          extraVar: {
+            feature_biotype: {
+              data: ['protein_coding', 'protein_coding', 'lncRNA'],
+              encodingType: 'string-array',
+            },
+            feature_length: {
+              data: new Float32Array([1200, 2400, 900]),
+              encodingType: 'array',
+            },
+            // An older file's column, without an encoding.
+            source: { data: ['Ensembl', '', 'Gapdh'] },
+          },
+        }),
+      ),
+    })
+
+    // The name column is always searched, so it is not offered; the index is
+    // matched by default.
+    await expect(dataset.geneSearchColumns()).resolves.toEqual({
+      columns: [
+        { key: '_index', index: true },
+        { key: 'feature_biotype', index: false },
+        { key: 'source', index: false },
+      ],
+      column: '_index',
+    })
+    await expect(dataset.geneSearchAliases('_index')).resolves.toEqual(
+      await dataset.geneAliases(),
+    )
+    await expect(dataset.geneSearchAliases('feature_biotype')).resolves.toEqual(
+      new Map([
+        ['Actb', 'protein_coding'],
+        ['Gad1', 'protein_coding'],
+        ['Gapdh', 'lncRNA'],
+      ]),
+    )
+    // Empty values and values that repeat the name are left out.
+    await expect(dataset.geneSearchAliases('source')).resolves.toEqual(
+      new Map([['Actb', 'Ensembl']]),
+    )
+    await expect(dataset.geneSearchAliases('feature_length')).rejects.toThrow(
+      '/var/feature_length is not a text column of the gene table.',
+    )
+  })
+
+  it('offers var text columns when the index names the genes', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/index-columns.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', {
+          extraVar: {
+            ensembl: {
+              data: [...TINY_GENE_IDS],
+              encodingType: 'string-array',
+            },
+          },
+        }),
+      ),
+    })
+
+    await expect(dataset.geneSearchColumns()).resolves.toEqual({
+      columns: [{ key: 'ensembl', index: false }],
+      column: null,
+    })
+    await expect(dataset.geneSearchAliases('ensembl')).resolves.toEqual(
+      new Map([
+        ['Actb', 'ENSMUSG00000029580'],
+        ['Gad1', 'ENSMUSG00000070880'],
+        ['Gapdh', 'ENSMUSG00000057666'],
+      ]),
+    )
   })
 
   it.each<[string, () => Promise<typeof fetch>]>([
@@ -2781,6 +2864,14 @@ interface TinyH5adOptions {
   // Writes the var index as Ensembl IDs and gene symbols as a categorical
   // `feature_name`, the CELLxGENE layout.
   readonly featureNames?: CategoricalFeatureNames
+  // More var columns, one value per gene, with the encoding-type anndata
+  // writes when given (older files have none).
+  readonly extraVar?: Readonly<
+    Record<
+      string,
+      { readonly data: Float32Array | readonly string[]; readonly encodingType?: string }
+    >
+  >
   // Writes the obs and var indexes and extra obs columns as nullable arrays,
   // the anndata 0.13 layout under pandas 3.
   readonly nullableStrings?: boolean
@@ -2980,6 +3071,17 @@ async function createTinyH5ad(
       varGroup.create_dataset({ name: 'feature_name', data: codes })
       const varCategories = varGroup.create_group('__categories')
       varCategories.create_dataset({ name: 'feature_name', data: categories })
+    }
+  }
+
+  for (const [name, column] of Object.entries(options.extraVar ?? {})) {
+    const dataset = varGroup.create_dataset({
+      name,
+      data: column.data instanceof Float32Array ? column.data : [...column.data],
+    })
+
+    if (column.encodingType !== undefined) {
+      dataset.create_attribute('encoding-type', column.encodingType)
     }
   }
 

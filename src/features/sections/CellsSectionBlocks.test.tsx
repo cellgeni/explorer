@@ -1,7 +1,14 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
-import { genePanelLoadReady, type SavedGeneSet } from '../genes/geneControlsModel'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  genePanelLoadReady,
+  genePanelSearchColumnFailed,
+  genePanelSearchColumnStarted,
+  type GenePanelState,
+  type SavedGeneSet,
+} from '../genes/geneControlsModel'
+import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { testCellsSectionModel } from '../../test/sectionModels'
 import type { CellColourModel, GeneSelectionModel } from './cellsSectionModel'
 import { GeneExpressionControls, GenePicker } from './CellsSectionBlocks'
@@ -334,5 +341,85 @@ describe('Gene picker focus', () => {
     remove('MBP')
     expect(screen.queryByLabelText('Selected genes')).toBeNull()
     expect(screen.getByLabelText('Gene selection')).toHaveFocus()
+  })
+})
+
+describe('Also search', () => {
+  const url = 'https://example.test/cellxgene.h5ad'
+  const options = ['MYH7', 'TTN']
+  const ready = genePanelLoadReady(url, options, new Map([['MYH7', 'ENSG00000092054']]), {
+    columns: [
+      { key: '_index', index: true },
+      { key: 'feature_biotype', index: false },
+    ],
+    column: '_index',
+  })
+
+  function renderPicker(
+    panelState: GenePanelState<StructuredLoadError>,
+    onSearchColumnChange = vi.fn(),
+  ) {
+    const { genes } = testCellsSectionModel({
+      genes: { panelState, options, onSearchColumnChange },
+    })
+    return render(<GenePicker genes={genes} />)
+  }
+
+  it('lists the var columns and picks the one the search matches', () => {
+    const onSearchColumnChange = vi.fn()
+    renderPicker(ready, onSearchColumnChange)
+    const select = screen.getByLabelText('Also search')
+
+    expect(select).toHaveValue('_index')
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['None', 'Index', 'feature_biotype'])
+
+    fireEvent.change(screen.getByLabelText('Gene selection'), {
+      target: { value: 'ENSG00000092054' },
+    })
+    expect(screen.getByRole('button', { name: 'MYH7' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'TTN' })).toBeNull()
+
+    fireEvent.change(select, { target: { value: 'feature_biotype' } })
+    expect(onSearchColumnChange).toHaveBeenLastCalledWith('feature_biotype')
+    fireEvent.change(select, { target: { value: '' } })
+    expect(onSearchColumnChange).toHaveBeenLastCalledWith(null)
+  })
+
+  it('shows the column being read, then why it could not be', () => {
+    const pending = genePanelSearchColumnStarted(ready, url, 'feature_biotype')
+    const { rerender } = renderPicker(pending)
+
+    expect(screen.getByLabelText('Also search')).toHaveValue('feature_biotype')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Reading feature_biotype from the gene table',
+    )
+
+    const { genes } = testCellsSectionModel({
+      genes: {
+        panelState: genePanelSearchColumnFailed(
+          pending,
+          url,
+          'feature_biotype',
+          'Could not read feature_biotype: Failed to fetch',
+        ),
+        options,
+      },
+    })
+    rerender(<GenePicker genes={genes} />)
+
+    expect(screen.getByLabelText('Also search')).toHaveValue('_index')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Could not read feature_biotype: Failed to fetch',
+    )
+  })
+
+  it('is left out for a gene panel without var columns', () => {
+    renderPicker(genePanelLoadReady(url, options))
+
+    expect(screen.queryByLabelText('Also search')).toBeNull()
   })
 })

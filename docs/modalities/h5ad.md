@@ -199,6 +199,16 @@ metadata, and the snapshot serves the same purpose.
   `Gene selection` search and `Gene set symbols` match aliases too, and the
   gene list tooltip shows it (`MYH7 (ENSG00000092054)`). Selected genes,
   shared links, and manifest `defaults.genes` use the listed names only.
+- **Gene search columns** (`geneSearchColumns`, `geneSearchAliases`): the
+  `Also search` picker under `Gene selection` swaps the alias for another
+  var column, or for none. It offers the index (when a column names the
+  genes) and every var column that holds text, from metadata alone:
+  categorical groups, `nullable-string-array` groups, datasets encoded
+  `string-array` or with a legacy `__categories` sidecar, and, in files
+  without encodings, any 1-D dataset but a Zarr number array. The name
+  column is always searched, so it is not offered. A picked column is read
+  whole when picked; the search keeps the last one until then, and a failed
+  read leaves it and says why. The choice resets when a dataset opens.
 
 ### `obs` Columns
 

@@ -13,15 +13,24 @@ import {
 } from '../../rendering/cellPointStyle'
 import { opacityToPercent } from '../../rendering/layerOpacity'
 import { nthOrLast, useKeepFocus } from '../../components/ui/useKeepFocus'
-import { Button, Chip, InfoTip, NumberField, Segmented } from '../../components/ui'
+import {
+  Button,
+  Chip,
+  InfoTip,
+  NumberField,
+  Segmented,
+  Select,
+} from '../../components/ui'
 import { COMBINE_GENES_HELP, EXPRESSION_DETAIL_HELP } from '../shell/helpText'
 import { isObservationColorMode } from '../app-shell/appShellModel'
 import { GeneOptionList } from '../genes/GeneOptionList'
 import {
   formatGeneScaleValue,
+  geneSearchColumnLabel,
   geneSearchEmptyMessage,
   isGeneExpressionDetailMode,
   roundGeneScaleValue,
+  type GeneSearchColumnState,
 } from '../genes/geneControlsModel'
 import {
   AUTO_GENE_SCALE_PERCENTILE,
@@ -201,6 +210,54 @@ export function CellViewControl({
   )
 }
 
+// The var column the gene search, and typed symbols, match besides the gene
+// names, for an AnnData table with text columns.
+function GeneSearchColumnSelect({
+  search,
+  onChange,
+}: {
+  readonly search: GeneSearchColumnState
+  readonly onChange: (column: string | null) => void
+}) {
+  const note =
+    search.pending === undefined
+      ? (search.error ?? null)
+      : `Reading ${search.pending} from the gene table`
+
+  return (
+    <>
+      <Select<string>
+        className="ui-field--inline"
+        label="Also search"
+        title="A gene table (var) column the search matches besides the gene names"
+        value={search.pending ?? search.column ?? ''}
+        options={[
+          { value: '', label: 'None' },
+          ...search.columns.map((column) => ({
+            value: column.key,
+            label: geneSearchColumnLabel(column),
+          })),
+        ]}
+        onChange={(value) => {
+          onChange(value === '' ? null : value)
+        }}
+      />
+      {note === null ? null : (
+        <p
+          className={
+            search.error === undefined || search.pending !== undefined
+              ? 'gene-search-column-note'
+              : 'gene-set-symbols-notice'
+          }
+          role="status"
+        >
+          {note}
+        </p>
+      )}
+    </>
+  )
+}
+
 // Gene search, the selected-gene chips, typed symbols and saved gene sets.
 export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
   const searchInputId = useId()
@@ -257,6 +314,13 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
           setGeneSearch(event.currentTarget.value)
         }}
       />
+      {genes.panelState.status !== 'ready' ||
+      genes.panelState.search === undefined ? null : (
+        <GeneSearchColumnSelect
+          search={genes.panelState.search}
+          onChange={genes.onSearchColumnChange}
+        />
+      )}
 
       {selectedGenes.length === 0 ? null : (
         <div

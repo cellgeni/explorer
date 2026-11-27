@@ -213,7 +213,11 @@ import {
 } from '../../datasets/datasetReader'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import { DatasetIsCollectionError } from '../../datasets/datasetManifest'
-import type { AnnDataVisiumSummary, GeneReadNote } from '../../datasets/h5adDataset'
+import type {
+  AnnDataVisiumSummary,
+  GeneReadNote,
+  GeneSearchColumns,
+} from '../../datasets/h5adDataset'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import { MERSCOPE_BOUNDARIES_AUTOLOAD_MAX_BYTES } from '../../datasets/merscopeFormat'
@@ -283,6 +287,7 @@ interface H5adLifecycleDataset {
   overview(options?: LoadReadOptions): Promise<readonly CellOverviewPoint[]>
   genePanel(options?: LoadReadOptions): Promise<readonly string[]>
   geneAliases?(options?: LoadReadOptions): Promise<ReadonlyMap<string, string>>
+  geneSearchColumns?(options?: LoadReadOptions): Promise<GeneSearchColumns>
   annotationGroups(options?: LoadReadOptions): Promise<readonly AnnotationGroupOption[]>
   embeddingOptions(options?: LoadReadOptions): Promise<readonly AnalysisEmbeddingOption[]>
   metadataTracks(
@@ -1522,6 +1527,7 @@ export function useDatasetLifecycle({
             cells,
             genes,
             geneAliases,
+            geneSearchColumns,
             annotationGroups,
             embeddingOptions,
             metadataTracks,
@@ -1530,6 +1536,7 @@ export function useDatasetLifecycle({
             annDataset.overview({ signal }),
             annDataset.genePanel({ signal }),
             annDataset.geneAliases?.({ signal }),
+            annDataset.geneSearchColumns?.({ signal }),
             annDataset.annotationGroups({ signal }),
             annDataset.embeddingOptions({ signal }),
             annDataset.metadataTracks({ signal }),
@@ -1545,7 +1552,9 @@ export function useDatasetLifecycle({
           const elementNoun = label === 'Visium' ? 'spots' : 'cells'
           commit()
           setOverviewCells(overviewCellsToLayerData(cells))
-          setGenePanelState(genePanelLoadReady(requestedUrl, genes, geneAliases))
+          setGenePanelState(
+            genePanelLoadReady(requestedUrl, genes, geneAliases, geneSearchColumns),
+          )
           setAnnotationGroupState(
             annotationGroupLoadReady(requestedUrl, annotationGroups),
           )

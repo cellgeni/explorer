@@ -35,6 +35,10 @@ import { useAteraImageWorkflow } from './features/app-shell/useAteraImageWorkflo
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import {
+  useGeneSearchColumn,
+  type GeneSearchAliasesLoader,
+} from './features/genes/useGeneSearchColumn'
+import {
   useVisiumHdExpressionProjectionWorkflow,
   type VisiumHdExpressionProjectionState,
 } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
@@ -2494,6 +2498,24 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [getSpatialDataset],
   )
+  const loadActiveGeneSearchAliases = useCallback<GeneSearchAliasesLoader>(
+    async (baseUrl, column, options = {}) => {
+      const dataset = await getSpatialDataset(baseUrl)
+
+      if (!isH5adGeneSearchDataset(dataset)) {
+        throw new Error('Loaded dataset does not expose its gene table columns.')
+      }
+
+      return dataset.geneSearchAliases(column, options)
+    },
+    [getSpatialDataset],
+  )
+  const setGeneSearchColumn = useGeneSearchColumn({
+    appendDebugEvent,
+    genePanelState,
+    loadGeneSearchAliases: loadActiveGeneSearchAliases,
+    setGenePanelState,
+  })
   const loadActiveAnalysisEmbeddings = useCallback<AnalysisEmbeddingsLoader>(
     async (...args) => {
       const [baseUrl, options = {}] = args
@@ -5259,6 +5281,7 @@ export function App({ dependencies }: AppProps = {}) {
     setGeneExpressionScaleDomain,
     setGeneExpressionScaleRange,
     setGeneExpressionScoreMode,
+    setGeneSearchColumn,
     setManualTranscriptExactRequestKey,
     setObservationColorMode,
     setSavedGeneSets,
@@ -6385,6 +6408,13 @@ interface H5adMetadataTrackDataset {
   ): Promise<readonly ContinuousCellMetadataValue[]>
 }
 
+interface H5adGeneSearchDataset {
+  geneSearchAliases(
+    column: string,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<ReadonlyMap<string, string>>
+}
+
 function isH5adRoiDataset(dataset: unknown): dataset is H5adRoiDataset {
   return hasFunction(dataset, 'cells')
 }
@@ -6405,6 +6435,10 @@ function isH5adMetadataTrackDataset(
   dataset: unknown,
 ): dataset is H5adMetadataTrackDataset {
   return hasFunction(dataset, 'metadataTrackValues')
+}
+
+function isH5adGeneSearchDataset(dataset: unknown): dataset is H5adGeneSearchDataset {
+  return hasFunction(dataset, 'geneSearchAliases')
 }
 
 function hasFunction<T extends string>(
