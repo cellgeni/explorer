@@ -55,10 +55,12 @@ loading uses the barcode-sidecar path without a UI budget field.
 The barcode reader streams `barcodes.tsv.gz` (since 2026-11-17): each line is
 parsed into columns as it arrives, so neither the file nor its 75 MB of text
 on the reference is held whole, and a barcode budget stops the download once
-it is passed. The parse, about 0.6 s for 3.4 million lines, runs between
-network reads rather than in one task. A viewport-scoped read is not
-possible: the file is gzipped text, and the filtered matrix's barcodes are
-not in spatial order.
+it is passed. Since 2026-11-27 it runs in a worker
+(`src/datasets/visiumHdTablesWorker.ts`), as the coarser tiers'
+`tissue_positions.parquet` reads do: the parse, about 0.6 s for 3.7 million
+lines, is off the main thread, which takes about 60 ms to receive the barcode
+strings. A viewport-scoped read is not possible: the file is gzipped text, and
+the filtered matrix's barcodes are not in spatial order.
 
 ## Barcode Mapping Bridge
 
@@ -71,17 +73,21 @@ profiles use an on-demand DuckDB-WASM query for one `cell_id`, projecting only
 
 First paint does not touch `barcode_mappings.parquet`. Selecting a bin (cell
 assignment in the Bin card) and projecting expression onto cell boundaries read
-it with hyparquet, but only the row groups that can hold the requested bins.
+it with hyparquet, but only the row groups that can hold the requested bins,
+and nothing reads the whole file.
 Space Ranger sorts the file by 2 µm barcode, so row groups whose `square_002um`,
 `square_008um` or `square_016um` min/max statistics rule out every bin are
 skipped. On the reference (1,123 row groups of 10,000 rows) one 16 µm bin is
 about 300 KB in one range request. The file's size and footer (704 KB) are read
 once per dataset. The app passes no row budget; a budget caps the rows in the
-row groups read.
+row groups read. The row groups are read in a worker, as columns, and only
+the requested bins' rows are made into objects; the footer, parsed on the
+main thread, is passed to it.
 
 hyparquet reads each column chunk with its own range request and starts them
-all at once. A whole-file read sent 6,738, and Chromium failed them with
-`net::ERR_INSUFFICIENT_RESOURCES`, taking other reads in flight with them.
+all at once. A whole-file read, since removed, sent 6,738, and Chromium
+failed them with `net::ERR_INSUFFICIENT_RESOURCES`, taking other reads in
+flight with them.
 The reader's URL buffer (`coalescingAsyncBuffer`, `src/data/`) merges the
 slices asked for together into ranges of up to 8 MiB and keeps at most four
 requests in flight.

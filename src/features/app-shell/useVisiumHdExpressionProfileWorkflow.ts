@@ -48,7 +48,6 @@ interface UseVisiumHdExpressionProfileWorkflowCallbacks {
 interface UseVisiumHdExpressionProfileWorkflowControls {
   readonly activeBinSize: VisiumHdBinSizeMicrometers | undefined
   readonly isVisiumHdDataset: boolean
-  readonly rowBudget?: number | undefined
 }
 
 interface UseVisiumHdExpressionProfileWorkflowData {
@@ -88,7 +87,7 @@ interface UseVisiumHdExpressionProfileWorkflowResult {
 
 export function useVisiumHdExpressionProfileWorkflow({
   callbacks: { appendDebugEvent },
-  controls: { activeBinSize, isVisiumHdDataset, rowBudget },
+  controls: { activeBinSize, isVisiumHdDataset },
   data: { activeSelection, loadState, selectedGridCell },
   loaders: { getSpatialDataset },
   refs: { abortRef, requestIdRef },
@@ -138,7 +137,6 @@ export function useVisiumHdExpressionProfileWorkflow({
       binSize,
       datasetUrl: readyDatasetUrl,
       getSpatialDataset,
-      rowBudget,
       selection,
       signal: request.signal,
     })
@@ -179,7 +177,6 @@ export function useVisiumHdExpressionProfileWorkflow({
     isVisiumHdDataset,
     readyDatasetUrl,
     requestIdRef,
-    rowBudget,
     selectedGridCell,
     setExpressionProfileState,
   ])
@@ -222,14 +219,12 @@ async function loadVisiumHdExpressionProfile({
   binSize,
   datasetUrl,
   getSpatialDataset,
-  rowBudget,
   selection,
   signal,
 }: {
   readonly binSize: VisiumHdBinSizeMicrometers
   readonly datasetUrl: string
   readonly getSpatialDataset: SpatialDatasetLoader
-  readonly rowBudget?: number | undefined
   readonly selection: CellExpressionProfileSelection
   readonly signal: AbortSignal
 }) {
@@ -250,12 +245,7 @@ async function loadVisiumHdExpressionProfile({
     }
   }
 
-  const mappings = await selectedVisiumHdCellMappings(
-    dataset,
-    selection.id,
-    rowBudget,
-    signal,
-  )
+  const mappings = await selectedVisiumHdCellMappings(dataset, selection.id, signal)
   const mappedBinIds = selectedVisiumHdCellMappedBinIds(mappings, selection.id, binSize)
 
   if (mappedBinIds.length === 0) {

@@ -1689,7 +1689,6 @@ export function App({ dependencies }: AppProps = {}) {
       controls: {
         activeBinSize: activeVisiumHdBinSize,
         isVisiumHdDataset,
-        rowBudget: visiumHdBarcodeMappingRowBudget,
       },
       data: {
         activeSelection: activeVisiumHdExpressionProfileSelection,

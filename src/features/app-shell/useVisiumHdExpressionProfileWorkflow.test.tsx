@@ -89,7 +89,6 @@ function Probe({
     controls: {
       activeBinSize: undefined,
       isVisiumHdDataset,
-      rowBudget: 50,
     },
     data: {
       activeSelection,

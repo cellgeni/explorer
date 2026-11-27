@@ -369,11 +369,13 @@ M3, main thread:
   - Measure S6, and the 460-plex zip through the mirror (S9).
   - Built in [#480](https://github.com/cellgeni/explorer/pull/480):
     [AnnData Tables Read In Place](#anndata-tables-read-in-place-2026-11-27).
-- [ ] **O16. Visium HD positions and barcode mappings in a worker.** (M) As
+- [x] **O16. Visium HD positions and barcode mappings in a worker.** (M) As
       for the Xenium overview: columns from a worker, not one object per
       row. Remove the whole-file mapping read nothing calls
       (`visiumHdBarcodeMappings.ts:124-150`). Look at the 2 µm
       `barcodes.tsv.gz` parse (`visiumHdBarcodes.ts:38-145`) too.
+  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+    [Visium HD Tables Read In A Worker](#visium-hd-tables-read-in-a-worker-2026-11-27).
 - [ ] **O17. A gene's CSR scan off the main thread.** (M) For an H5AD read
       by the H5 worker, use its `matrix-cells` request
       (`h5FileMessages.ts:110`) rather than reading the matrix into the
@@ -1786,6 +1788,72 @@ equal the per-cell path's. `src/datasets/h5adObsColumns.test.ts` checks the
 distinct-value counts around 16 values and the 10,000 limit, and that
 number columns, 64-bit integers included, keep their values as typed
 arrays.
+
+## Visium HD Tables Read In A Worker (2026-11-27)
+
+Task O16. To measure at the reference run's size without hosted data,
+`scripts/make_scale_data.py --what visium-hd` now writes a Space Ranger 4
+folder: 3,740,816 bins under tissue at 2 µm, 233,814 at 8 µm and 58,453 at
+16 µm, with a 91 MB `barcode_mappings.parquet` (see
+[Profiling](../../profiling.md#synthetic-data-at-scale)). CPU profiles of
+the base of this task's PR put three long tasks on the main thread:
+
+- **The load** decoded each tier's `tissue_positions.parquet` (700,569 rows
+  at 8 µm) into one object per row with hyparquet: one stretch of 0.4–0.7 s,
+  most of it in hyparquet's string decoding.
+- **A bin's card** (Enter on the view) read the bin's row groups of
+  `barcode_mappings.parquet` as objects and kept the bin's rows: one
+  stretch of 0.67–0.81 s.
+- **Zooming to the 2 µm bins** parsed the 3.7 million lines of
+  `barcodes.tsv.gz`: one stretch of about 1 s, 0.56 s of it the parse.
+
+What changed:
+
+- **A worker reads the three tables** (`src/datasets/visiumHdTablesWorker.ts`,
+  `src/workers/visiumHdTables.worker.ts`). It fetches and decodes the file,
+  and sends back the positions' columns and the barcodes' rows and columns
+  as transferred typed arrays, with their barcode strings. As with the other
+  table workers, a read stays on the main thread when its caller passes a
+  fetcher, a file, a row reader, compressors or a byte-range cache, where
+  there is no `Worker`, and when the worker fails to start.
+- **The positions are read as columns** (`readParquetColumns`, moved to
+  `src/data/parquetColumns.ts` from the Xenium cells reader), not one object
+  per row, on either thread.
+- **A bin read gets the file's footer on the main thread**, once per
+  dataset as before, and passes it to the worker with the row ranges to
+  read. The worker reads those rows as columns and makes objects of the
+  bin's rows only.
+- **The whole-file mapping read is gone**, with the dataset method and the
+  row budget control that led to it; `readVisiumHdBarcodeMappings` now
+  requires the bins.
+
+Measured with unminified production builds of the base (#480) and the
+branch, alternating, three runs each, with GPU drawing, on the synthetic
+folder served locally: the load, then the 2 µm button and seven zoom steps
+(the seventh draws the 2 µm bins); and the load, then Enter.
+
+| Step                      | Base: busy     | Branch: busy | Base: longest  | Branch: longest | Base: page | Branch: page |
+| ------------------------- | -------------- | ------------ | -------------- | --------------- | ---------- | ------------ |
+| Load                      | 850–944 ms     | 325–388 ms   | 405–710 ms     | 150–156 ms      | 46–51 MB   | 96–97 MB     |
+| Bin card (Enter)          | 759–911 ms     | 85–149 ms    | 670–812 ms     | under 50 ms     | 193–205 MB | 104–105 MB   |
+| Zoom step that draws 2 µm | 1,059–1,099 ms | 396–421 ms   | 1,009–1,040 ms | 332–340 ms      | 485–521 MB | 336–340 MB   |
+
+- **The load** is ready in 0.35–0.39 s rather than 0.66–0.87 s. The page
+  holds more just after it only until the next collection: 47–49 MB by the
+  fifth zoom step, against 52–75 MB on the base.
+- **The 2 µm step** still has a stretch of 0.33–0.34 s: receiving the 3.7
+  million barcode strings (57 ms), making the overview (37 ms), and the
+  view's tile index of the bins (`gridCellTileIndex`, about 100 ms) with
+  garbage collection. The tile index is not this task's.
+- **The same requests** on both builds: 53 (5.6 MB) for the load, 9
+  (14.2 MB) for the card, and 2 (9.2 MB) for the 2 µm barcodes.
+
+Tests: `src/datasets/visiumHdTablesWorker.test.ts` runs the worker's
+handler across a structured clone against fixtures in
+`src/test/fixtures/visium-hd/` (a `tissue_positions.parquet` in three row
+groups was added): the worker's positions, bin mappings and barcodes match
+the main thread's, typed arrays are transferred, errors keep their names,
+and reads with a fetcher or byte-range cache stay on the main thread.
 
 ## Closed Open Items
 

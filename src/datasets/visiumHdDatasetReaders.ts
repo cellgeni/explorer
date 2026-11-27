@@ -82,6 +82,7 @@ import type {
   VisiumHdGeneExpressionQueryOptions,
   VisiumHdImageOptions,
 } from './visiumHdDataset'
+import { visiumHdTablesInWorker } from './visiumHdTablesWorker'
 import { normalizeGeneList } from './xeniumDatasetRows'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import { throwIfAborted } from '../utils/abort'
@@ -164,13 +165,6 @@ export interface VisiumHdDatasetReaderControllerOptions {
 
 export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
 
-const readVisiumHdTissuePositionsLazy = async (
-  options: ReadVisiumHdTissuePositionsOptions,
-): Promise<VisiumHdTissuePositions> => {
-  const { readVisiumHdTissuePositions } = await import('./visiumHdOverview')
-  return readVisiumHdTissuePositions(options)
-}
-
 const readVisiumHdScalefactorsLazy = async (
   url: string,
   options: ReadVisiumHdScalefactorsOptions,
@@ -193,15 +187,6 @@ const readVisiumHdBinnedOverviewLazy = async (
 ): Promise<VisiumHdBinnedOverview> => {
   const { readVisiumHdBinnedOverview } = await import('./visiumHdOverview')
   return readVisiumHdBinnedOverview(options)
-}
-
-const readVisiumHdFilteredMatrixBarcodesLazy = async (
-  baseUrl: string,
-  bin: VisiumHdBinDescriptor,
-  options: ReadVisiumHdFilteredMatrixBarcodesOptions,
-): Promise<VisiumHdSquareBarcodeColumns> => {
-  const { readVisiumHdFilteredMatrixBarcodes } = await import('./visiumHdBarcodes')
-  return readVisiumHdFilteredMatrixBarcodes(baseUrl, bin, options)
 }
 
 const readVisiumHdBarcodeMappingsLazy = async (
@@ -270,6 +255,9 @@ export class VisiumHdDatasetReaderController {
   readonly maxTwoMicrometerFilteredBarcodes: number | undefined
   private readonly defaultBinSizeMicrometers: VisiumHdBinSizeMicrometers
   private readonly fetcher: typeof fetch
+  // The fetcher the caller gave. Without one, the tables are read in a
+  // worker, which fetches with its own fetch (visiumHdTablesWorker.ts).
+  private readonly callerFetcher: typeof fetch | undefined
   private readonly tissuePositionsReader: VisiumHdTissuePositionsReader
   private readonly scalefactorsReader: VisiumHdScalefactorsReader
   private readonly featureGenePanelReader: VisiumHdFeatureGenePanelReader
@@ -311,12 +299,6 @@ export class VisiumHdDatasetReaderController {
     VisiumHdBinSizeMicrometers,
     Promise<VisiumHdSquareBarcodeColumns>
   >()
-  // Barcode-mapping reads are shared by callers with their own signals (see
-  // waitForSharedLoad), so a bin selection's cancel does not drop the cache.
-  private readonly barcodeMappingLoads = new Map<
-    number,
-    SharedLoad<readonly VisiumHdBarcodeMapping[]>
-  >()
   private readonly barcodeMappingCellLoads = new Map<
     SpatialElementId,
     SharedLoad<readonly VisiumHdBarcodeMapping[]>
@@ -346,13 +328,14 @@ export class VisiumHdDatasetReaderController {
     this.defaultBinSizeMicrometers =
       options.defaultBinSizeMicrometers ?? preferredDefaultBinSize(options.bins)
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+    this.callerFetcher = options.fetcher
     this.tissuePositionsReader =
-      options.tissuePositionsReader ?? readVisiumHdTissuePositionsLazy
+      options.tissuePositionsReader ?? visiumHdTablesInWorker.tissuePositions
     this.scalefactorsReader = options.scalefactorsReader ?? readVisiumHdScalefactorsLazy
     this.featureGenePanelReader =
       options.featureGenePanelReader ?? readVisiumHdFeatureGenePanelLazy
     this.filteredMatrixBarcodeReader =
-      options.filteredMatrixBarcodeReader ?? readVisiumHdFilteredMatrixBarcodesLazy
+      options.filteredMatrixBarcodeReader ?? visiumHdTablesInWorker.filteredMatrixBarcodes
     this.barcodeMappingsReader =
       options.barcodeMappingsReader ?? readVisiumHdBarcodeMappingsLazy
     this.barcodeMappingsForCellReader =
@@ -540,7 +523,7 @@ export class VisiumHdDatasetReaderController {
 
     const bin = findBin(this.bins, binSizeMicrometers)
     const promise = this.filteredMatrixBarcodeReader(this.baseUrl, bin, {
-      fetcher: this.fetcher,
+      ...this.callerFetcherOption(),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     }).catch((error: unknown) => {
       if (this.filteredMatrixBarcodePromises.get(binSizeMicrometers) === promise) {
@@ -555,27 +538,6 @@ export class VisiumHdDatasetReaderController {
     }
 
     return promise
-  }
-
-  barcodeMappings(
-    options: VisiumHdBarcodeMappingQueryOptions,
-  ): Promise<readonly VisiumHdBarcodeMapping[]> {
-    const maxRows =
-      options.maxRows === undefined
-        ? undefined
-        : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
-
-    return waitForSharedLoad(
-      this.barcodeMappingLoads,
-      maxRows ?? Number.POSITIVE_INFINITY,
-      (signal) =>
-        this.barcodeMappingsReader(this.baseUrl, {
-          ...(maxRows === undefined ? {} : { maxRows }),
-          ...this.barcodeMappingReadOptions(),
-          signal,
-        }),
-      options.signal,
-    )
   }
 
   barcodeMappingsForCell(
@@ -623,9 +585,10 @@ export class VisiumHdDatasetReaderController {
     )
   }
 
-  private barcodeMappingReadOptions(): ReadVisiumHdBarcodeMappingsOptions {
+  private barcodeMappingReadOptions(): Omit<ReadVisiumHdBarcodeMappingsOptions, 'bins'> {
     return {
-      fetcher: this.fetcher,
+      ...this.callerFetcherOption(),
+      readRangesInWorker: visiumHdTablesInWorker.barcodeMappingRanges,
       ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
       ...(this.loadCompressors === undefined
         ? {}
@@ -634,6 +597,10 @@ export class VisiumHdDatasetReaderController {
         ? {}
         : { byteRangeCache: this.byteRangeCache }),
     }
+  }
+
+  private callerFetcherOption(): { readonly fetcher?: typeof fetch } {
+    return this.callerFetcher === undefined ? {} : { fetcher: this.callerFetcher }
   }
 
   async segmentationElements(
@@ -786,7 +753,7 @@ export class VisiumHdDatasetReaderController {
       baseUrl: this.baseUrl,
       bin,
       ...(basis === undefined ? {} : { basis }),
-      fetcher: this.fetcher,
+      ...this.callerFetcherOption(),
       tissuePositionsReader: this.tissuePositionsReader,
       scalefactorsReader: this.scalefactorsReader,
       ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
@@ -814,7 +781,7 @@ export class VisiumHdDatasetReaderController {
         signal,
       }),
       this.filteredMatrixBarcodeReader(this.baseUrl, bin, {
-        fetcher: this.fetcher,
+        ...this.callerFetcherOption(),
         ...(this.maxTwoMicrometerFilteredBarcodes === undefined
           ? {}
           : { maxBarcodeCount: this.maxTwoMicrometerFilteredBarcodes }),

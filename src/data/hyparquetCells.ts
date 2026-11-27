@@ -1,9 +1,4 @@
-import {
-  asyncBufferFromUrl,
-  parquetMetadataAsync,
-  parquetRead,
-  parquetSchema,
-} from 'hyparquet'
+import { asyncBufferFromUrl } from 'hyparquet'
 import type { CellMetadata } from './cellMetadata'
 import { asCellId } from './cellid'
 import { micrometers } from './coords'
@@ -14,6 +9,7 @@ import {
 } from './persistentByteRangeCache'
 import { rangeReadsWithoutHttpCache } from './rangeFetch'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
+import { readParquetColumns } from './parquetColumns'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { CellId } from './cellid'
 import type { DataPoint } from './coords'
@@ -122,7 +118,7 @@ export async function readCellsOverviewColumns(
   options: ReadCellsOverviewColumnsOptions,
 ): Promise<CellsOverviewColumns> {
   const file = options.file ?? (await fileFromUrl(options))
-  const readColumns = options.readColumns ?? readHyparquetColumns
+  const readColumns = options.readColumns ?? readParquetColumns
   const compressors =
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
   const columns: readonly string[] =
@@ -215,78 +211,6 @@ async function fileFromUrl(
     fetcher: fetcher.fetch,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   }) as AsyncBuffer
-}
-
-// Decodes column chunks as they are, without building an object per row.
-async function readHyparquetColumns(
-  options: HyparquetReadColumnsOptions,
-): Promise<Readonly<Record<string, ArrayLike<unknown>>>> {
-  const metadata = await parquetMetadataAsync(options.file)
-  const fileColumns = new Set(
-    parquetSchema(metadata).children.map((child) => child.element.name),
-  )
-  const columns = options.columns.filter((column) => fileColumns.has(column))
-  // Counted from the row groups, which hyparquet reads: some writers put a
-  // wrong total in the footer (fastparquet 1.0.0, in a Xenium XOA 1.0.1 run).
-  const fileRows = metadata.row_groups.reduce(
-    (sum, group) => sum + Number(group.num_rows),
-    0,
-  )
-  const rowCount = Math.min(fileRows, options.rowEnd ?? Infinity)
-  const chunks = new Map<string, ColumnChunk[]>(columns.map((column) => [column, []]))
-
-  await parquetRead({
-    file: options.file,
-    metadata,
-    columns,
-    ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
-    ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
-    onChunk: ({ columnName, columnData, rowStart }) => {
-      chunks.get(columnName)?.push({ rowStart, values: columnData })
-    },
-  })
-
-  return Object.fromEntries(
-    columns.map((column) => [
-      column,
-      joinColumnChunks(chunks.get(column) ?? [], rowCount),
-    ]),
-  )
-}
-
-interface ColumnChunk {
-  readonly rowStart: number
-  readonly values: ArrayLike<unknown>
-}
-
-// Chunks arrive in any order and hold whole pages, so rows from `rowCount` on
-// are dropped.
-function joinColumnChunks(
-  chunks: readonly ColumnChunk[],
-  rowCount: number,
-): ArrayLike<unknown> {
-  const [first] = chunks
-
-  if (
-    chunks.length === 1 &&
-    first !== undefined &&
-    first.rowStart === 0 &&
-    first.values.length === rowCount
-  ) {
-    return first.values
-  }
-
-  const values = new Array<unknown>(rowCount)
-
-  for (const { rowStart, values: chunkValues } of chunks) {
-    const end = Math.min(chunkValues.length, rowCount - rowStart)
-
-    for (let index = 0; index < end; index += 1) {
-      values[rowStart + index] = chunkValues[index]
-    }
-  }
-
-  return values
 }
 
 // Checks every value, as `parseCellOverviewRow` does for a row.
