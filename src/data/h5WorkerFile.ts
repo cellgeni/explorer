@@ -6,6 +6,7 @@ import type { GexResult } from './gexTypes'
 import type { H5StructureWalk, H5ValuePreview } from './h5StructureTypes'
 import type { VisiumFeatureSliceMetadata } from './visiumFeatureSliceH5'
 import type {
+  H5FileCsrPaths,
   H5FileFeatureSliceTarget,
   H5FileRangeStats,
   H5FileSlice,
@@ -76,6 +77,24 @@ export interface H5WorkerFile {
   ): Promise<GexResult<ElementId>>
   // A Visium HD feature_slice.h5's metadata, without its feature names.
   featureSliceMetadata(signal?: AbortSignal): Promise<VisiumFeatureSliceMetadata>
+  // Keeps a CSR matrix's arrays in the worker (see `H5FileCsrKeepRequest`).
+  keepCsr(paths: H5FileCsrPaths, signal?: AbortSignal): Promise<void>
+  // Each row's values of `cols` added up, from a kept matrix. `rows` is
+  // transferred.
+  csrRowSums(
+    data: string,
+    rows: Int32Array,
+    cols: readonly number[],
+    matrixCols: number,
+    signal?: AbortSignal,
+  ): Promise<Float64Array>
+  // Each of `cols`' stored values other than 0, by row, from a kept matrix.
+  csrGeneValues(
+    data: string,
+    cols: readonly number[],
+    matrixCols: number,
+    signal?: AbortSignal,
+  ): Promise<readonly { readonly rows: Uint32Array; readonly values: Float32Array }[]>
   // The root's tree with just these paths below it, each whole, for groups
   // the open's tree left out.
   readTree(paths: readonly string[], signal?: AbortSignal): Promise<H5TreeGroup>
@@ -284,6 +303,45 @@ function createH5WorkerFile(
       }
 
       return response.metadata
+    },
+    async keepCsr(paths, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'csr-keep', paths }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'csr-keep') {
+        throw new Error('The H5 file worker answered a CSR keep with another reply.')
+      }
+    },
+    async csrRowSums(data, rows, cols, matrixCols, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'csr-row-sums', data, rows, cols: [...cols], matrixCols }),
+        [rows.buffer],
+        signal,
+      )
+
+      if (response.op !== 'csr-row-sums') {
+        throw new Error('The H5 file worker answered a CSR row sum with another reply.')
+      }
+
+      return response.sums
+    },
+    async csrGeneValues(data, cols, matrixCols, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'csr-gene-values', data, cols: [...cols], matrixCols }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'csr-gene-values') {
+        throw new Error(
+          'The H5 file worker answered a CSR gene value read with another reply.',
+        )
+      }
+
+      return response.columns
     },
     async readTree(paths, signal) {
       const response = await connection.request(

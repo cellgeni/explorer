@@ -35,6 +35,9 @@ import {
   type H5TreeNode,
 } from './h5FileMessages'
 import { fetchWithRetry } from '../data/fetchRetry'
+import { CsrRowSums, sumCsrRows, type CsrArrays } from '../data/csrRowSums'
+import { geneValuesFromCsr } from '../data/geneValues'
+import { isNumericTypedArray, type NumericTypedArray } from '../data/numericArray'
 
 // The H5 file worker's handler. It also runs on the main thread where there is
 // no Worker (Vitest's jsdom), through `createInProcessH5FileWorker`.
@@ -96,6 +99,10 @@ export function createH5FileHandler(
   let open: OpenH5File | null = null
   let matrixReader: MatrixReader | null = null
   let featureSlice: VisiumFeatureSliceCache | null = null
+  // CSR matrices kept whole (`csr-keep`), by data path, and their arrays by
+  // path for reads.
+  const keptCsr = new Map<string, CsrArrays & { readonly rows: number }>()
+  const keptArrays = new Map<string, NumericTypedArray>()
   // Requests run one at a time, in order, so a read sent right after `open`
   // waits for the file.
   let queue: Promise<void> = Promise.resolve()
@@ -106,6 +113,16 @@ export function createH5FileHandler(
     }
 
     return open
+  }
+
+  const expectKeptCsr = (data: string) => {
+    const matrix = keptCsr.get(data)
+
+    if (matrix === undefined) {
+      throw new Error(`The H5 file worker keeps no CSR matrix with data ${data}.`)
+    }
+
+    return matrix
   }
 
   const processRequest = async (request: H5FileWorkerRequest): Promise<void> => {
@@ -138,6 +155,15 @@ export function createH5FileHandler(
         }
         case 'read': {
           const current = expectOpen()
+          const kept = keptArrays.get(request.path)
+
+          if (kept !== undefined && isVectorSlice(request.slice)) {
+            const [start, end] = request.slice?.[0] ?? [0, kept.length]
+            const value = kept.slice(start, end)
+            respond({ id: request.id, ok: true, op: 'read', value }, [value.buffer])
+            return
+          }
+
           const entity = current.file.get(request.path)
 
           if (!(entity instanceof current.h5wasm.Dataset)) {
@@ -150,6 +176,68 @@ export function createH5FileHandler(
               : entity.slice(h5wasmRanges(request.slice))
           throwRangeError(current)
           respond({ id: request.id, ok: true, op: 'read', value }, transferablesOf(value))
+          return
+        }
+        case 'csr-keep': {
+          const current = expectOpen()
+          const { paths } = request
+
+          if (!keptCsr.has(paths.data)) {
+            const arrays = [paths.data, paths.indices, paths.indptr].map((path) => {
+              const entity = current.file.get(path)
+
+              if (!(entity instanceof current.h5wasm.Dataset)) {
+                throw new Error(`H5 path ${path} is not a dataset.`)
+              }
+
+              const value: unknown = entity.value
+              throwRangeError(current)
+
+              if (!isNumericTypedArray(value)) {
+                throw new Error(`H5 dataset ${path} does not hold numbers.`)
+              }
+
+              return value
+            })
+            const [data, indices, indptr] = arrays as [
+              NumericTypedArray,
+              NumericTypedArray,
+              NumericTypedArray,
+            ]
+
+            keptCsr.set(paths.data, { data, indices, indptr, rows: indptr.length - 1 })
+            keptArrays.set(paths.data, data)
+            keptArrays.set(paths.indices, indices)
+            keptArrays.set(paths.indptr, indptr)
+          }
+
+          respond({ id: request.id, ok: true, op: 'csr-keep' }, [])
+          return
+        }
+        case 'csr-row-sums': {
+          const matrix = expectKeptCsr(request.data)
+          const sums = CsrRowSums.of(request.cols, request.matrixCols)
+
+          if (sums === null) {
+            throw new Error('A CSR row sum asked for a column outside the matrix.')
+          }
+
+          const counts = sumCsrRows(matrix, request.rows, sums)
+          respond({ id: request.id, ok: true, op: 'csr-row-sums', sums: counts }, [
+            counts.buffer,
+          ])
+          return
+        }
+        case 'csr-gene-values': {
+          const matrix = expectKeptCsr(request.data)
+          const columns = await geneValuesFromCsr(
+            { ...matrix, cols: request.matrixCols },
+            request.cols,
+          )
+          respond(
+            { id: request.id, ok: true, op: 'csr-gene-values', columns },
+            columns.flatMap((column) => [column.rows.buffer, column.values.buffer]),
+          )
           return
         }
         case 'tree': {
@@ -289,12 +377,19 @@ export function createH5FileHandler(
       open = null
       matrixReader = null
       featureSlice = null
+      keptCsr.clear()
+      keptArrays.clear()
 
       if (current !== null) {
         closeH5File(current)
       }
     },
   }
+}
+
+// A read of a whole 1-D dataset, or of one range of it.
+function isVectorSlice(slice: H5FileSlice | undefined): boolean {
+  return slice === undefined || (slice.length === 1 && slice[0] !== null)
 }
 
 function rangeStats(open: OpenH5File): H5FileRangeStats | null {
