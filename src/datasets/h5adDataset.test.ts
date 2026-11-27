@@ -2020,6 +2020,39 @@ describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
     expect(rangeRequests).toHaveLength(1)
   })
 
+  // The Log's note: a CSR matrix read by range reads every value of every
+  // cell for each gene, here all 8 values and indices at 4 bytes each.
+  it('says why gene reads are slow from a CSR matrix over HTTP', async () => {
+    const { dataset, rangeRequests } = referenceDataset('csr')
+    await dataset.geneValuesRowIds()
+    rangeRequests.length = 0
+
+    await expect(dataset.geneReadNote({ minBytes: 0 })).resolves.toEqual({
+      message:
+        'Gene reads are slow: /X is stored by cell (CSR), so each gene over all 4 cells reads 64 B of values (uncompressed).',
+      action:
+        'Store /X by gene (CSC) to read each gene as one slice. ROI gene stats then cannot read every gene of the selected cells.',
+    })
+    // Only a read over the size: not 64 bytes of 64, nor of the 32 MiB the
+    // Log notes by default.
+    await expect(dataset.geneReadNote({ minBytes: 64 })).resolves.toBeNull()
+    await expect(dataset.geneReadNote()).resolves.toBeNull()
+    // The note reads nothing.
+    expect(rangeRequests).toEqual([])
+  })
+
+  it.each([
+    { name: 'CSC', matrixKind: 'csc' },
+    { name: 'dense Zarr', matrixKind: 'dense' },
+  ] satisfies readonly { name: string; matrixKind: MatrixKind }[])(
+    'has no slow gene read note for a $name matrix, read a gene at a time',
+    async ({ matrixKind }) => {
+      const { dataset } = referenceDataset(matrixKind, { chunks: [4, 1] })
+
+      await expect(dataset.geneReadNote({ minBytes: 0 })).resolves.toBeNull()
+    },
+  )
+
   it.each([
     { name: 'dense Zarr v2 chunked by gene', store: 'tiny.zarr' },
     { name: 'CSR Zarr v3', store: 'tiny.v3.zarr' },
@@ -2437,6 +2470,22 @@ describe('AnnDataH5adDataset read by range', () => {
       expect(estimate).toMatchObject({ kind: 'read' })
       expect(estimate.kind === 'read' ? estimate.bytes : 0).toBe(
         { dense: 4 * 3 * 4, csr: 8 * 8, csc: 5 * 8 }[matrixKind],
+      )
+      // The Log says why for the layouts read a cell at a time.
+      await expect(dataset.geneReadNote({ minBytes: 0 })).resolves.toEqual(
+        {
+          dense: expect.objectContaining({
+            message: expect.stringContaining(
+              '/X is dense and read in bands of whole cells, so each gene over all 4 cells reads 48 B of values',
+            ),
+          }),
+          csr: expect.objectContaining({
+            message: expect.stringContaining(
+              '/X is stored by cell (CSR), so each gene over all 4 cells reads 64 B of values',
+            ),
+          }),
+          csc: null,
+        }[matrixKind],
       )
       const reads = await dataset.geneValues(['Gapdh', 'Gad1'])
       expect(
@@ -3664,6 +3713,23 @@ describe('AnnDataH5adDataset sections', () => {
     await expect(z('s2')).resolves.toEqual([1, 2])
     await expect(z('s1')).resolves.toEqual([0, 2])
     expect((await file.overview()).map((point) => point.z)).toEqual([61, 0, 62, 2])
+  })
+
+  it("says why a section's gene reads are slow from its own rows", async () => {
+    const host = stubH5adRangeHost(await createTinyH5ad('csr', SECTIONS))
+    const file = new AnnDataH5adDataset({
+      url: 'https://example.test/sections.h5ad',
+      h5WorkerFactory: host.h5WorkerFactory,
+      rangeMatrixMaxBytes: 0,
+    })
+    const { dataset } = openSection(file, 'section', 's1')
+
+    // cell-b and cell-d store 4 of the file's 8 values.
+    await expect(dataset.geneReadNote({ minBytes: 0 })).resolves.toMatchObject({
+      message: expect.stringContaining(
+        'so each gene over all 2 cells reads 32 B of values',
+      ),
+    })
   })
 
   it('opens one section as a dataset of its rows, read through the file', async () => {

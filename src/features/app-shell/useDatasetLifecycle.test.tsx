@@ -1737,6 +1737,83 @@ describe('useDatasetLifecycle', () => {
     expect(dataset.tissueImage).not.toHaveBeenCalled()
   })
 
+  // The note is the dataset's (AnnDataH5adDataset.geneReadNote): a data access
+  // note until the next load. One that cannot be made leaves the load as it was.
+  const geneReadNote = {
+    message: 'Gene reads are slow: /X is stored by cell (CSR).',
+    action: 'Store /X by gene (CSC).',
+  }
+  it.each([
+    { name: 'notes', note: async () => geneReadNote, noted: true },
+    {
+      name: 'skips a failed',
+      note: async () => Promise.reject(new Error('no cache')),
+      noted: false,
+    },
+    { name: 'skips a missing', note: async () => null, noted: false },
+  ])('$name note on why gene reads are slow', async ({ note, noted }) => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/cells.h5ad'
+    const dataset = {
+      overview: vi.fn(async () => []),
+      genePanel: vi.fn(async () => []),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      geneReadNote: vi.fn(note),
+      meta: vi.fn(),
+      visiumSummary: vi.fn(async () => null),
+      tissueImage: vi.fn(),
+    }
+    const appendFallbackNotice = vi.fn()
+    const setLoadState = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        appendFallbackNotice={appendFallbackNotice}
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'h5ad' as const,
+          baseUrl: datasetUrl,
+          h5adUrl: datasetUrl,
+          checked: [],
+        }))}
+        getSpatialDataset={
+          vi.fn(
+            async () => dataset,
+          ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+        }
+        setLoadState={setLoadState}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, true)
+    })
+
+    expect(dataset.geneReadNote).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) })
+    expect(setLoadState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'ready', url: datasetUrl }),
+    )
+    expect(appendFallbackNotice.mock.calls).toEqual(
+      noted
+        ? [
+            [
+              {
+                source: 'Gene expression',
+                ...geneReadNote,
+                coalesceKey: `gene-read:${datasetUrl}`,
+              },
+            ],
+          ]
+        : [],
+    )
+  })
+
   it('gives the dataset it opens, and each of its reads, the signal Cancel aborts', async () => {
     const refs = createLifecycleRefs()
     const startDatasetLoadRef = {

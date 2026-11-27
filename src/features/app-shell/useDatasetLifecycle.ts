@@ -213,7 +213,7 @@ import {
 } from '../../datasets/datasetReader'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import { DatasetIsCollectionError } from '../../datasets/datasetManifest'
-import type { AnnDataVisiumSummary } from '../../datasets/h5adDataset'
+import type { AnnDataVisiumSummary, GeneReadNote } from '../../datasets/h5adDataset'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import { MERSCOPE_BOUNDARIES_AUTOLOAD_MAX_BYTES } from '../../datasets/merscopeFormat'
@@ -288,6 +288,8 @@ interface H5adLifecycleDataset {
   metadataTracks(
     options?: LoadReadOptions,
   ): Promise<readonly ContinuousCellMetadataTrack[]>
+  // Why colouring by a gene is slow, from the matrix's layout.
+  geneReadNote?(options?: LoadReadOptions): Promise<GeneReadNote | null>
 }
 
 interface SpatialDataSummaryDataset {
@@ -1523,6 +1525,7 @@ export function useDatasetLifecycle({
             annotationGroups,
             embeddingOptions,
             metadataTracks,
+            geneReadNote,
           ] = await Promise.all([
             annDataset.overview({ signal }),
             annDataset.genePanel({ signal }),
@@ -1530,6 +1533,8 @@ export function useDatasetLifecycle({
             annDataset.annotationGroups({ signal }),
             annDataset.embeddingOptions({ signal }),
             annDataset.metadataTracks({ signal }),
+            // A note that cannot be made does not stop the load.
+            annDataset.geneReadNote?.({ signal }).catch(() => null) ?? null,
           ])
 
           if (!isCurrentDatasetLoad()) {
@@ -1577,6 +1582,14 @@ export function useDatasetLifecycle({
             `${label} metadata tracks ready: ${metadataTracks.length.toLocaleString()} numeric obs columns`,
             { coalesceKey: `${coalescePrefix}-metadata-tracks` },
           )
+          // In the data access notes until the next load, and in the Log.
+          if (geneReadNote !== null) {
+            notifyFallbackWhenCommitted({
+              source: 'Gene expression',
+              ...geneReadNote,
+              coalesceKey: `gene-read:${requestedUrl}`,
+            })
+          }
           recordTelemetry(
             telemetryEvent('dataset.load', 'success', {
               startedAt: loadStartedAt,
