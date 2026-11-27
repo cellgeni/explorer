@@ -224,6 +224,18 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     })
   }
 
+  // Drops what the dataset read, its cell table's arrays included (O19). A
+  // later read opens what it needs again.
+  dispose(): void {
+    this.table.dispose()
+    this.vzgPromise = null
+    this.lastPyramid = null
+    this.loaded = null
+    this.overviewLoad.clear()
+    this.boundaryIndexPromise = null
+    this.boundaryElements = null
+  }
+
   async meta(): Promise<DatasetMeta> {
     const tableMeta = await this.table.meta()
     const boundaries = this.files.cellBoundaries

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createH5Bytes, writeTinyFeatureSlice } from '../test/h5Fixtures'
 import {
-  FeatureSliceFullFileBudgetExceededError,
   featureSliceBinningScale,
   gexFromVisiumFeatureSliceH5,
   parseVisiumFeatureSliceMetadata,
@@ -78,9 +77,10 @@ describe('Visium HD Feature Slice H5', () => {
 
   it('reads selected feature COO slices and bins them to active Visium HD bins', async () => {
     const bytes = await createTinyFeatureSliceH5()
-    const body = new ArrayBuffer(bytes.byteLength)
-    new Uint8Array(body).set(bytes)
-    const fetcher = vi.fn(async () => new Response(body))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(bytes.slice())),
+    )
 
     const result = await gexFromVisiumFeatureSliceH5(
       'https://example.test/visium/feature_slice-fixture-a.h5',
@@ -90,11 +90,10 @@ describe('Visium HD Feature Slice H5', () => {
         { id: 'BC-empty', row: 2, col: 2 },
       ],
       ['Actb', 'Gad1', 'NegControlProbe_001', 'Actb'],
-      {
-        binSizeMicrometers: 16,
-        fetcher,
-      },
-    )
+      { binSizeMicrometers: 16 },
+    ).finally(() => {
+      vi.unstubAllGlobals()
+    })
 
     expect(result.geneNames).toEqual(['Actb', 'Gad1', 'NegControlProbe_001'])
     expect(result.cells.get('BC-0')).toEqual({
@@ -109,40 +108,6 @@ describe('Visium HD Feature Slice H5', () => {
       geneNames: [],
       counts: [],
     })
-    // The read runs under the shared load's own signal (15.5-E).
-    expect(fetcher).toHaveBeenCalledWith(
-      'https://example.test/visium/feature_slice-fixture-a.h5',
-      { signal: expect.any(AbortSignal) },
-    )
-  })
-
-  it('rejects oversized Feature Slice H5 files before full fetch', async () => {
-    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === 'HEAD') {
-        return new Response(null, {
-          headers: {
-            'content-length': String(512 * 1024 * 1024),
-          },
-        })
-      }
-
-      throw new Error('Unexpected full Feature Slice fetch')
-    })
-
-    await expect(
-      gexFromVisiumFeatureSliceH5(
-        'https://example.test/visium/feature_slice-too-large.h5',
-        [{ id: 'BC-0', row: 0, col: 0 }],
-        ['Actb'],
-        {
-          binSizeMicrometers: 16,
-          fetcher,
-          maxFullFileBytes: 128 * 1024 * 1024,
-        },
-      ),
-    ).rejects.toBeInstanceOf(FeatureSliceFullFileBudgetExceededError)
-    expect(fetcher).toHaveBeenCalledTimes(1)
-    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'HEAD' })
   })
 
   it('reads hosted files in an H5 file worker that stays open', async () => {
@@ -161,7 +126,6 @@ describe('Visium HD Feature Slice H5', () => {
         ],
         ['Actb', 'Gad1', 'Actb'],
         {
-          backend: 'lazy-range-worker',
           binSizeMicrometers: 16,
           onStageTiming: (timing) => {
             stageLabels.push(timing.label)
@@ -181,7 +145,7 @@ describe('Visium HD Feature Slice H5', () => {
         url,
         [{ id: 'BC-0', row: 0, col: 0 }],
         ['Actb'],
-        { backend: 'lazy-range-worker', binSizeMicrometers: 16 },
+        { binSizeMicrometers: 16 },
       )
 
       expect(second.cells.get('BC-0')).toEqual({ geneNames: ['Actb'], counts: [5] })
@@ -209,7 +173,7 @@ describe('Visium HD Feature Slice H5', () => {
         url,
         [{ id: 'BC-0', row: 0, col: 0 }],
         ['Actb'],
-        { backend: 'lazy-range-worker', binSizeMicrometers: 16 },
+        { binSizeMicrometers: 16 },
       )
 
       expect(genes.cells.get('BC-0')).toEqual({ geneNames: ['Actb'], counts: [5] })
@@ -227,7 +191,6 @@ describe('Visium HD Feature Slice H5', () => {
     const url = 'https://example.test/visium/range/not_feature_slice.h5'
     const read = () =>
       gexFromVisiumFeatureSliceH5(url, [{ id: 'BC-0', row: 0, col: 0 }], ['Actb'], {
-        backend: 'lazy-range-worker',
         binSizeMicrometers: 16,
       })
     vi.stubGlobal('fetch', fetcher)

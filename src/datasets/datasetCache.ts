@@ -3,6 +3,11 @@
 // is retained: the viewer retains the one it shows, and a collection preview
 // the one it is reading. Of the rest, the few used last are kept and older
 // ones are disposed, which ends their workers and lets their data go.
+//
+// Resources opened for a dataset's files outside the dataset object, such as
+// gex.ts's matrix workers, are released through this registry once no
+// viewer, preview or cache holds the dataset's URL (O19): see
+// `onDatasetReleased` and src/data/datasetResources.ts.
 
 import { sharedLoad, type SharedLoad } from '../utils/sharedLoad'
 
@@ -21,7 +26,41 @@ const retainedUrls = new Map<string, number>()
 const caches = new Set<{
   readonly released: (url: string) => void
   readonly delete: (matches: (key: string, url: string) => boolean) => void
+  readonly addHeldUrls: (urls: Set<string>) => void
 }>()
+const releaseListeners = new Set<(url: string) => void>()
+
+// Calls `listener` with each dataset URL that stops being held: no longer
+// retained, with none of its datasets left in a cache. Returns what stops
+// listening.
+export function onDatasetReleased(listener: (url: string) => void): () => void {
+  releaseListeners.add(listener)
+  return () => {
+    releaseListeners.delete(listener)
+  }
+}
+
+// The dataset URLs held now: retained, or with a dataset in a cache, including
+// one dropped while it may still be read.
+export function heldDatasetUrls(): ReadonlySet<string> {
+  const urls = new Set(retainedUrls.keys())
+
+  for (const cache of caches) cache.addHeldUrls(urls)
+
+  return urls
+}
+
+function notifyIfReleased(urls: Iterable<string>): void {
+  if (releaseListeners.size === 0) return
+
+  const held = heldDatasetUrls()
+
+  for (const url of new Set(urls)) {
+    if (held.has(url)) continue
+
+    for (const listener of releaseListeners) listener(url)
+  }
+}
 
 export function normalizeDatasetUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
@@ -47,6 +86,8 @@ export function retainDataset(baseUrl: string): () => void {
     retainedUrls.delete(url)
 
     for (const cache of caches) cache.released(url)
+
+    notifyIfReleased([url])
   }
 }
 
@@ -118,6 +159,11 @@ export class DatasetCache<T extends DisposableDataset> {
     this.evict()
   }
 
+  addHeldUrls(urls: Set<string>): void {
+    for (const entry of this.entries.values()) urls.add(entry.url)
+    for (const entry of this.dropped) urls.add(entry.url)
+  }
+
   // A URL no longer retained was in use until now, so its datasets count as
   // the ones used last.
   released(url: string): void {
@@ -132,11 +178,14 @@ export class DatasetCache<T extends DisposableDataset> {
   }
 
   private evict(): void {
+    const disposed: string[] = []
+
     for (const entry of this.dropped) {
       if (isRetained(entry.url)) continue
 
       this.dropped.delete(entry)
       disposeEntry(entry)
+      disposed.push(entry.url)
     }
 
     const inactive = [...this.entries].filter(([, entry]) => !isRetained(entry.url))
@@ -145,7 +194,10 @@ export class DatasetCache<T extends DisposableDataset> {
     for (const [key, entry] of inactive.slice(0, excess)) {
       this.entries.delete(key)
       disposeEntry(entry)
+      disposed.push(entry.url)
     }
+
+    notifyIfReleased(disposed)
   }
 }
 

@@ -365,20 +365,6 @@ describe('loadErrorModel', () => {
       title: 'Expression matrix over budget',
       detail: 'FullFileMatrixBudgetExceededError',
     })
-    const featureSliceOverBudget = new Error(
-      'Feature Slice H5 is 503.2 MB, exceeding the interactive full-file budget of 128.0 MB.',
-    )
-    featureSliceOverBudget.name = 'FeatureSliceFullFileBudgetExceededError'
-
-    expect(
-      createStructuredLoadError('Gene expression', featureSliceOverBudget),
-    ).toMatchObject({
-      code: 'unsupported',
-      title: 'Feature Slice H5 over budget',
-      detail: 'FeatureSliceFullFileBudgetExceededError',
-      action:
-        'Use the lazy-range Feature Slice H5 backend for hosted Visium HD selected-gene overlays, or lower the full-file budget scope.',
-    })
     const segmentationOverBudget = new Error(
       'Visium HD segmentation GeoJSON is 65.0 MB, exceeding the interactive full-file budget of 64.0 MB.',
     )

@@ -110,6 +110,7 @@ import type {
 import type { QptiffIfdSummary } from './qptiff'
 import { isAbortError } from '../utils/abort'
 import { retryingFetch } from '../data/fetchRetry'
+import { releaseWithDatasets } from '../data/datasetResources'
 
 export interface TiffChunk {
   readonly offset: number
@@ -200,6 +201,8 @@ const PREFETCHED_TILE_LIMIT = 512
 // IFD N after IFD M reads only the IFDs between them.
 const OPEN_TIFF_FILE_LIMIT = 4
 const openTiffFiles = new Map<string, Promise<GeoTIFF>>()
+// Each cache of files also lets a file go with its datasets (O19).
+releaseWithDatasets(openTiffFiles)
 
 // Bands of stripped levels, shared by every loader so that the planes and
 // channels of one image share one memory limit.
@@ -647,6 +650,7 @@ async function stripImageTileSize(
 const TOP_LEVEL_PYRAMID_FILE_CACHE_SIZE = 2
 const TOP_LEVEL_PYRAMID_MAX_IFDS = 10_000
 const topLevelPyramidFiles = new Map<string, Promise<TopLevelPyramidFile>>()
+releaseWithDatasets(topLevelPyramidFiles)
 
 interface TopLevelPyramidFile {
   readonly tiff: GeoTIFF
@@ -1109,6 +1113,7 @@ interface NdpiFile {
 }
 
 const ndpiFiles = new Map<string, Promise<NdpiFile>>()
+releaseWithDatasets(ndpiFiles)
 
 const NDPI_FORMAT = { name: 'NDPI', withArticle: 'an NDPI' }
 

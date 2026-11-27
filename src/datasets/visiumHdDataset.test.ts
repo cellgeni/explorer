@@ -3,10 +3,7 @@ import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
 import { gridCellCenter } from './spatialGrid'
 import { parseVisiumHdFilteredMatrixBarcodes } from './visiumHdBarcodes'
-import {
-  DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
-  VisiumHdDataset,
-} from './visiumHdDataset'
+import { VisiumHdDataset } from './visiumHdDataset'
 import {
   VISIUM_HD_TISSUE_POSITION_COLUMNS,
   createVisiumHdBinnedOverview,
@@ -1360,10 +1357,7 @@ describe('Visium HD dataset readers', () => {
       ],
       ['Actb', 'Gad1'],
       expect.objectContaining({
-        backend: 'lazy-range-worker',
         binSizeMicrometers: 16,
-        fetcher: expect.any(Function),
-        maxFullFileBytes: DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
         onStageTiming: expect.any(Function),
       }),
     )
@@ -1429,7 +1423,6 @@ describe('Visium HD dataset readers', () => {
       ],
       ['Actb'],
       expect.objectContaining({
-        backend: 'lazy-range-worker',
         binSizeMicrometers: 16,
       }),
     )
