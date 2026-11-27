@@ -647,6 +647,7 @@ describe('App with a dataset collection', () => {
     afterEach(() => {
       deckView.linked = undefined
       deckView.onLinkedChange = undefined
+      deckView.onLinkedHover = undefined
       deckView.stackLayerIds = undefined
     })
 
@@ -1170,19 +1171,24 @@ describe('App with a dataset collection', () => {
       await waitFor(() => {
         expect(deckView.linked).toBeDefined()
       })
-      const hoverFirstCell = () => {
-        act(() => {
-          deckView.onLinkedHover?.({
-            index: 0,
-            layer: { id: 'linked-section-cells' },
-            x: 10,
-            y: 10,
-          })
+      const hover = () => {
+        deckView.onLinkedHover?.({
+          index: 0,
+          layer: { id: 'linked-section-cells' },
+          x: 10,
+          y: 10,
         })
       }
+      const hoverFirstCell = () => {
+        act(hover)
+      }
 
-      hoverFirstCell()
-      expect(within(panel).getByText('cell-a')).toBeInTheDocument()
+      // Hovered again until the panel's latest render has its cells: under a
+      // loaded run the first handler can come from an earlier render.
+      await waitFor(() => {
+        hover()
+        expect(within(panel).getByText('cell-a')).toBeInTheDocument()
+      })
 
       fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
       fireEvent.click(
