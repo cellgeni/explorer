@@ -215,7 +215,11 @@ Original-brief items with no outcome:
 - [ ] Memory ceiling with eviction telemetry beyond tile caches. Partly done:
       budgets scale with device memory, and the tile LRU (with eviction
       telemetry), the OME-Zarr chunk cache and the IndexedDB cache each evict
-      on their own. There is no app-wide ceiling.
+      on their own. Since O20 (2026-11-27) Data access notes shows what each
+      cache and worker pool holds
+      ([Memory Held, Counted](phases/optimization-pass.md#memory-held-counted-2026-11-27)).
+      There is no app-wide ceiling; one tile budget across channels in bytes
+      is proposed there.
 
 Testing:
 

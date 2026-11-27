@@ -982,10 +982,21 @@ Diagnostics in the info drawer shows the active profile with debug info on.
 - **Fallback notices.** `notifyFallback` (`src/data/fallbackNotice.ts`) reports
   when a slower or partial path is used (for example the H5 matrix or
   cell-summary transcript density). Shown under "Data access notes" in the
-  info drawer's Diagnostics.
+  info drawer's Diagnostics, with the memory table below.
 - **Diagnostics.** `runDatasetDiagnostics` (`src/data/datasetDiagnostics.ts`)
   checks the files each platform needs. `Download diagnostics` writes a JSON
   dump built by `src/features/diagnostics/diagnosticsDump.ts`.
+- **Memory.** Each cache and worker pool registers a reporter
+  (`registerMemoryReporter`, `src/data/memoryTelemetry.ts`) that gives its
+  items, workers and bytes: image tiles, Zarr chunks, inflated zip entries,
+  H5 files, DuckDB clients, the decode pools, Cell Query, Plots, short-lived
+  workers and the dataset instances. Data access notes reads them while it
+  is open, every 5 s, and shows a table with the page's JavaScript heap. A
+  worker answers for its own memory, and one busy with a long read is left
+  out after 2 s: an H5 file's worker counts h5wasm's WebAssembly memory and
+  the blocks and arrays it keeps, and DuckDB the memory of its buffer
+  manager (`duckdb_memory()`). Decode pools and dataset objects report no
+  bytes.
 - **Telemetry.** `telemetryEvent` (`src/data/telemetry.ts`) records events in
   memory only; they appear in the diagnostics dump and are never sent anywhere.
   Past the profile's event limit the oldest go first, but the latest of each

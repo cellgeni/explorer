@@ -9,6 +9,7 @@
 // viewer, preview or cache holds the dataset's URL (O19): see
 // `onDatasetReleased` and src/data/datasetResources.ts.
 
+import { registerMemoryReporter } from '../data/memoryTelemetry'
 import { sharedLoad, type SharedLoad } from '../utils/sharedLoad'
 
 export interface DisposableDataset {
@@ -27,7 +28,18 @@ const caches = new Set<{
   readonly released: (url: string) => void
   readonly delete: (matches: (key: string, url: string) => boolean) => void
   readonly addHeldUrls: (urls: Set<string>) => void
+  readonly size: number
 }>()
+
+// The dataset instances open, for the memory table (O20). What they hold is
+// in the page's heap, which only Chrome measures.
+registerMemoryReporter('Datasets', () => {
+  let entries = 0
+
+  for (const cache of caches) entries += cache.size
+
+  return { entries, workers: 0, bytes: null }
+})
 const releaseListeners = new Set<(url: string) => void>()
 
 // Calls `listener` with each dataset URL that stops being held: no longer
@@ -157,6 +169,11 @@ export class DatasetCache<T extends DisposableDataset> {
     }
 
     this.evict()
+  }
+
+  // Datasets cached, and those dropped but still in use.
+  get size(): number {
+    return this.entries.size + this.dropped.size
   }
 
   addHeldUrls(urls: Set<string>): void {

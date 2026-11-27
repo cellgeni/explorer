@@ -3,6 +3,11 @@ import duckdbEhWasm from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url'
 import duckdbMvpWasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url'
 import ehWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
 import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url'
+import {
+  LiveInstances,
+  registerMemoryReporter,
+  sumReportedBytes,
+} from './memoryTelemetry'
 
 export interface DuckDbQueryConnection {
   query(sql: string): Promise<unknown>
@@ -40,6 +45,59 @@ export interface ConfigureDuckDbOptions {
 export interface CreateDuckDbClientOptions {
   readonly logger?: duckdb.Logger
   readonly onInstantiationProgress?: duckdb.InstantiationProgressHandler
+}
+
+// Every open client, for the memory table (O20): each is a worker, and
+// reports the memory DuckDB's buffer manager holds (`duckdb_memory()`), not
+// its whole WebAssembly heap.
+const liveClients = new LiveInstances<DuckDbMemoryReader>()
+registerMemoryReporter('DuckDB', () => {
+  const clients = [...liveClients]
+
+  return {
+    entries: clients.length,
+    workers: clients.length,
+    bytes:
+      clients.length === 0 ? 0 : sumReportedBytes(clients.map((client) => client.read())),
+  }
+})
+
+// Asks on a connection of its own, one question at a time, so the dataset's
+// queries are not disturbed; it waits for a query already running.
+class DuckDbMemoryReader {
+  private pending: Promise<number | null> | null = null
+
+  constructor(private readonly db: duckdb.AsyncDuckDB) {}
+
+  read(): Promise<number | null> {
+    this.pending ??= this.query().finally(() => {
+      this.pending = null
+    })
+    return this.pending
+  }
+
+  private async query(): Promise<number | null> {
+    try {
+      const conn = await this.db.connect()
+
+      try {
+        // A sum of BIGINTs is a HUGEINT, which Arrow returns as neither a
+        // number nor a bigint.
+        const table = await conn.query(
+          'SELECT CAST(coalesce(sum(memory_usage_bytes), 0) AS DOUBLE) AS bytes FROM duckdb_memory()',
+        )
+        const value: unknown = table.getChildAt(0)?.get(0)
+
+        return typeof value === 'number' || typeof value === 'bigint'
+          ? Number(value)
+          : null
+      } finally {
+        await conn.close()
+      }
+    } catch {
+      return null
+    }
+  }
 }
 
 export function getDuckDbBundles(): duckdb.DuckDBBundles {
@@ -146,6 +204,8 @@ export async function createDuckDbClient(
 
     const version = await db.getVersion()
     const client = { db, conn, worker }
+    const memory = new DuckDbMemoryReader(db)
+    liveClients.add(memory)
 
     return {
       db,
@@ -153,7 +213,10 @@ export async function createDuckDbClient(
       bundle,
       version,
       loadSpatial: () => loadDuckDbSpatial(client.conn),
-      close: () => shutDownDuckDb(client),
+      close: () => {
+        liveClients.delete(memory)
+        return shutDownDuckDb(client)
+      },
     }
   } catch (error) {
     await shutDownDuckDb({ db, conn, worker }).catch(() => undefined)

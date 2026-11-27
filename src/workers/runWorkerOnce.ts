@@ -1,5 +1,6 @@
 import { abortError } from '../utils/abort'
 import { workerFailureError } from './workerStartError'
+import { workerTally } from '../data/memoryTelemetry'
 
 // Runs one request in a worker of its own and settles with its answer. The
 // worker is terminated once it has answered, failed to run or been aborted.
@@ -36,6 +37,9 @@ export interface RunWorkerOnceOptions<Request, Response, Result> {
   readonly failureMessage?: string
 }
 
+// Workers running a one-shot read, for the memory table (O20).
+const oneShotWorkers = workerTally('Short-lived workers')
+
 export function runWorkerOnce<Request, Response, Result>(
   worker: OneShotWorker<Request, Response>,
   request: Request,
@@ -48,6 +52,8 @@ export function runWorkerOnce<Request, Response, Result>(
     return Promise.reject(abortError(signal))
   }
 
+  oneShotWorkers.add(worker)
+
   return new Promise<Result>((resolve, reject) => {
     let finished = false
     const finish = () => {
@@ -56,6 +62,7 @@ export function runWorkerOnce<Request, Response, Result>(
       worker.onmessage = null
       worker.onerror = null
       worker.terminate()
+      oneShotWorkers.delete(worker)
     }
     const handleAbort = () => {
       finish()

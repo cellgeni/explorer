@@ -213,6 +213,10 @@ export interface H5FileStatsResponse {
   readonly ok: true
   readonly op: 'stats'
   readonly range: H5FileRangeStats | null
+  // What the worker holds for the file: h5wasm's WebAssembly memory, the
+  // range blocks kept and the CSR arrays kept. A matrix reader's barcode
+  // index is not counted.
+  readonly memoryBytes: number
 }
 
 export interface H5FileStructureResponse {

@@ -99,6 +99,11 @@ export class RangeBlockCache {
     return { requests: this.requests, fetchedBytes: this.fetchedBytes }
   }
 
+  // The bytes of the blocks kept.
+  get heldBytes(): number {
+    return this.cachedBytes
+  }
+
   // Copies the file from `position` into `target`, and returns how many bytes
   // it copied: fewer than asked only at the end of the file.
   readInto(target: Uint8Array, position: number): number {

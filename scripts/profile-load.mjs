@@ -27,6 +27,9 @@
 //   --requests <text>    summarise requests whose URL contains <text>
 //   --memory             report the JavaScript heaps of the page and of each
 //                        worker after every phase
+//   --caches             at the end, open Dataset info > Data access notes and
+//                        print the memory table, what each cache and worker
+//                        pool reports holding
 //   --gpu                draw with the GPU (Metal through ANGLE, macOS)
 //                        rather than SwiftShader
 //   --throttle <mbit,ms> limit bandwidth and add latency, e.g. 10,150
@@ -54,7 +57,8 @@ if (positional.length < 2 || options.help !== undefined) {
       '[--gene S] [--steps KEYS] [--step-settle S] [--then URLS] [--then-gene S] ' +
       '[--hash PARAMS] ' +
       '[--until SELECTOR] [--runs N] ' +
-      '[--settle S] [--requests TEXT] [--memory] [--gpu] [--throttle MBIT,MS] ' +
+      '[--settle S] [--requests TEXT] [--memory] [--caches] [--gpu] ' +
+      '[--throttle MBIT,MS] ' +
       '[--raw PREFIX] [--json]',
   )
   process.exit(positional.length < 2 ? 1 : 0)
@@ -233,9 +237,38 @@ async function profileRun(run, appIndex, appUrl) {
         )
       }
     }
+
+    // Read last: the drawer narrows the view, which redraws it.
+    if (options.caches !== undefined) {
+      const rows = await readMemoryTable(page)
+      console.log(
+        options.json === undefined
+          ? rows.map((row) => `  ${row.join(' | ')}`).join('\n')
+          : JSON.stringify({ app: appUrl, run, phase: 'caches', rows }),
+      )
+    }
   } finally {
     await browser.close()
   }
+}
+
+// The rows of the memory table in Dataset info > Data access notes, heading
+// first, once the first reading is shown.
+async function readMemoryTable(page) {
+  await page.getByRole('button', { name: /^Dataset info/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Dataset info' })
+  const notes = dialog.locator('section.data-access-notes summary')
+  await notes.scrollIntoViewIfNeeded()
+  await notes.click()
+  const memory = dialog.getByRole('region', { name: 'Memory' })
+  await memory.locator('table').waitFor({ timeout: TIMEOUT_MS })
+  const rows = [[await memory.locator('p').first().innerText()]]
+
+  for (const row of await memory.locator('tr').all()) {
+    rows.push(await row.locator('th, td').allInnerTexts())
+  }
+
+  return rows
 }
 
 // Main-thread time by script (the built chunk's name without its hash),
@@ -515,7 +548,7 @@ function parseArgs(args) {
 
     if (!arg.startsWith('--')) {
       positional.push(arg)
-    } else if (['--json', '--help', '--memory', '--gpu'].includes(arg)) {
+    } else if (['--json', '--help', '--memory', '--caches', '--gpu'].includes(arg)) {
       options[arg.slice(2)] = true
     } else {
       options[arg.slice(2)] = args[index + 1]

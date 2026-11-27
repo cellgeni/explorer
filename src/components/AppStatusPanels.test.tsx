@@ -1,10 +1,12 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  DataAccessNotes,
   ErrorSummary,
   LoadingIndicator,
   type LoadingTaskSummary,
 } from './AppStatusPanels'
+import type { MemoryReport } from '../data/memoryTelemetry'
 
 const TASKS: readonly LoadingTaskSummary[] = [
   { id: 'dataset', label: 'Loading dataset', detail: 'output', cancellable: true },
@@ -110,5 +112,69 @@ describe('ErrorSummary', () => {
     expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Run Diagnostics' })).toBeVisible()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('DataAccessNotes memory (O20)', () => {
+  const REPORTS: readonly MemoryReport[] = [
+    { name: 'Image tiles', entries: 120, workers: 0, bytes: 31_457_280 },
+    { name: 'H5 files', entries: 2, workers: 2, bytes: 90_000_000 },
+    { name: 'Image decoders', entries: 0, workers: 3, bytes: null },
+    // Holds nothing, so it has no row.
+    { name: 'Zip entries', entries: 0, workers: 0, bytes: 0 },
+  ]
+
+  function toggle(details: HTMLDetailsElement, open: boolean) {
+    details.open = open
+    fireEvent(details, new Event('toggle'))
+  }
+
+  it('reads what the caches hold only while open', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const read = vi.fn(() => Promise.resolve(REPORTS))
+      const { container } = render(
+        <DataAccessNotes
+          matrixState={{ status: 'idle' }}
+          notices={[]}
+          readMemory={read}
+        />,
+      )
+      const details = container.querySelector('details')
+      if (details === null) throw new Error('missing details')
+
+      expect(screen.getByText('Data access notes')).toBeInTheDocument()
+      await act(() => vi.advanceTimersByTimeAsync(20_000))
+      expect(read).not.toHaveBeenCalled()
+
+      toggle(details, true)
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      expect(read).toHaveBeenCalledTimes(1)
+
+      const table = screen.getByRole('table')
+      expect(
+        within(table)
+          .getAllByRole('row')
+          .map((row) => row.textContent),
+      ).toEqual([
+        'Held byMemoryItemsWorkers',
+        'Image tiles31.5 MB1200',
+        'H5 files90 MB22',
+        'Image decoders—03',
+      ])
+      expect(
+        screen.getByText(/Caches and workers hold 121 MB where measured, with 5 workers/),
+      ).toBeInTheDocument()
+
+      // Read again while open, and not after it closes.
+      await act(() => vi.advanceTimersByTimeAsync(5_000))
+      expect(read).toHaveBeenCalledTimes(2)
+      toggle(details, false)
+      await act(() => vi.advanceTimersByTimeAsync(20_000))
+      expect(read).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
