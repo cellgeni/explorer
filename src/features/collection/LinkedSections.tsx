@@ -33,7 +33,10 @@ import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
 import { PointerTooltip } from '../../components/PointerTooltip'
 import { ReleasingDeck } from '../../components/releasingDeck'
 import type { DatasetCollectionEntry } from '../../datasets/datasetCollection'
-import { overviewCellRadiusMaxPixels } from '../../rendering/cellPointRenderer'
+import {
+  overviewCellRadiusMaxPixels,
+  UNCAPPED_RADIUS_PIXELS,
+} from '../../rendering/cellPointRenderer'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { fitExtentViewState } from '../../rendering/overviewViewState'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
@@ -397,10 +400,14 @@ function LinkedSectionPanel({
     [percentile, scores],
   )
   const { min: scaleMin, max: scaleMax } = geneScaleBounds(scaleRange, ownTop)
-  const radiusMaxPixels = overviewCellRadiusMaxPixels(
-    (viewState?.zoom ?? fittedZoom) - fittedZoom,
-    pointSizeFullViewScale,
-  )
+  // Visium spots keep their size at every zoom, as in the main view.
+  const radiusMaxPixels =
+    cells?.trueSize === true
+      ? UNCAPPED_RADIUS_PIXELS
+      : overviewCellRadiusMaxPixels(
+          (viewState?.zoom ?? fittedZoom) - fittedZoom,
+          pointSizeFullViewScale,
+        )
   const showsCells = imageMode !== 'only'
   const layers = useMemo(
     () =>

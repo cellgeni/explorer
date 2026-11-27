@@ -1,7 +1,8 @@
 import { micrometers, type BBox } from '../../data/coords'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
-import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
+import type { GeneExpressionBatch, Platform } from '../../datasets/spatialDataset'
+import { cellAreaToRadiusMicrometers } from '../../rendering/deckLayerColors'
 import { geneExpressionScores } from '../../rendering/geneExpressionRenderer'
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type {
@@ -12,6 +13,7 @@ import type {
   SpatialDatasetDetector,
   SpatialDatasetLoader,
 } from '../app-shell/appDependencies'
+import { trueSizePointsFor } from '../app-shell/platformAdapter'
 import { throwIfAborted } from '../../utils/abort'
 import type { Annotation } from '../../data/annotation'
 
@@ -48,7 +50,20 @@ export interface PreviewCells {
   readonly bounds: PreviewBounds
   // For cells placed in 3D (CellOverviewPoint.z): each cell's z.
   readonly depths?: PreviewDepths
+  // Each cell's radius, from its area, when any cell has one (previewRadius).
+  readonly radius?: PreviewRadius
+  // Points keep their physical size at every zoom, as the main view draws
+  // the dataset's platform (Visium spots; AppPlatformAdapter.trueSizePoints).
+  readonly trueSize?: boolean
 }
+
+// Radii in µm, as the main view sizes cells from their areas: one for every
+// cell when they share it (Visium spots), else one per cell.
+export type PreviewRadius = number | Float32Array
+
+// A cell without an area: a point 10 µm across, like the smallest cell
+// without one in the main view.
+export const PREVIEW_CELL_RADIUS_MICROMETERS = 5
 
 export interface PreviewDepths {
   readonly values: Float32Array
@@ -63,6 +78,8 @@ export interface PreviewScores {
   readonly maxScore: number
   // Each scored cell's z, for cells placed in 3D.
   readonly depths?: Float32Array
+  // Each scored cell's radius, as PreviewCells.radius.
+  readonly radius?: PreviewRadius
 }
 
 export interface PreviewClass {
@@ -262,8 +279,14 @@ export async function openPreviewSource(
   const dataset = () => previewDataset(url, loaders)
 
   return {
-    cells: async (cellSignal) =>
-      previewCells(await (await dataset()).overview(), cellSignal),
+    cells: async (cellSignal) => {
+      const opened = await dataset()
+      const [overview, trueSize] = await Promise.all([
+        opened.overview(),
+        drawsTrueSize(opened),
+      ])
+      return previewCells(overview, cellSignal, trueSize)
+    },
     scores: async (cells, genes, scoreMode, scoreSignal) =>
       previewScores(
         cells,
@@ -317,6 +340,7 @@ interface PreviewDataset {
     trackId: string,
     options: { readonly signal?: AbortSignal },
   ): Promise<readonly PreviewCellValue[]>
+  meta?(): Promise<{ readonly platform: Platform }>
 }
 
 // The track's values, or none when the dataset has no track of that ID, as
@@ -333,6 +357,13 @@ async function trackValues(
   return dataset.metadataTrackValues(trackId, signal === undefined ? {} : { signal })
 }
 
+// Whether the main view would draw the dataset's points at their physical
+// size; a dataset that does not say its platform is drawn as Xenium is.
+async function drawsTrueSize(dataset: PreviewDataset): Promise<boolean> {
+  const meta = await dataset.meta?.()
+  return meta === undefined ? false : trueSizePointsFor(meta.platform)
+}
+
 async function previewDataset(
   url: string,
   loaders: CollectionPreviewLoaders,
@@ -343,6 +374,7 @@ async function previewDataset(
 function previewCells(
   cells: readonly CellOverviewPoint[],
   signal: AbortSignal | undefined,
+  trueSize = false,
 ): PreviewCells {
   throwIfAborted(signal)
 
@@ -368,7 +400,43 @@ function previewCells(
   }
 
   const depths = previewDepths(cells)
-  return { positions, cellIds, bounds, ...(depths === null ? {} : { depths }) }
+  const radius = previewRadius(cells.length, (index) => cells[index]?.cellArea)
+  return {
+    positions,
+    cellIds,
+    bounds,
+    ...(depths === null ? {} : { depths }),
+    ...(radius === undefined ? {} : { radius }),
+    ...(trueSize ? { trueSize } : {}),
+  }
+}
+
+// Each cell's radius in µm from its area, as cellAreaToRadiusMicrometers
+// gives it in the main view, PREVIEW_CELL_RADIUS_MICROMETERS without one: a
+// number when every cell has the same, so a Visium section stores none per
+// spot; undefined when no cell has an area.
+export function previewRadius(
+  count: number,
+  areaOf: (index: number) => number | undefined,
+): PreviewRadius | undefined {
+  let measured = false
+  let shared = PREVIEW_CELL_RADIUS_MICROMETERS
+  let radii: Float32Array | null = null
+
+  for (let index = 0; index < count; index += 1) {
+    const fromArea = cellAreaToRadiusMicrometers(areaOf(index))
+    const radius = fromArea ?? PREVIEW_CELL_RADIUS_MICROMETERS
+    if (fromArea !== undefined) measured = true
+
+    if (index === 0) {
+      shared = radius
+    } else if (radii === null && radius !== shared) {
+      radii = new Float32Array(count).fill(shared, 0, index)
+    }
+    if (radii !== null) radii[index] = radius
+  }
+
+  return measured ? (radii ?? shared) : undefined
 }
 
 // Every cell's z, when every cell has one and they are not all the same.
@@ -457,11 +525,17 @@ function previewScores(
     }
   })
 
+  const radius = previewRadius(
+    batch.elements.length,
+    (index) => batch.elements[index]?.cellArea,
+  )
+
   return {
     positions,
     scores: values,
     maxScore,
     ...(depths === null ? {} : { depths }),
+    ...(radius === undefined ? {} : { radius }),
   }
 }
 

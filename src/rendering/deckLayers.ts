@@ -14,6 +14,7 @@ import {
   geneExpressionRadiusMaxPixels,
   hasGeneExpressionStyle,
   overviewCellRadiusMaxPixels,
+  UNCAPPED_RADIUS_PIXELS,
 } from './cellPointRenderer'
 import { cellPointLayerColors, type CellPointLayerColors } from './cellPointStyle'
 import { createPythonHighlightLayers } from './pythonHighlightLayer'
@@ -164,9 +165,6 @@ function cachedCellPointLayerColors(
   cellPointLayerColorsCache.set(colors, { fillOpacity, lineOpacity, colors: layerColors })
   return layerColors
 }
-
-// deck.gl's own default: no cap.
-const UNCAPPED_RADIUS_PIXELS = Number.MAX_SAFE_INTEGER
 
 export function createOverviewLayers(
   cells: readonly OverviewCellDatum[],

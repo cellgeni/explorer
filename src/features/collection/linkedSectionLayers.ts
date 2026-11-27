@@ -11,9 +11,11 @@ import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { metadataValueText } from '../annotations/annotationModel'
 import type { CollectionBarAnnotations } from './CollectionBar'
 import {
+  PREVIEW_CELL_RADIUS_MICROMETERS,
   shownClassOf,
   type PreviewCells,
   type PreviewMetadataTrack,
+  type PreviewRadius,
   type PreviewScores,
   type PreviewValues,
 } from './collectionPreviewData'
@@ -22,16 +24,15 @@ import type { PreviewEntry } from './collectionPreviewStore'
 
 // The layers of a panel beside the main view: a registered section's cells
 // from its collection preview, coloured as the main view colours them. Each
-// cell is a point 10 µm across, like a cell without an area in the main view,
-// kept between a minimum and a maximum size on screen. Data y grows
-// downwards; deck.gl's y is its negative, as in the main view.
+// cell is a point the size of its area, as in the main view (10 µm across
+// without one), kept between a minimum and a maximum size on screen. Data y
+// grows downwards; deck.gl's y is its negative, as in the main view.
 
 export const LINKED_SECTION_VIEW = new OrthographicView({
   id: 'linked-section',
   flipY: false,
 })
 
-export const LINKED_SECTION_CELL_RADIUS_MICROMETERS = 5
 const CELL_RADIUS_MIN_PIXELS = 0.5
 const SCORED_CELL_RADIUS_MIN_PIXELS = 1
 
@@ -55,7 +56,8 @@ export interface LinkedSectionLayerOptions {
   readonly scaleMax: number
   // The Cell point size multiplier.
   readonly radiusScale: number
-  // The largest a point gets on screen, before radiusScale.
+  // The largest a point gets on screen, before radiusScale
+  // (UNCAPPED_RADIUS_PIXELS for points that keep their physical size).
   readonly radiusMaxPixels: number
 }
 
@@ -65,6 +67,8 @@ export interface LinkedScoredCells {
   readonly colors: Uint8Array
   // Each drawn cell's index in PreviewScores.
   readonly order: Uint32Array
+  // Their radii, in drawn order when one per cell.
+  readonly radius: PreviewRadius
 }
 
 // What a section's cells are coloured by: the annotation set's classes in
@@ -115,8 +119,8 @@ export function linkedSectionLayers(
     radiusUnits: 'common',
     radiusScale: options.radiusScale,
     radiusMaxPixels: options.radiusMaxPixels * options.radiusScale,
-    getRadius: LINKED_SECTION_CELL_RADIUS_MICROMETERS,
   } as const
+  const cellRadius = cells.radius ?? PREVIEW_CELL_RADIUS_MICROMETERS
   const cellCount = cells.positions.length / 2
   const classColors =
     overlay?.kind === 'classes'
@@ -131,12 +135,14 @@ export function linkedSectionLayers(
         length: cellCount,
         attributes: {
           getPosition: { value: deckPositions(cells.positions), size: 2 },
+          ...radiusAttribute(cellRadius),
           ...(classColors === null
             ? {}
             : { getFillColor: { value: classColors, size: 4, normalized: true } }),
         },
       },
       ...radius,
+      ...radiusProp(cellRadius),
       radiusMinPixels: CELL_RADIUS_MIN_PIXELS * options.radiusScale,
       ...(classColors === null
         ? { getFillColor: overlay?.kind === 'scores' ? UNSCORED_CELL_RGBA : CELL_RGBA }
@@ -159,9 +165,11 @@ export function linkedSectionLayers(
             attributes: {
               getPosition: { value: scored.positions, size: 2 },
               getFillColor: { value: scored.colors, size: 4, normalized: true },
+              ...radiusAttribute(scored.radius),
             },
           },
           ...radius,
+          ...radiusProp(scored.radius),
           radiusMinPixels: SCORED_CELL_RADIUS_MIN_PIXELS * options.radiusScale,
           pickable: true,
           stroked: false,
@@ -172,6 +180,18 @@ export function linkedSectionLayers(
   }
 
   return layers
+}
+
+// A radius as deck.gl takes it: one for every point as the getRadius prop
+// (radiusProp), or one per point as an attribute (radiusAttribute).
+export function radiusAttribute(radius: PreviewRadius): {
+  readonly getRadius?: { readonly value: Float32Array; readonly size: 1 }
+} {
+  return typeof radius === 'number' ? {} : { getRadius: { value: radius, size: 1 } }
+}
+
+export function radiusProp(radius: PreviewRadius): { readonly getRadius?: number } {
+  return typeof radius === 'number' ? { getRadius: radius } : {}
 }
 
 // Cached per array, so a pan or zoom hands deck.gl the same attribute arrays
@@ -284,8 +304,13 @@ export function scoredCells(
   const order = Uint32Array.from(indices)
   const positions = new Float32Array(order.length * 2)
   const colors = new Uint8Array(order.length * 4)
+  const scoreRadii = scores.radius instanceof Float32Array ? scores.radius : null
+  const radii = scoreRadii === null ? null : new Float32Array(order.length)
 
   order.forEach((scoreIndex, index) => {
+    if (radii !== null) {
+      radii[index] = scoreRadii?.[scoreIndex] ?? PREVIEW_CELL_RADIUS_MICROMETERS
+    }
     positions[index * 2] = scores.positions[scoreIndex * 2] ?? 0
     positions[index * 2 + 1] = -(scores.positions[scoreIndex * 2 + 1] ?? 0)
     const color = geneExpressionColor(
@@ -302,7 +327,10 @@ export function scoredCells(
     colors[index * 4 + 3] = SCORED_CELL_ALPHA
   })
 
-  const cells = { positions, colors, order }
+  const radius =
+    radii ??
+    (typeof scores.radius === 'number' ? scores.radius : PREVIEW_CELL_RADIUS_MICROMETERS)
+  const cells = { positions, colors, order, radius }
   scoredCellsCache.set(scores, { key, cells })
   return cells
 }

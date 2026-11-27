@@ -36,6 +36,7 @@ interface LayerProps {
     >
   }
   readonly getFillColor?: readonly number[]
+  readonly getRadius?: number
   readonly radiusScale: number
   readonly radiusMaxPixels: number
   readonly radiusMinPixels: number
@@ -91,6 +92,35 @@ describe('linkedSectionLayers', () => {
       top.slice(0, 3),
     )
     expect(scoredCells(scores, OPTIONS).order).toEqual(Uint32Array.from([2, 0]))
+  })
+
+  it('sizes points by their radii: one for all as a prop, else one each', () => {
+    // Cells without an area are points 10 µm across.
+    const plain = props(linkedSectionLayers(section, null, OPTIONS)[0])
+    expect(plain.getRadius).toBe(5)
+    expect(plain.data.attributes.getRadius).toBeUndefined()
+    // Visium spots share one radius.
+    const spots = props(
+      linkedSectionLayers({ ...section, radius: 27.5 }, null, OPTIONS)[0],
+    )
+    expect(spots.getRadius).toBe(27.5)
+    expect(spots.data.attributes.getRadius).toBeUndefined()
+
+    const radius = Float32Array.of(4, 5, 6)
+    const scores = {
+      positions: new Float32Array([0, 0, 10, 20, 30, 5]),
+      scores: new Float32Array([4, 0, 1]),
+      maxScore: 4,
+      radius,
+    }
+    const layers = linkedSectionLayers(
+      { ...section, radius },
+      { kind: 'scores', scores },
+      OPTIONS,
+    )
+    expect(props(layers[0]).data.attributes.getRadius?.value).toBe(radius)
+    // The scored cells' radii, in drawn order: highest score last.
+    expect([...props(layers[1]).data.attributes.getRadius!.value]).toEqual([6, 4])
   })
 
   it('draws no cell whose stored score is NaN or infinite (EXP-241)', () => {
