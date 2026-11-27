@@ -473,3 +473,26 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A panel loaded on first use (LazyPanel.tsx): its loading line, and the
+   message if it cannot load. */
+.lazy-panel-status {
+  margin: 0;
+  padding: 8px;
+  color: var(--text-3);
+  font-size: var(--font-control);
+}
+
+.lazy-panel-error {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 8px;
+}
+
+.lazy-panel-error p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+  line-height: 1.25;
+}

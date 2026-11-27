@@ -1,7 +1,15 @@
-import { PlotsPanel } from '../plots/PlotsPanel'
+import { lazy } from 'react'
+import { LazyPanel } from '../../components/LazyPanel'
+import { useOpenedOnce } from '../../components/useOpenedOnce'
 import type { PlotsModel } from '../plots/usePlotsModel'
 import { FloatingWindow, type FloatingWindowSize } from './FloatingWindow'
 import { PLOTS_WINDOW_MIN_SIZE, PLOTS_WINDOW_SIZE } from './floatingWindowModel'
+
+// The figures load with the window, not with the app (O21).
+const PlotsPanel = lazy(async () => {
+  const module = await import('../plots/PlotsPanel')
+  return { default: module.PlotsPanel }
+})
 
 // Plots of the selected genes by class (plan 22-D8): a window at the top
 // right of the canvas, or to the left of the Embedding window, opened from
@@ -26,6 +34,9 @@ export function PlotsWindow({
   readonly front?: boolean | undefined
   readonly onActivate?: (() => void) | undefined
 }) {
+  // Mounted from the first open on, so a closed window keeps its figures.
+  const opened = useOpenedOnce(open)
+
   return (
     <FloatingWindow
       title="Plots"
@@ -45,7 +56,11 @@ export function PlotsWindow({
       front={front}
       onActivate={onActivate}
     >
-      <PlotsPanel plots={plots} />
+      {opened ? (
+        <LazyPanel label="Plots">
+          <PlotsPanel plots={plots} />
+        </LazyPanel>
+      ) : null}
     </FloatingWindow>
   )
 }

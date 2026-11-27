@@ -416,13 +416,15 @@ M4, memory:
 
 M5, start-up:
 
-- [ ] **O21. Load panels when they open.** (S–M) Cell Query, Browse Store
+- [x] **O21. Load panels when they open.** (S–M) Cell Query, Browse Store
       and Browse File, Plots and Screenshot load on first use, with the
       message that a lazy chunk already shows after a deploy.
   - A test keeps them out of the entry chunk, as
     `tests/config/viteConfig.test.ts` keeps `h5wasm` out of the vendor
     groups.
   - Measure S1.
+  - Built in [#489](https://github.com/cellgeni/explorer/pull/489):
+    [Panels Loaded On First Use](#panels-loaded-on-first-use-2026-11-27).
 
 ### Baseline (2026-11-25)
 
@@ -2122,6 +2124,62 @@ Tests:
   its worker's memory, and not once closed.
 - `src/workers/h5FileCore.test.ts`: `stats` reports more than the blocks
   read.
+
+## Panels Loaded On First Use (2026-11-27)
+
+Task O21. On the base of this task's PR (#488), the entry chunk was
+1,206 kB minified (363 kB gzip), and `index.html` preloaded it with 45
+other files. Cell Query, Plots, the Browse drawer (Browse Store and Browse
+File) and the Screenshot form were in it, although none shows until asked
+for.
+
+What changed:
+
+- **The four load the first time they are shown**: Cell Query and Plots
+  when their window first opens, the Browse drawer when it first opens, the
+  Screenshot form when the popover first opens. Each stays mounted after,
+  as before.
+- **`LazyPanel`** (`src/components/LazyPanel.tsx`) shows "Loading …" while
+  a panel's chunk loads. If the chunk is gone, as after a deploy, it says
+  the app was updated, with Reload, inside the panel rather than over the
+  whole app (`staleChunk.ts`); an error of the panel's own offers Retry.
+- **One `app` chunk** (`vite.config.ts`) for the app's own modules that the
+  entry imports statically. With the panels lazy, Rolldown put each module
+  they share with the entry in a chunk of its own, which `index.html`
+  preloads: 59 files, and a start screen 0.2 s slower at 150 ms a request
+  than the base. The group puts them, and the many small shared chunks the
+  base already had, in one.
+
+Measured S1 (the start screen at 10 Mbit/s and 150 ms a request, minified
+builds, three runs each, alternating):
+
+| Build                       | Time        | Requests | Busy (ms) | Longest (ms) | JavaScript preloaded  |
+| --------------------------- | ----------- | -------- | --------- | ------------ | --------------------- |
+| Base                        | 2.03–2.05 s | 48       | 127–141   | 94–97        | 46 files, 987 kB gzip |
+| Panels lazy, no `app` group | 2.21–2.27 s | 61       | 107–148   | 74–95        | 59 files, 976 kB gzip |
+| Panels lazy and `app` group | 1.25–1.27 s | 8        | 93–100    | 78–80        | 6 files, 953 kB gzip  |
+
+- **The panels' own chunks** are 67 kB minified, 21 kB gzip: Browse 36 kB,
+  Cell Query 17 kB, Plots 7.5 kB and Screenshot 5.6 kB. Most of their code,
+  the models App holds, stays at start.
+- **Most of the time saved is requests**: 40 fewer round trips of 150 ms on
+  6 connections.
+- **Loading and colouring a dataset** take as long: the synthetic Xenium
+  folder loaded with 838–879 ms of main-thread time against 842–937 ms, and
+  coloured in 0.66–0.73 s against 0.71–0.76 s.
+
+Tests:
+
+- `tests/config/lazyPanels.test.ts` walks the static imports from
+  `src/main.tsx`, leaving out type-only imports and `import()`. The windows
+  that load the panels are reached and the panels are not. The `app` group
+  takes `src` modules that the entry needs, and no package.
+- `src/components/LazyPanel.test.tsx` covers the loading line, the
+  app-updated message with Reload when the import fails as after a deploy,
+  Retry after an error of the panel's own, and `useOpenedOnce`.
+- Checked in the built app: each panel's chunk is fetched only when it
+  opens; with the Plots chunk deleted, the Plots window says the app was
+  updated, with Reload, and the rest of the app works.
 
 ## Closed Open Items
 

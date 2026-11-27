@@ -1017,7 +1017,15 @@ it in sync. The field list is in the
 - `vite.config.ts` splits vendor chunks (`react-vendor`, `deck-vendor`,
   `duckdb-vendor`, `spatial-io-vendor`, `codec-vendor`); h5wasm, whose
   WASM is inlined, stays out of them in a chunk of its own that loads on
-  first import, so the start screen does not preload it. The config also
+  first import, so the start screen does not preload it. The app's own
+  modules that the entry imports statically go in one `app` chunk, so the
+  start screen fetches 6 files of JavaScript rather than one for each module
+  that a lazily loaded part shares. Cell Query, Plots, the Browse drawer and
+  the Screenshot form load the first time they are shown (`LazyPanel`,
+  `src/components/LazyPanel.tsx`), which says so while they load and, if
+  their chunk is gone after a deploy, that the app was updated, with Reload;
+  `tests/config/lazyPanels.test.ts` keeps them out of the entry's static
+  imports. The config also
   serves `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp` in dev and preview. The app does not
   depend on cross-origin isolation: nothing uses `SharedArrayBuffer`, and

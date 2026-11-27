@@ -117,7 +117,7 @@ import {
 } from './features/app-shell/useUndoableRemovals'
 import { useUndoToast } from './features/app-shell/useUndoToast'
 import { StartScreen } from './features/start/StartScreen'
-import { StoreStructureDrawer } from './features/store-structure/StoreStructureDrawer'
+import { LazyStoreStructureDrawer } from './features/store-structure/LazyStoreStructureDrawer'
 import { useStoreStructure } from './features/store-structure/useStoreStructure'
 import {
   CollectionBar,
@@ -5954,7 +5954,7 @@ export function App({ dependencies }: AppProps = {}) {
         panels={shellPanels}
         onPanelsChange={setShellPanels}
         layerReveal={layerReveal}
-        storeStructure={<StoreStructureDrawer store={storeStructure} />}
+        storeStructure={<LazyStoreStructureDrawer store={storeStructure} />}
         collection={
           datasetCollection.state.status === 'idle' ? null : (
             <CollectionBar
