@@ -40,7 +40,7 @@ Other options:
 | Option                   | Effect                                                                                                   |
 | ------------------------ | -------------------------------------------------------------------------------------------------------- |
 | `--runs <n>`             | Repeat each app URL n times                                                                              |
-| `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, with one profile per key              |
+| `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, or click a button, one profile each   |
 | `--step-settle <s>`      | Profile each step this many seconds (default 2)                                                          |
 | `--then <urls>`          | Then open each of these datasets (comma-separated) in turn from the dataset field, with one profile each |
 | `--hash <params>`        | Add these parameters to the link's hash, for example `cellBounds=0` to start with cell outlines off      |
@@ -61,6 +61,12 @@ keyboard controls: `=` zooms in, `-` zooms out and the arrow keys pan. For
 example, `--gene SNAP25 --steps "=,=,=,=,=,ArrowRight"` colours the cells by
 SNAP25, zooms in five times and pans once, with a profile for each step and
 the expression status line after it.
+
+A step `click:<name>` clicks the button with exactly that name instead, then
+puts the focus back on the spatial view, so keys after it still zoom. For a
+Visium HD folder, `--steps "click:2 µm,=,=,=,=,=,=,="` picks the 2 µm bins and
+zooms in until they are drawn; `--steps Enter` opens the card of the bin at
+the centre of the view, which reads its rows of `barcode_mappings.parquet`.
 
 `--memory` reads CDP's `Runtime.getHeapUsage` from the page and from every
 worker alive at the end of the phase. For each it prints the JavaScript heap
@@ -204,8 +210,25 @@ Then open `http://127.0.0.1:4199/xenium/` or
   - With more cells or genes per cell, `X` passes 300 MiB and is read gene by
     gene instead.
 
-Both are drawn from one seeded model of a tissue: cells on a jittered 10 µm
-grid, in 20 clusters that are patches of the slide.
+With `--what visium-hd` (or `--what xenium,h5ad,visium-hd`), the script also
+writes **`visium-hd/`**, a Space Ranger 4 Visium HD folder at the size of the
+reference run, about 240 MB:
+
+- A grid of 3,350 × 3,350 bins of 2 µm (`--visium-hd-side`), with a disc of
+  tissue a third of its area: 3,740,816 bins under tissue at 2 µm, 233,814
+  at 8 µm and 58,453 at 16 µm.
+- For each bin size, `tissue_positions.parquet` with every bin of the grid,
+  as Space Ranger writes it, the scalefactors, grey tissue images, and the
+  filtered matrix as H5 and `features.tsv.gz`; at 2 µm, `barcodes.tsv.gz`,
+  from which the viewer reads that tier.
+- `barcode_mappings.parquet`, sorted by 2 µm barcode in row groups of about
+  a million rows, with square cells of 5 × 5 bins.
+
+Open it as `http://127.0.0.1:4199/visium-hd/`.
+
+The Xenium folder and the H5AD file are drawn from one seeded model of a
+tissue: cells on a jittered 10 µm grid, in 20 clusters that are patches of
+the slide.
 
 - **Marker genes:** each cluster has five, `M01a` to `M20e`, expressed by
   most of its cells, so each is in a few percent of all cells.

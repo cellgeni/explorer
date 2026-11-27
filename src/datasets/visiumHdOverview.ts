@@ -1,4 +1,4 @@
-import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
+import { asyncBufferFromUrl } from 'hyparquet'
 import { datasetFileUrl } from '../data/datasetFiles'
 import { isGeneFeature } from '../data/geneFeatures'
 import { readMaybeGzipText } from '../data/readMaybeGzipText'
@@ -8,6 +8,7 @@ import {
   defaultPersistentByteRangeCache,
   fetchKeepingValidator,
 } from '../data/persistentByteRangeCache'
+import { readParquetColumns } from '../data/parquetColumns'
 import { rangeReadsWithoutHttpCache } from '../data/rangeFetch'
 import {
   deriveNestedGridBasis,
@@ -280,23 +281,86 @@ export function parseVisiumHdScalefactors(value: unknown): VisiumHdScalefactors 
   }
 }
 
+// Read as columns, with no object per row, unless `readObjects` is given
+// (O16); the worker reads them this way too (visiumHdTablesWorker.ts).
 export async function readVisiumHdTissuePositions(
   options: ReadVisiumHdTissuePositionsOptions,
 ): Promise<VisiumHdTissuePositions> {
   const file = options.file ?? (await visiumHdFileFromUrl(options))
   const compressors =
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
+
+  if (options.readObjects === undefined) {
+    let columns: Readonly<Record<string, ArrayLike<unknown>>>
+
+    try {
+      columns = await readParquetColumns({
+        file,
+        columns: VISIUM_HD_TISSUE_POSITION_COLUMNS,
+        compressors,
+        ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
+      })
+    } catch (error) {
+      throw isLowLevelParquetReadFailure(error)
+        ? createTissuePositionsDecodeError(
+            error,
+            VISIUM_HD_TISSUE_POSITION_COLUMNS,
+            options.url,
+          )
+        : error
+    }
+
+    return parseVisiumHdTissuePositionColumns(columns)
+  }
+
   const rows = await readVisiumHdPositionRowsWithContext({
     file,
     columns: VISIUM_HD_TISSUE_POSITION_COLUMNS,
     rowFormat: 'object',
     compressors,
     ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
-    readObjects: options.readObjects ?? readHyparquetObjects,
+    readObjects: options.readObjects,
     url: options.url,
   })
 
   return parseVisiumHdTissuePositionRows(rows)
+}
+
+// As parseVisiumHdTissuePositionRows, from the file's columns.
+export function parseVisiumHdTissuePositionColumns(
+  columns: Readonly<Record<string, ArrayLike<unknown>>>,
+): VisiumHdTissuePositions {
+  const barcodes = columns.barcode ?? []
+  const rowCount = barcodes.length
+  const column = (key: string): ArrayLike<unknown> => columns[key] ?? { length: 0 }
+  const inTissueValues = column('in_tissue')
+  const arrayRowValues = column('array_row')
+  const arrayColValues = column('array_col')
+  const fullresRowValues = column('pxl_row_in_fullres')
+  const fullresColValues = column('pxl_col_in_fullres')
+  const ids = new Array<SpatialElementId>(rowCount)
+  const inTissue = new Uint8Array(rowCount)
+  const arrayRows = new Int32Array(rowCount)
+  const arrayCols = new Int32Array(rowCount)
+  const fullresRows = new Float64Array(rowCount)
+  const fullresCols = new Float64Array(rowCount)
+
+  for (let index = 0; index < rowCount; index += 1) {
+    const barcode = barcodes[index]
+
+    if (typeof barcode !== 'string') {
+      throw new Error('Expected tissue_positions.parquet barcode to be a string.')
+    }
+
+    ids[index] = barcode
+    inTissue[index] = readInTissueValue(inTissueValues[index])
+    arrayRows[index] = readIntegerValue(arrayRowValues[index], 'array_row')
+    arrayCols[index] = readIntegerValue(arrayColValues[index], 'array_col')
+    fullresRows[index] = readNumericValue(fullresRowValues[index], 'pxl_row_in_fullres')
+    fullresCols[index] = readNumericValue(fullresColValues[index], 'pxl_col_in_fullres')
+  }
+
+  return { ids, inTissue, arrayRows, arrayCols, fullresRows, fullresCols }
 }
 
 export function parseVisiumHdTissuePositionRows(
@@ -752,18 +816,6 @@ async function visiumHdFileFromUrl(
   }) as AsyncBuffer
 }
 
-async function readHyparquetObjects(
-  options: VisiumHdParquetReadObjectsOptions,
-): Promise<readonly Record<string, unknown>[]> {
-  return (await parquetReadObjects({
-    file: options.file,
-    columns: [...options.columns],
-    rowFormat: options.rowFormat,
-    ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
-    ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
-  })) as readonly Record<string, unknown>[]
-}
-
 async function readVisiumHdPositionRowsWithContext(
   options: VisiumHdParquetReadObjectsOptions & {
     readonly readObjects: VisiumHdParquetObjectReader
@@ -850,8 +902,10 @@ function readOptionalRegistrationTargetImageScale(
 }
 
 function readInTissue(row: Record<string, unknown>): 0 | 1 {
-  const value = row.in_tissue
+  return readInTissueValue(row.in_tissue)
+}
 
+function readInTissueValue(value: unknown): 0 | 1 {
   if (value === true || value === 1 || value === 1n) {
     return 1
   }
@@ -864,7 +918,11 @@ function readInTissue(row: Record<string, unknown>): 0 | 1 {
 }
 
 function readIntegerColumn(row: Record<string, unknown>, key: string): number {
-  const value = readNumericColumn(row, key)
+  return readIntegerValue(row[key], key)
+}
+
+function readIntegerValue(source: unknown, key: string): number {
+  const value = readNumericValue(source, key)
 
   if (!Number.isInteger(value)) {
     throw new Error(`Expected tissue_positions.parquet ${key} to be an integer.`)
@@ -874,8 +932,10 @@ function readIntegerColumn(row: Record<string, unknown>, key: string): number {
 }
 
 function readNumericColumn(row: Record<string, unknown>, key: string): number {
-  const value = row[key]
+  return readNumericValue(row[key], key)
+}
 
+function readNumericValue(value: unknown, key: string): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
   }

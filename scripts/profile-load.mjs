@@ -9,7 +9,10 @@
 //
 //   --gene <symbol>      also profile colouring by this gene after the load
 //   --steps <keys>       then press these keys on the spatial view, one
-//                        profile each, e.g. "=,=,=,ArrowRight" (= zooms in)
+//                        profile each, e.g. "=,=,=,ArrowRight" (= zooms in);
+//                        a step "click:<name>" clicks the button of that
+//                        name instead, e.g. "click:8 µm" for a Visium HD bin
+//                        size
 //   --step-settle <s>    profile each step this long (default 2)
 //   --then <urls>        then open each of these datasets (comma-separated)
 //                        in turn from the dataset field, one profile each
@@ -163,7 +166,17 @@ async function profileRun(run, appIndex, appUrl) {
     for (const [index, key] of steps.entries()) {
       await cdp.send('Profiler.start')
       const stepStarted = Date.now()
-      await page.keyboard.press(key)
+
+      if (key.startsWith('click:')) {
+        await page
+          .getByRole('button', { name: key.slice('click:'.length), exact: true })
+          .click()
+        // Later keys go to the spatial view again.
+        await page.getByRole('img', { name: SPATIAL_VIEW }).focus()
+      } else {
+        await page.keyboard.press(key)
+      }
+
       await page.waitForTimeout(stepSettleMs)
       const status = await page
         .locator('.analysis-status')

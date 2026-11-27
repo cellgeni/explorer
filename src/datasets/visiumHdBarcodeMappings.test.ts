@@ -13,50 +13,51 @@ import {
 } from './visiumHdBarcodeMappings'
 import type { AsyncBuffer, FileMetaData } from 'hyparquet'
 import type {
+  VisiumHdBarcodeMappingBinSelection,
   VisiumHdBarcodeMappingsReadObjectsOptions,
   VisiumHdBarcodeMappingsSourceCache,
 } from './visiumHdBarcodeMappings'
 
-const fakeFile: AsyncBuffer = {
-  byteLength: 8,
-  slice: () => new ArrayBuffer(0),
-}
-
 describe('Visium HD barcode mappings', () => {
-  it('projects root barcode_mappings.parquet columns through a budgeted read', async () => {
+  it("projects the bins' rows through a read of their row groups", async () => {
     const calls: VisiumHdBarcodeMappingsReadObjectsOptions[] = []
     const mappings = await readVisiumHdBarcodeMappings('https://example.test/visium', {
-      file: fakeFile,
-      maxRows: 10,
+      file: fixtureFile(),
+      maxRows: 1_000,
+      // 16 µm bin (2, 3) is in 2 µm rows 16-23: row groups 16-23.
+      bins: { binSizeMicrometers: 16, binIds: ['s_016um_00002_00003-1'] },
       readObjects: async (options) => {
         calls.push(options)
         return [
           {
-            square_002um: 's_002um_000001_000002-1',
-            square_008um: 's_008um_000000_000000-1',
-            square_016um: 's_016um_000000_000000-1',
+            square_002um: 's_002um_00016_00024-1',
+            square_008um: 's_008um_00004_00006-1',
+            square_016um: 's_016um_00002_00003-1',
             cell_id: 'cell-1',
             in_nucleus: 1n,
             in_cell: true,
           },
+          mappingRow('s_002um_00016_00000-1'),
         ]
       },
     })
 
     expect(calls).toEqual([
       {
-        file: fakeFile,
+        file: expect.anything(),
+        metadata: expect.anything(),
         columns: VISIUM_HD_BARCODE_MAPPING_COLUMNS,
         rowFormat: 'object',
-        rowEnd: 11,
+        rowStart: 16 * 40,
+        rowEnd: 24 * 40,
         compressors: parquetCompressors,
       },
     ])
     expect(mappings).toEqual([
       {
-        square002um: 's_002um_000001_000002-1',
-        square008um: 's_008um_000000_000000-1',
-        square016um: 's_016um_000000_000000-1',
+        square002um: 's_002um_00016_00024-1',
+        square008um: 's_008um_00004_00006-1',
+        square016um: 's_016um_00002_00003-1',
         cellId: 'cell-1',
         inNucleus: true,
         inCell: true,
@@ -64,15 +65,12 @@ describe('Visium HD barcode mappings', () => {
     ])
   })
 
-  it('rejects reads that return more rows than the configured budget', async () => {
+  it('rejects reads whose row groups hold more rows than the budget', async () => {
     await expect(
       readVisiumHdBarcodeMappings('https://example.test/visium', {
-        file: fakeFile,
-        maxRows: 1,
-        readObjects: async () => [
-          mappingRow('s_002um_000001_000002-1'),
-          mappingRow('s_002um_000003_000004-1'),
-        ],
+        file: fixtureFile(),
+        maxRows: 100,
+        bins: { binSizeMicrometers: 16, binIds: ['s_016um_00002_00003-1'] },
       }),
     ).rejects.toBeInstanceOf(VisiumHdBarcodeMappingsBudgetExceededError)
   })
@@ -170,6 +168,22 @@ const FIXTURE_BYTES = new Uint8Array(
 )
 const FIXTURE_ROW_GROUPS = 48
 const FIXTURE_ROWS = FIXTURE_ROW_GROUPS * 40
+// The fixture's 6 x 5 16 µm bins, which hold every row.
+const EVERY_16UM_BIN: VisiumHdBarcodeMappingBinSelection = {
+  binSizeMicrometers: 16,
+  binIds: Array.from(
+    { length: 30 },
+    (_value, index) =>
+      `s_016um_${String(Math.floor(index / 5)).padStart(5, '0')}_${String(index % 5).padStart(5, '0')}-1`,
+  ),
+}
+
+function fixtureFile(): AsyncBuffer {
+  return {
+    byteLength: FIXTURE_BYTES.byteLength,
+    slice: (start, end) => FIXTURE_BYTES.slice(start, end).buffer,
+  }
+}
 
 // Serves the fixture with HEAD and Range, recording each request and how many
 // are in flight. A response arrives on the next macrotask.
@@ -235,6 +249,7 @@ describe('Visium HD barcode mappings over HTTP', () => {
       fetcher: recorded.fetcher,
       byteRangeCache: null,
       rangeRequests: { maxRangeBytes: 1 },
+      bins: EVERY_16UM_BIN,
     })
 
     expect(mappings).toHaveLength(FIXTURE_ROWS)
@@ -249,6 +264,7 @@ describe('Visium HD barcode mappings over HTTP', () => {
     const mappings = await readVisiumHdBarcodeMappings(FIXTURE_BASE_URL, {
       fetcher: recorded.fetcher,
       byteRangeCache: null,
+      bins: EVERY_16UM_BIN,
     })
 
     expect(mappings).toHaveLength(FIXTURE_ROWS)
@@ -268,6 +284,7 @@ describe('Visium HD barcode mappings over HTTP', () => {
     const all = await readVisiumHdBarcodeMappings(FIXTURE_BASE_URL, {
       fetcher: fixtureFetcher().fetcher,
       byteRangeCache: null,
+      bins: EVERY_16UM_BIN,
     })
     const sourceCache: VisiumHdBarcodeMappingsSourceCache = new Map()
     const first = fixtureFetcher()

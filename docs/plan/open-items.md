@@ -41,10 +41,11 @@ Sequencing:
 Other gaps found in the review:
 
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
-      than the Xenium overview, SpatialData shapes and imported vector
-      segmentations, which have workers of their own (Visium HD positions and
-      barcode mappings; the positions decode for about 0.6 s in short tasks,
-      measured 2026-11-17), and the fetching and assembly in zarrita reads. The
+      than the Xenium overview, SpatialData shapes, imported vector
+      segmentations and, since O16 (2026-11-27), Visium HD positions and bin
+      mappings, which have workers of their own
+      ([Visium HD Tables Read In A Worker](phases/optimization-pass.md#visium-hd-tables-read-in-a-worker-2026-11-27)),
+      and the fetching and assembly in zarrita reads. The
       AnnData table code also runs there, for both H5AD backends. Since O15
       (2026-11-27) its passes are cheaper: on the 598,222-cell 460-plex zip a
       load spends 0.33–0.38 s on making the cell IDs unique, counting string

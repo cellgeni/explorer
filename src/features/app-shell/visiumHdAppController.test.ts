@@ -84,43 +84,28 @@ describe('visiumHdAppController', () => {
     const barcodeMappingsForCell = vi.fn(async () => mappings)
     const signal = new AbortController().signal
     await selectedVisiumHdCellMappings(
-      { matrix: vi.fn(), barcodeMappings: vi.fn(), barcodeMappingsForCell },
+      { matrix: vi.fn(), barcodeMappingsForCell },
       'cell-1#3',
-      50,
       signal,
     )
     expect(barcodeMappingsForCell).toHaveBeenCalledWith('cell-1', { signal })
   })
 
-  it('uses cell-scoped mapping APIs before full mapping scans', async () => {
+  it('reads mappings for the cell, and refuses a dataset without them', async () => {
     const signal = new AbortController().signal
     const barcodeMappingsForCell = vi.fn(async () => mappings)
-    const barcodeMappings = vi.fn(async () => [])
-    const dataset = {
-      matrix: vi.fn(),
-      barcodeMappings,
-      barcodeMappingsForCell,
-    }
 
     await expect(
-      selectedVisiumHdCellMappings(dataset, 'cell-1', 50, signal),
+      selectedVisiumHdCellMappings(
+        { matrix: vi.fn(), barcodeMappingsForCell },
+        'cell-1',
+        signal,
+      ),
     ).resolves.toBe(mappings)
     expect(barcodeMappingsForCell).toHaveBeenCalledWith('cell-1', { signal })
-    expect(barcodeMappings).not.toHaveBeenCalled()
-  })
-
-  it('falls back to budgeted full mapping scans', async () => {
-    const signal = new AbortController().signal
-    const barcodeMappings = vi.fn(async () => mappings)
-    const dataset = {
-      matrix: vi.fn(),
-      barcodeMappings,
-    }
-
     await expect(
-      selectedVisiumHdCellMappings(dataset, 'cell-1', 50, signal),
-    ).resolves.toBe(mappings)
-    expect(barcodeMappings).toHaveBeenCalledWith({ maxRows: 50, signal })
+      selectedVisiumHdCellMappings({ matrix: vi.fn() }, 'cell-1', signal),
+    ).rejects.toThrow('Loaded dataset does not expose Visium HD barcode mappings.')
   })
 
   it('formats mapping-row scope labels and detects capabilities', () => {

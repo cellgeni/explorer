@@ -187,12 +187,6 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return this.readers.filteredMatrixBarcodes(binSizeMicrometers, options)
   }
 
-  barcodeMappings(
-    options: VisiumHdBarcodeMappingQueryOptions,
-  ): Promise<readonly VisiumHdBarcodeMapping[]> {
-    return this.readers.barcodeMappings(options)
-  }
-
   barcodeMappingsForCell(
     cellId: SpatialElementId,
     options: VisiumHdBarcodeMappingCellQueryOptions = {},
