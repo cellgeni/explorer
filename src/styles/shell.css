@@ -411,17 +411,27 @@
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
-/* The Python console (29-D11): the output, which takes the rest, then the
-   prompt and its actions. */
+/* The Python console (29-D11): the output, the prompt and its actions. */
 .shell-python-body {
   grid-template-rows: minmax(0, 1fr);
 }
 
+/* The output and the input share the height evenly until the separator
+   between them sets the input's height. */
 .python-console {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto auto;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr) auto;
   gap: var(--space-2);
   min-height: 0;
+}
+
+.python-console.has-prompt-height {
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
+}
+
+/* Without Python the output and the buttons show, and no input. */
+.python-console.is-unavailable {
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 /* A code file dragged over the console: it goes in the input. */
@@ -505,9 +515,8 @@
 }
 
 .python-prompt {
-  max-height: 40%;
   min-height: 2.5em;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-2);
   background: var(--surface-0);
@@ -519,11 +528,16 @@
 }
 
 .python-prompt .cm-editor {
-  /* Fills an input dragged taller, so a click anywhere in it types there
-     and its focus ring goes round the whole box. */
-  min-height: 100%;
+  /* Fills the input and scrolls in it, so the content fills it too: a click
+     below the lines goes to the last (pythonPrompt.ts), and the focus ring
+     goes round the whole box. */
+  height: 100%;
   background: transparent;
   color: var(--text-1);
+}
+
+.python-prompt .cm-scroller {
+  overflow: auto;
 }
 
 .python-prompt .cm-editor.cm-focused {
@@ -545,6 +559,24 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   justify-content: flex-end;
+}
+
+/* The guide to the Python API, at the start of the buttons' row; 24 px
+   tall, as the Help links are. */
+.python-api-link {
+  align-self: center;
+  margin-right: auto;
+  padding: 4px 0;
+  color: var(--accent);
+  font-size: var(--font-control);
+  line-height: 16px;
+  text-underline-offset: 2px;
+}
+
+.python-api-link:focus-visible {
+  border-radius: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* In a short window, as at 400% zoom, a window's plot, table or embedding

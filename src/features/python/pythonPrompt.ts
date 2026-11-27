@@ -25,7 +25,8 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 // highlighting. Enter runs an input Python finds complete and adds a line
 // to one that is not; Shift+Enter always adds a line. Up on the first line
 // and Down on the last walk the history. Tab completes, or indents at the
-// start of a line.
+// start of a line. A click in the space around the lines, rather than on
+// one, goes to the end of the last line.
 
 export interface PythonPromptHandlers {
   // Runs the input: 'incomplete' when Python wants more lines.
@@ -102,6 +103,22 @@ export function createPythonPrompt(
     return { from, options: items.map((item) => ({ label: item })) }
   }
 
+  // The content fills the input (shell.css), so a press on it but on no
+  // line is in the space above or below the lines. A click with a modifier,
+  // which extends the selection or adds a cursor, stays CodeMirror's.
+  const toEndOnEmptySpace = (event: MouseEvent, target: EditorView): boolean => {
+    const modified = event.shiftKey || event.altKey || event.ctrlKey || event.metaKey
+    if (event.button !== 0 || modified || event.target !== target.contentDOM) {
+      return false
+    }
+    target.dispatch({
+      selection: { anchor: target.state.doc.length },
+      scrollIntoView: true,
+    })
+    target.focus()
+    return true
+  }
+
   view = new EditorView({
     parent,
     state: EditorState.create({
@@ -115,6 +132,7 @@ export function createPythonPrompt(
             { key: 'Tab', run: completeOrIndent },
           ]),
         ),
+        EditorView.domEventHandlers({ mousedown: toEndOnEmptySpace }),
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         python(),

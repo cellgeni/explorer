@@ -7,6 +7,7 @@ import {
   DOCS_BASE_URL,
   HELP_LINKS,
   HOST_YOUR_OWN_DATA_URL,
+  PYTHON_API_URL,
   UI_REFERENCE_URL,
   USER_GUIDE_LOADING_DATA_URL,
   USER_GUIDE_URL,
@@ -39,6 +40,7 @@ describe('docLinks', () => {
       USER_GUIDE_LOADING_DATA_URL,
       UI_REFERENCE_URL,
       HOST_YOUR_OWN_DATA_URL,
+      PYTHON_API_URL,
     ]) {
       const { file } = docPath(url)
 
