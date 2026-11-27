@@ -3,6 +3,7 @@ import { useEffect, useState, type SetStateAction } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import { setVisiumView, visiumViewFor } from '../../datasets/datasetFactory'
+import { DatasetIsCollectionError } from '../../datasets/datasetManifest'
 import type {
   DatasetMeta,
   GridCellBatch,
@@ -97,6 +98,7 @@ function Probe({
   isDatasetLoaded = false,
   isDatasetLoading = false,
   onBeforeDatasetLoad,
+  onDatasetIsCollection,
   resultRef,
   startDatasetLoadRef = { current: null },
   warmDatasetForRoi = vi.fn(async () => undefined),
@@ -126,6 +128,7 @@ function Probe({
   readonly isDatasetLoaded?: boolean
   readonly isDatasetLoading?: boolean
   readonly onBeforeDatasetLoad?: () => void
+  readonly onDatasetIsCollection?: (collectionUrl: string, datasetUrl: string) => void
   readonly resultRef?: { current: ReturnType<typeof useDatasetLifecycle> | null }
   readonly startDatasetLoadRef?: LifecycleOptions['refs']['startDatasetLoadRef']
   readonly warmDatasetForRoi?: LifecycleOptions['loaders']['warmDatasetForRoi']
@@ -137,6 +140,7 @@ function Probe({
       appendDebugEvent: vi.fn(),
       appendFallbackNotice,
       ...(onBeforeDatasetLoad === undefined ? {} : { onBeforeDatasetLoad }),
+      ...(onDatasetIsCollection === undefined ? {} : { onDatasetIsCollection }),
       queueAutoContrast: vi.fn(),
       recordTelemetry: vi.fn(),
     },
@@ -497,6 +501,72 @@ describe('useDatasetLifecycle', () => {
       'reader',
     )
     expect(setDatasetReader).toHaveBeenLastCalledWith(null)
+  })
+
+  it('hands a dataset address that is a collection to be opened as one', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef: LifecycleOptions['refs']['startDatasetLoadRef'] = {
+      current: null,
+    }
+    const folderUrl = 'https://example.test/study'
+    const collectionUrl = `${folderUrl}/explorer.json`
+    const detectSpatialDataset: LifecycleOptions['loaders']['detectSpatialDataset'] =
+      vi.fn(async () => {
+        throw new DatasetIsCollectionError(collectionUrl)
+      })
+    const onDatasetIsCollection = vi.fn()
+    const setLoadState = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={detectSpatialDataset}
+        onDatasetIsCollection={onDatasetIsCollection}
+        setLoadState={setLoadState}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(folderUrl, false)
+    })
+
+    expect(onDatasetIsCollection).toHaveBeenCalledExactlyOnceWith(
+      collectionUrl,
+      folderUrl,
+    )
+    // No failure is shown while the page leaves for the collection.
+    expect(setLoadState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'error' }),
+    )
+  })
+
+  it('reports a collection opened as a dataset when nothing opens it as one', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef: LifecycleOptions['refs']['startDatasetLoadRef'] = {
+      current: null,
+    }
+    const collectionUrl = 'https://example.test/study/collection.json'
+    const setLoadState = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={vi.fn(async () => {
+          throw new DatasetIsCollectionError(collectionUrl)
+        })}
+        setLoadState={setLoadState}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(collectionUrl, false)
+    })
+
+    expect(setLoadState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'error', url: collectionUrl }),
+    )
   })
 
   describe('replacing an open dataset (15.1-F)', () => {

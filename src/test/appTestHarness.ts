@@ -91,6 +91,7 @@ export function appTestDependencies({
   loadTranscriptAggregates,
   loadTranscriptCapabilities,
   loadTranscriptViewport,
+  openCollectionPage,
   readParquetRows,
   readParquetStructure,
   readStoreStructure,
@@ -118,6 +119,8 @@ export function appTestDependencies({
     (async (url) => {
       throw new Error(`No test collection for ${url}.`)
     })
+  // Never a navigation, which jsdom does not do.
+  dataset.openCollectionPage = openCollectionPage ?? (() => {})
   if (loadGenePanel !== undefined) dataset.loadGenePanel = loadGenePanel
   if (detectSpatialDataset !== undefined)
     dataset.detectSpatialDataset = detectSpatialDataset

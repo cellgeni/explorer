@@ -148,10 +148,27 @@ interface UseShareableUrlHashOptions {
   // link's card, ROI, channels and z plane later, so until then the address
   // keeps the link, and so does Copy Link.
   readonly linkOpening?: boolean
+  // An address to open in place of this page: the collection link for a
+  // dataset address (`datasetUrl`) that turned out to be a collection.
+  // Nothing more is written once it is set.
+  readonly leaveTo?: {
+    readonly href: string
+    readonly datasetUrl: string
+  } | null
+  // Opens an address, replacing the current history entry or after it.
+  readonly navigate?: (href: string, replace: boolean) => void
 }
 
 function reloadPage(): void {
   window.location.reload()
+}
+
+export function navigatePage(href: string, replace: boolean): void {
+  if (replace) {
+    window.location.replace(href)
+  } else {
+    window.location.assign(href)
+  }
 }
 
 // The dataset the address names: the hash's, or else the query string's.
@@ -213,6 +230,8 @@ export function useShareableUrlHash({
   view,
   onHistoryDatasetChange = reloadPage,
   linkOpening = false,
+  leaveTo = null,
+  navigate = navigatePage,
 }: UseShareableUrlHashOptions): () => string {
   const {
     annotationGroupIds,
@@ -316,6 +335,16 @@ export function useShareableUrlHash({
   useEffect(() => {
     datasetUrlRef.current = datasetUrl
   }, [datasetUrl])
+
+  useEffect(() => {
+    if (leaveTo === null || leavingRef.current) return
+
+    leavingRef.current = true
+    // The link that named the collection as a dataset is replaced, so Back
+    // does not return to an address that only leads here again; the entry of
+    // a dataset open before stays for Back.
+    navigate(leaveTo.href, linkedDatasetUrl() === leaveTo.datasetUrl.trim())
+  }, [leaveTo, navigate])
 
   useEffect(() => {
     // Back, Forward, or a link typed or pasted into the address bar.

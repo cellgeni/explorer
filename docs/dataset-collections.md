@@ -8,6 +8,10 @@ viewer's address:
 https://cellgeni.github.io/explorer/?collection=https://host/study/collection.json
 ```
 
+A collection given where a dataset goes (`dataset=`, the dataset form, or a
+folder whose `explorer.json` is a collection) reloads the viewer with it as
+`collection=`.
+
 An AnnData table that holds several sections opens as a collection too, one
 dataset per section; see [Sections Of One Table](#sections-of-one-table).
 

@@ -7,7 +7,11 @@ import {
   MAX_COLLECTION_DATASETS,
   parseDatasetCollection,
 } from './datasetCollection'
-import { DatasetManifestError, parseDatasetManifest } from './datasetManifest'
+import {
+  DatasetIsCollectionError,
+  DatasetManifestError,
+  parseDatasetManifest,
+} from './datasetManifest'
 
 const COLLECTION_URL = 'https://example.test/studies/injury/collection.json'
 
@@ -394,12 +398,21 @@ describe('parseDatasetCollection', () => {
 
 describe('parseDatasetManifest', () => {
   it('points a collection opened as a dataset at collection=', () => {
-    expect(() =>
-      parseDatasetManifest({ version: 1, datasets: [{ dataset: 'a' }] }, COLLECTION_URL),
-    ).toThrow(DatasetManifestError)
-    expect(() =>
-      parseDatasetManifest({ version: 1, datasets: [{ dataset: 'a' }] }, COLLECTION_URL),
-    ).toThrow(/this is a dataset collection; open it with collection=/)
+    const parseCollection = () =>
+      parseDatasetManifest({ version: 1, datasets: [{ dataset: 'a' }] }, COLLECTION_URL)
+
+    expect(parseCollection).toThrow(DatasetManifestError)
+    expect(parseCollection).toThrow(
+      /this is a dataset collection; open it with collection=/,
+    )
+    // The viewer opens it as a collection, from the URL the error carries.
+    expect(parseCollection).toThrow(
+      expect.objectContaining({
+        name: 'DatasetManifestError',
+        manifestUrl: COLLECTION_URL,
+      }),
+    )
+    expect(parseCollection).toThrow(DatasetIsCollectionError)
   })
 })
 
