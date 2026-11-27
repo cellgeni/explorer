@@ -51,8 +51,12 @@
 }
 
 .viewer-main-tile > .viewer-tile-header {
-  padding-right: var(--space-2);
   border-color: var(--accent-border);
+}
+
+/* Without an image to toggle, the name alone. */
+.viewer-main-tile > .viewer-tile-header:not(:has(.viewer-tile-action)) {
+  padding-right: var(--space-2);
 }
 
 /* Holds the 2D view, to make it inert under a 3D view (App.tsx); no box of

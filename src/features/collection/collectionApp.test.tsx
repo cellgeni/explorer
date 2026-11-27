@@ -1362,7 +1362,7 @@ describe('App with an image beside itself', () => {
     )
   })
 
-  it('shows the open image again beside the main view, with its own channels', async () => {
+  function renderImageApp() {
     const loader = imageLoaderFixture(IMAGE_URL)
     const dataset = {
       meta: vi.fn(async () => ({
@@ -1402,6 +1402,12 @@ describe('App with an image beside itself', () => {
       />,
     )
 
+    return dataset
+  }
+
+  it('shows the open image again beside the main view, with its own channels', async () => {
+    const dataset = renderImageApp()
+
     await waitFor(() => {
       expect(dataset.image).toHaveBeenCalledTimes(1)
     })
@@ -1433,6 +1439,39 @@ describe('App with an image beside itself', () => {
     // Another copy is numbered.
     fireEvent.click(screen.getByRole('button', { name: 'Show beside again' }))
     expect(await screen.findByRole('region', { name: /, beside 2$/ })).toBeInTheDocument()
+  })
+
+  it("shows or hides the main view's image from its pill, as the Layers drawer does", async () => {
+    const dataset = renderImageApp()
+
+    await waitFor(() => {
+      expect(dataset.image).toHaveBeenCalledTimes(1)
+    })
+    openControls('image')
+    fireEvent.click(await screen.findByRole('button', { name: 'Show beside' }))
+    await screen.findByRole('region', { name: /, beside$/ })
+
+    const toggle = screen.getByRole('button', {
+      name: /^Show the image of .* in the main view$/,
+    })
+    const eye = within(screen.getByRole('complementary', { name: 'Layers' })).getByRole(
+      'checkbox',
+      { name: 'Show Image' },
+    )
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(eye).toBeChecked()
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(eye).not.toBeChecked()
+    // The panel's image is its own.
+    const panel = screen.getByRole('region', { name: /, beside$/ })
+    expect(
+      within(panel).getByRole('button', { name: /^Channels of / }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(eye)
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
   })
 })
 
