@@ -55,6 +55,7 @@ type BarProps = Omit<
   readonly previews?: TestPreviews
   readonly initialPreviewSize?: number
   readonly onPreviewSizeChange?: (size: number) => void
+  readonly initialReadAll?: boolean
 }
 
 const NO_LOADERS = {} as CollectionPreviewLoaders
@@ -67,10 +68,12 @@ function Bar({
   previews,
   initialPreviewSize = 150,
   onPreviewSizeChange,
+  initialReadAll = true,
   ...props
 }: BarProps) {
   const [view, setView] = useState(initialView)
   const [previewSize, setPreviewSize] = useState(initialPreviewSize)
+  const [readAll, setReadAll] = useState(initialReadAll)
   const store = useCollectionPreviewStore({
     collection:
       previews !== undefined && props.state.status === 'ready'
@@ -100,6 +103,7 @@ function Bar({
           onPreviewSizeChange?.(next)
         },
       }}
+      previewReading={{ all: readAll, onChange: setReadAll }}
       {...(previews === undefined
         ? {}
         : {
@@ -369,7 +373,7 @@ describe('CollectionBar previews', () => {
     }
   }
 
-  function renderBar(previews: TestPreviews) {
+  function renderBar(previews: TestPreviews, props: Partial<BarProps> = {}) {
     return render(
       <Bar
         state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
@@ -378,6 +382,7 @@ describe('CollectionBar previews', () => {
         onSelect={vi.fn()}
         onClose={vi.fn()}
         previews={previews}
+        {...props}
       />,
     )
   }
@@ -670,6 +675,62 @@ describe('CollectionBar previews', () => {
     expect(bar.querySelector('.collection-bar-scale')).toHaveTextContent('type1 hidden')
     // The genes are not read while the cells are coloured by the set.
     expect(within(bar).queryByText(/^(max|top) /)).toBe(null)
+  })
+
+  it('reads the previews in view only, or every preview, those in view first', async () => {
+    // Only Sham B is in view.
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        readonly callback: IntersectionObserverCallback
+        constructor(callback: IntersectionObserverCallback) {
+          this.callback = callback
+        }
+        observe(target: HTMLElement) {
+          const isIntersecting = target.dataset.previewUrl === SHAM_B
+          this.callback(
+            [{ target, isIntersecting } as unknown as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+          )
+        }
+        disconnect() {}
+      },
+    )
+    try {
+      const loaders = previewLoaders()
+      renderBar(
+        {
+          loaders,
+          genes: ['Aqp4'],
+          scoreMode: 'sum',
+          colorScale: 'plasma',
+          annotations: null,
+          paused: false,
+        },
+        { initialReadAll: false },
+      )
+      const bar = screen.getByRole('navigation', { name: 'Collection' })
+      const shamA = within(bar).getByRole('button', { name: 'Sham A' })
+      const readAll = within(bar).getByRole('button', { name: 'Read every preview' })
+      expect(readAll).toHaveAttribute('aria-pressed', 'false')
+
+      expect(
+        await within(within(bar).getByRole('button', { name: 'Sham B' })).findByText(
+          'top 8',
+        ),
+      ).toBeInTheDocument()
+      await act(async () => {})
+      expect(
+        vi.mocked(loaders.detectSpatialDataset).mock.calls.map(([url]) => url),
+      ).toEqual([SHAM_B])
+      expect(within(shamA).queryByText('top 3')).toBeNull()
+
+      fireEvent.click(readAll)
+      expect(readAll).toHaveAttribute('aria-pressed', 'true')
+      expect(await within(shamA).findByText('top 3')).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('waits while the main view loads a dataset', async () => {

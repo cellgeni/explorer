@@ -169,6 +169,12 @@ the canvas, a `nav` named "Collection":
 - `Previews` (picture icon, `aria-pressed`, pressed by default) turns the
   previews off, leaving the labels, and back on in the row. Its tooltip
   says what it does. The link keeps it as `collectionView=names`.
+- `Read every preview` (arrow into a tray, `aria-pressed`, pressed by
+  default) reads the previews out of view too, after those in view.
+  Unpressed, only the previews in view and just beyond are read, as on a
+  slow connection. Disabled with previews off. Its tooltip says what it
+  does. Kept in this browser (`explorer.collection.previewReading` in
+  localStorage), not in the link.
 - `Show {label} beside` (two columns, `aria-pressed`), on the top right of
   each preview (after the label without previews), on every dataset of the
   collection but the open one: shows it in a panel beside the main view, or
@@ -200,9 +206,11 @@ opened, whatever the address field holds meanwhile. The top bar shows the
 entry's `name` when the dataset has no manifest name.
 
 Previews are read by `CollectionPreviewStore`
-(`src/features/collection/collectionPreviewStore.ts`): the cards in view and
-240 px beyond (sideways in the bar, up and down in the grid), found with an `IntersectionObserver`, four datasets at a
-time, none while the main view loads. `openPreviewSource`
+(`src/features/collection/collectionPreviewStore.ts`): first the cards in view
+and 240 px beyond (sideways in the bar, up and down in the grid), found with
+an `IntersectionObserver`, four datasets at a time, then, with `Read every
+preview` pressed, the rest, two at a time (`setReadAll`), none while the main
+view loads. `openPreviewSource`
 (`collectionPreviewData.ts`) reads positions, scores and classes with the
 main view's loaders, and `rasterizePreview` (`collectionPreviewRaster.ts`) draws them.
 

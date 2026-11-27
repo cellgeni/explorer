@@ -243,7 +243,9 @@ type part of their name in the set's search box, and check the box again:
 it then applies to the matching classes only. `Expand` (the arrows next to "Collection") shows every preview larger, as a grid over
 the view, to compare more sections at once; its `Size` slider makes the
 previews larger, to see more of each section, or smaller, to fit more on
-screen. Choosing one opens it in place and
+screen. Previews out of view are read too, after those in view; on a slow
+connection, turn off `Read every preview` (the arrow next to "Collection")
+to read only those you scroll to. Choosing one opens it in place and
 keeps the selected genes, the annotation set with its hidden classes and
 colours, and the cell colouring, so you can step through sections with the
 same gene or cell type. `Share` copies a link with the collection and

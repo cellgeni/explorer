@@ -7,6 +7,9 @@ import {
   collectionSwitchOpening,
   collectionViewForLink,
   collectionViewFromLink,
+  COLLECTION_PREVIEW_READING_KEY,
+  readAllCollectionPreviews,
+  writeReadAllCollectionPreviews,
 } from './collectionModel'
 
 describe('collectionEntryLabel', () => {
@@ -53,6 +56,42 @@ describe('collectionPreviewSizeFromLink', () => {
   it('leaves the default width out of the link', () => {
     expect(collectionPreviewSizeForLink(150)).toBeUndefined()
     expect(collectionPreviewSizeForLink(320)).toBe(320)
+  })
+})
+
+describe('readAllCollectionPreviews', () => {
+  it('keeps the choice in storage, every preview by default', () => {
+    const items = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        items.set(key, value)
+      },
+    }
+    expect(readAllCollectionPreviews(storage)).toBe(true)
+
+    writeReadAllCollectionPreviews(false, storage)
+    expect(items.get(COLLECTION_PREVIEW_READING_KEY)).toBe('in-view')
+    expect(readAllCollectionPreviews(storage)).toBe(false)
+
+    writeReadAllCollectionPreviews(true, storage)
+    expect(readAllCollectionPreviews(storage)).toBe(true)
+  })
+
+  it('reads every preview when storage is missing or refuses', () => {
+    const refusing = {
+      getItem: (): string | null => {
+        throw new Error('SecurityError')
+      },
+      setItem: () => {
+        throw new Error('QuotaExceededError')
+      },
+    }
+    expect(readAllCollectionPreviews(null)).toBe(true)
+    expect(readAllCollectionPreviews(refusing)).toBe(true)
+    expect(() => {
+      writeReadAllCollectionPreviews(false, refusing)
+    }).not.toThrow()
   })
 })
 

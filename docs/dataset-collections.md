@@ -444,10 +444,14 @@ read or imported.
   beside it, so changing the genes or the annotation set redraws the grid.
   Choosing a dataset opens it and returns to the bar, as do `Collapse` and
   Escape.
-- **When.** Only previews in view, and those just beyond the bar's ends or
-  the grid's edges, are read, four datasets at a time. None start while the main view loads a
-  dataset. `Previews` (the picture icon next to "Collection") turns them off and
-  lists names only.
+- **When.** Previews in view, and those just beyond the bar's ends or the
+  grid's edges, are read first, four datasets at a time; the rest follow,
+  two at a time, leaving room for those scrolled into view. None start
+  while the main view loads a dataset. `Read every preview` (the arrow next
+  to "Collection") turned off reads only those in view, which suits a slow
+  connection or a collection whose previews are slow to read; the browser
+  remembers the choice. `Previews` (the picture icon) turns them off and
+  lists names only, which reads none.
 - **No preview.** Image-only and Visium HD datasets show "No cells to
   preview". A plain `.h5ad` whose reported size is over 64 MiB shows its size
   instead: such a file is read by range, at a cost that depends on how it is

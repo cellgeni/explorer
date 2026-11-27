@@ -25,6 +25,7 @@ export {
   CloseIcon,
   CogIcon,
   CollapseIcon,
+  DownloadIcon,
   EmbeddingIcon,
   ExpandIcon,
   EyeIcon,

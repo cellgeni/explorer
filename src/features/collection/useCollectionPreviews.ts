@@ -23,9 +23,10 @@ interface UseCollectionPreviewStoreOptions extends PreviewStoreRequestOptions {
 }
 
 // The previews of a collection's datasets, which the bar and the panels of
-// sections shown side by side read from. Each marks the datasets it shows;
-// only those are read. The caller is not re-rendered as previews arrive:
-// what draws them subscribes with useCollectionPreviewUpdates.
+// sections shown side by side read from. Each marks the datasets it shows,
+// which are read first; the bar asks for the rest after them. The caller is
+// not re-rendered as previews arrive: what draws them subscribes with
+// useCollectionPreviewUpdates.
 export function useCollectionPreviewStore({
   collection,
   loaders,
