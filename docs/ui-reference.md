@@ -170,13 +170,15 @@ the canvas, a `nav` named "Collection":
   previews off, leaving the labels, and back on in the row. Its tooltip
   says what it does. The link keeps it as `collectionView=names`.
 - `Show {label} beside` (two columns, `aria-pressed`), on the top right of
-  each preview (after the label without previews), on the sections in the
-  open dataset's `coordinateSystem`: shows the section in a panel beside the
-  main view, or closes it. Disabled, with a tooltip saying so, while three
-  are shown. A shown section's button has an accent border.
+  each preview (after the label without previews), on every dataset of the
+  collection but the open one: shows it in a panel beside the main view, or
+  closes it. Its tooltip says whether the panel opens linked (the open
+  dataset's `coordinateSystem`) or with a view of its own. Disabled, with a
+  tooltip saying so, while three are shown. A shown section's button has an
+  accent border.
 - `Close Collection` (×) removes the bar, `collection=`,
-  `collectionView=`, `collectionPreviewSize=`, `compare=` and
-  `sectionView=` from the address; the open dataset stays.
+  `collectionView=`, `collectionPreviewSize=`, `compare=`, `compareLink=`
+  and `sectionView=` from the address; the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).
@@ -209,16 +211,21 @@ into one tile per viewer: two in a row, three in a row, or 2 by 2, stacked
 under 860 px. The main view keeps its overlays (legend, minimap, zoom
 buttons, scale bar) in its own tile, with its dataset's name in a pill at the
 top centre. Each panel (`LinkedSections`, a `region` named after the section)
-has a pill at its top centre with the name, its top or highest score, `Open`
-and `Close {label}` (×). Instead of cells: "Loading…", the reason it has no
+has a pill at its top centre with the name, its top or highest score,
+`Link {label} to the main view` (a chain, `aria-pressed`; a broken chain
+unlinked), `Reset the offset of {label}` (target; disabled with no offset)
+while linked or `Fit {label}` while unlinked, `Open` and `Close {label}` (×). Instead of cells: "Loading…", the reason it has no
 preview, or "Could not be read". Hovering a cell shows a small label with its
 ID and class, or the gene and score. Closing a panel, or opening its section,
 hands keyboard focus back to the control that showed it, or else to the
 canvas.
 
-The main view and the panels share one camera through `LinkedViewChannel`
-(`src/components/linkedView.ts`): each publishes its view as it changes and
-follows the others exactly. Panels are drawn by `linkedSectionLayers`
+The main view and the linked panels share one camera through
+`LinkedViewChannel` (`src/components/linkedView.ts`): each publishes its view
+as it changes and follows the others exactly. A linked panel shows the
+channel's view at its offset and publishes the main view its own stands
+for; an unlinked one keeps its own view, which the link takes 180 ms after
+it rests (`compareLink=`). Panels are drawn by `linkedSectionLayers`
 (`linkedSectionLayers.ts`) from the preview store's data, which reads the
 shown sections first (`setLinked`).
 

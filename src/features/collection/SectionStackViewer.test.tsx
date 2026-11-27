@@ -6,6 +6,7 @@ import type { DatasetCollectionEntry } from '../../datasets/datasetCollection'
 import { previewBounds, type PreviewCells } from './collectionPreviewData'
 import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
 import { LinkedSections, type LinkedSectionsColoring } from './LinkedSections'
+import { LINKED } from './linkedSectionsModel'
 import { SectionStackViewer } from './SectionStackViewer'
 
 interface DeckProps {
@@ -293,7 +294,10 @@ describe('LinkedSections', () => {
             Show s2 beside
           </button>
           <LinkedSections
-            entries={shown}
+            panels={shown.map((shownEntry) => ({
+              entry: shownEntry,
+              panel: { url: shownEntry.url, link: LINKED },
+            }))}
             store={fakeStore({
               [entry.url]: {
                 cells: cellsAt(
@@ -314,6 +318,8 @@ describe('LinkedSections', () => {
             onClose={() => {
               setShown([])
             }}
+            onLinkChange={vi.fn()}
+            onViewReport={vi.fn()}
           />
         </>
       )

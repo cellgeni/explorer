@@ -3,6 +3,7 @@ import type { RoiSelection } from '../../data/roiSelection'
 import {
   formatShareableState,
   parseShareableState,
+  type ShareablePanelLink,
   type ShareableState,
   type ShareableViewState,
 } from '../../data/shareableState'
@@ -35,8 +36,10 @@ interface ShareableDatasetHashOptions {
   // The width of each preview in its grid, when not the default
   // (collectionPreviewSize=).
   readonly collectionPreviewSize?: number | undefined
-  // Its registered sections shown beside the dataset (compare=).
+  // Its sections shown beside the dataset (compare=).
   readonly compareUrls?: readonly string[] | undefined
+  // How each follows the main view (compareLink=), when not by default.
+  readonly compareLinks?: readonly (ShareablePanelLink | null)[] | undefined
   // `3d` while its serial sections are stacked in 3D (sectionView=).
   readonly sectionView?: string | undefined
   readonly datasetUrl: string
@@ -254,6 +257,8 @@ export function useShareableUrlHash({
   const segmentationUnits = dataset.segmentation?.units
   // As a string, so a new array with the same URLs writes nothing.
   const compareKey = dataset.compareUrls?.join('\n') ?? ''
+  const compareLinksKey =
+    dataset.compareLinks === undefined ? '' : JSON.stringify(dataset.compareLinks)
   const spatialDataTable = dataset.spatialDataSelection?.spatialDataTable
   const spatialDataCoordinateSystem =
     dataset.spatialDataSelection?.spatialDataCoordinateSystem
@@ -393,6 +398,13 @@ export function useShareableUrlHash({
           ...(collectionView === undefined ? {} : { collectionView }),
           ...(collectionPreviewSize === undefined ? {} : { collectionPreviewSize }),
           ...(compareKey === '' ? {} : { compareUrls: compareKey.split('\n') }),
+          ...(compareLinksKey === ''
+            ? {}
+            : {
+                compareLinks: JSON.parse(
+                  compareLinksKey,
+                ) as readonly (ShareablePanelLink | null)[],
+              }),
           ...(sectionView === undefined ? {} : { sectionView }),
           datasetUrl,
           ...(datasetReader === undefined ? {} : { datasetReader }),
@@ -518,6 +530,7 @@ export function useShareableUrlHash({
     collectionView,
     collectionPreviewSize,
     compareKey,
+    compareLinksKey,
     sectionView,
     boundaryCellLimit,
     deviceBoundaryCellLimit,

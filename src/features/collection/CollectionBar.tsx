@@ -44,7 +44,7 @@ import {
 import { shownClassOf, type PreviewMetadataTrack } from './collectionPreviewData'
 import { rasterizePreview, type PreviewOverlay } from './collectionPreviewRaster'
 import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
-import { canShowBeside, MAX_LINKED_SECTIONS } from './linkedSectionsModel'
+import { canShowBeside, isRegistered, MAX_LINKED_SECTIONS } from './linkedSectionsModel'
 import { useCollectionPreviewUpdates } from './useCollectionPreviews'
 
 // The preview's size in CSS px.
@@ -79,7 +79,7 @@ export interface CollectionBarPreviewSize {
   readonly onChange: (size: number) => void
 }
 
-// Registered sections shown side by side with the open dataset.
+// Sections shown side by side with the open dataset.
 export interface CollectionBarBeside {
   readonly shown: readonly DatasetCollectionEntry[]
   readonly onToggle: (entry: DatasetCollectionEntry) => void
@@ -488,10 +488,12 @@ export function CollectionBar({
                         className="collection-bar-beside"
                         title={
                           isBeside
-                            ? `${label} is shown beside the open dataset, with one view. Click to close it`
+                            ? `${label} is shown beside the open dataset. Click to close it`
                             : besideFull
                               ? `Up to ${MAX_LINKED_SECTIONS} sections can be shown beside the open dataset; close one first`
-                              : `Show ${label} beside the open dataset, with one view: it is registered to it`
+                              : isRegistered(loadedEntry, entry)
+                                ? `Show ${label} beside the open dataset, linked to its view: it is registered to it`
+                                : `Show ${label} beside the open dataset, with a view of its own`
                         }
                         aria-label={`Show ${label} beside`}
                         aria-pressed={isBeside}

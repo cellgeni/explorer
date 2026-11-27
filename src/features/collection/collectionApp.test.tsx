@@ -672,10 +672,14 @@ describe('App with a dataset collection', () => {
           'true',
         )
       })
-      // Only a section registered to the open one can be shown beside it.
+      // Every other entry can be shown beside it; one that is not
+      // registered to it has a view of its own.
       expect(
-        within(bar).queryByRole('button', { name: 'Show Atlas beside' }),
-      ).not.toBeInTheDocument()
+        within(bar).getByRole('button', { name: 'Show Atlas beside' }),
+      ).toHaveAttribute(
+        'title',
+        'Show Atlas beside the open dataset, with a view of its own',
+      )
       const toggle = within(bar).getByRole('button', { name: 'Show Section 2 beside' })
       expect(toggle).toHaveAttribute('aria-pressed', 'false')
       fireEvent.click(toggle)
@@ -715,7 +719,8 @@ describe('App with a dataset collection', () => {
       expect(swapped.get('dataset')).toBe(SECTION_2)
       expect(swapped.getAll('compare')).toEqual([SECTION_1])
 
-      // A dataset outside the coordinate system closes the panels and fits.
+      // A dataset outside the coordinate system opens fitted; the panel stays
+      // where it was, unlinked.
       fireEvent.click(within(bar).getByRole('button', { name: 'Atlas' }))
       await waitFor(() => {
         expect(within(bar).getByRole('button', { name: 'Atlas' })).toHaveAttribute(
@@ -723,11 +728,17 @@ describe('App with a dataset collection', () => {
           'true',
         )
       })
-      expect(screen.queryByRole('region', { name: 'Section 1' })).not.toBeInTheDocument()
+      const kept = screen.getByRole('region', { name: 'Section 1' })
+      expect(
+        within(kept).getByRole('button', { name: 'Link Section 1 to the main view' }),
+      ).toHaveAttribute('aria-pressed', 'false')
       await waitFor(() => {
         expect(deckView.current?.target?.[0]).toBeCloseTo(5)
       })
-      expect((await hashAfterWrite()).has('compare')).toBe(false)
+      expect(deckView.linked).toMatchObject({ target: [7, -1, 0], zoom: 3 })
+      const atlas = await hashAfterWrite()
+      expect(atlas.getAll('compare')).toEqual([SECTION_1])
+      expect(atlas.getAll('compareLink')).toEqual(['0,7,-1,3'])
     })
 
     it('keeps the sections beside the open dataset while the next one loads', async () => {
@@ -954,6 +965,96 @@ describe('App with a dataset collection', () => {
         within(bar).getByRole('button', { name: 'Show Section 2 beside' }),
       ).toHaveAttribute('aria-pressed', 'false')
       expect((await hashAfterWrite()).has('compare')).toBe(false)
+    })
+
+    it('unlinks a panel, links it again at its offset, and resets the offset', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&view=900%2C900%2C0%2C3`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      await waitFor(() => {
+        expect(deckView.linked).toMatchObject({ target: [900, 900, 0], zoom: 3 })
+      })
+      const link = within(panel).getByRole('button', {
+        name: 'Link Section 2 to the main view',
+      })
+      const reset = within(panel).getByRole('button', {
+        name: 'Reset the offset of Section 2',
+      })
+      expect(link).toHaveAttribute('aria-pressed', 'true')
+      expect(reset).toBeDisabled()
+
+      // Unlinked, the panel and the main view pan on their own.
+      fireEvent.click(link)
+      expect(link).toHaveAttribute('aria-pressed', 'false')
+      act(() => {
+        deckView.onLinkedChange?.({ viewState: { target: [910, 880, 0], zoom: 4 } })
+      })
+      expect(deckView.linked).toMatchObject({ target: [910, 880, 0], zoom: 4 })
+      expect(deckView.current).toMatchObject({ target: [900, 900, 0], zoom: 3 })
+      act(() => {
+        deckView.onChange?.({ viewState: { target: [800, 800, 0], zoom: 3 } })
+      })
+      expect(deckView.linked).toMatchObject({ target: [910, 880, 0], zoom: 4 })
+      // The address takes the panel's view once it rests.
+      await waitFor(() => {
+        expect(
+          new URLSearchParams(window.location.hash.slice(1)).getAll('compareLink'),
+        ).toEqual(['0,910,880,4'])
+      })
+
+      // Linked again where it is, it keeps its offset as they pan together.
+      fireEvent.click(link)
+      expect(link).toHaveAttribute('aria-pressed', 'true')
+      act(() => {
+        deckView.onChange?.({ viewState: { target: [700, 750, 0], zoom: 2 } })
+      })
+      expect(deckView.linked).toMatchObject({ target: [810, 830, 0], zoom: 3 })
+      act(() => {
+        deckView.onLinkedChange?.({ viewState: { target: [820, 830, 0], zoom: 3 } })
+      })
+      expect(deckView.current).toMatchObject({ target: [710, 750, 0], zoom: 2 })
+      expect((await hashAfterWrite()).getAll('compareLink')).toEqual(['1,110,80,1'])
+
+      // Reset puts it at the main view's centre and zoom.
+      expect(reset).toBeEnabled()
+      fireEvent.click(reset)
+      expect(deckView.linked).toMatchObject({ target: [710, 750, 0], zoom: 2 })
+      expect(reset).toBeDisabled()
+      expect((await hashAfterWrite()).has('compareLink')).toBe(false)
+    })
+
+    it('opens a link’s panels with their links and offsets', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&compareLink=1%2C10%2C-20%2C1&view=900%2C900%2C0%2C3`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      await screen.findByRole('region', { name: 'Section 2' })
+      await waitFor(() => {
+        expect(deckView.linked).toMatchObject({ target: [910, 880, 0], zoom: 4 })
+      })
+      expect((await hashAfterWrite()).getAll('compareLink')).toEqual(['1,10,-20,1'])
     })
 
     it('names the hovered cell of a section beside, unless Settings turns tooltips off', async () => {

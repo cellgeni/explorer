@@ -3,14 +3,23 @@ import { DeckGL } from '@deck.gl/react'
 import {
   memo,
   useCallback,
+  useEffect,
   useId,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
-import type { LinkedViewChannel } from '../../components/linkedView'
-import { Button, CloseIcon, IconButton } from '../../components/ui'
+import type { LinkedViewChannel, LinkedViewState } from '../../components/linkedView'
+import {
+  Button,
+  CloseIcon,
+  FitIcon,
+  IconButton,
+  LinkIcon,
+  TargetIcon,
+  UnlinkIcon,
+} from '../../components/ui'
 import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
 import { PointerTooltip } from '../../components/PointerTooltip'
 import { ReleasingDeck } from '../../components/releasingDeck'
@@ -39,15 +48,26 @@ import {
   sectionOverlay,
   valueLabel,
 } from './linkedSectionLayers'
+import {
+  hasOffset,
+  LINKED,
+  mainViewForPanel,
+  NO_OFFSET,
+  offsetBetween,
+  shownPanelView,
+  type PanelLink,
+  type ShownPanel,
+} from './linkedSectionsModel'
 import { useCollectionPreviewUpdates } from './useCollectionPreviews'
 import { useFocusHandOff } from './useFocusHandOff'
 
-// The panels of registered sections shown beside the main view, each a
-// viewer of one section's cells from its collection preview. They share the
-// main view's camera through the linked view channel: pan or zoom any and the
-// rest follow. Cells are coloured as the main view colours them: by the
-// selected genes, on the Gene scale, by the annotation set's classes, or by a
-// metadata track.
+// The panels of sections shown beside the main view, each a viewer of one
+// section's cells from its collection preview. A linked panel shares the main
+// view's camera through the linked view channel, at its offset: pan or zoom
+// any linked viewer and the rest follow. An unlinked one pans and zooms on
+// its own. Cells are coloured as the main view colours them: by the selected
+// genes, on the Gene scale, by the annotation set's classes, or by a metadata
+// track.
 
 export interface LinkedSectionsColoring {
   // The genes cells are coloured by; none draws the cells only.
@@ -61,7 +81,7 @@ export interface LinkedSectionsColoring {
 }
 
 interface LinkedSectionsProps {
-  readonly entries: readonly DatasetCollectionEntry[]
+  readonly panels: readonly ShownPanel[]
   readonly store: CollectionPreviewStore | null
   readonly channel: LinkedViewChannel
   readonly coloring: LinkedSectionsColoring
@@ -72,6 +92,10 @@ interface LinkedSectionsProps {
   // Opens the section in the main view, in place of the open dataset.
   readonly onOpen: (entry: DatasetCollectionEntry) => void
   readonly onClose: (entry: DatasetCollectionEntry) => void
+  // Links or unlinks a panel, or resets its offset.
+  readonly onLinkChange: (url: string, link: PanelLink) => void
+  // An unlinked panel's view, once it has stopped moving, for the address.
+  readonly onViewReport: (url: string, view: LinkedViewState | null) => void
 }
 
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
@@ -79,9 +103,12 @@ const NO_CLASS_COLORS: Readonly<Record<string, string>> = {}
 // Points can be a pixel or two across, so hovering picks the nearest within
 // this distance.
 const PICKING_RADIUS_PIXELS = 6
+// How long an unlinked panel's view rests before the address takes it, as
+// the main view's does.
+const VIEW_REPORT_DELAY_MS = 180
 
 export function LinkedSections({
-  entries,
+  panels,
   store,
   channel,
   coloring,
@@ -90,6 +117,8 @@ export function LinkedSections({
   hoverTooltips,
   onOpen,
   onClose,
+  onLinkChange,
+  onViewReport,
 }: LinkedSectionsProps) {
   useCollectionPreviewUpdates(store)
   const classColors =
@@ -106,10 +135,11 @@ export function LinkedSections({
 
   return (
     <>
-      {entries.map((entry) => (
+      {panels.map(({ entry, panel }) => (
         <LinkedSectionPanel
           key={entry.url}
           entry={entry}
+          link={panel.link}
           preview={store?.entry(entry.url) ?? null}
           channel={channel}
           coloring={shownColoring}
@@ -119,6 +149,8 @@ export function LinkedSections({
           hoverTooltips={hoverTooltips}
           onOpen={onOpen}
           onClose={onClose}
+          onLinkChange={onLinkChange}
+          onViewReport={onViewReport}
         />
       ))}
     </>
@@ -127,6 +159,7 @@ export function LinkedSections({
 
 interface LinkedSectionPanelProps {
   readonly entry: DatasetCollectionEntry
+  readonly link: PanelLink
   readonly preview: PreviewEntry | null
   readonly channel: LinkedViewChannel
   readonly coloring: LinkedSectionsColoring
@@ -136,6 +169,8 @@ interface LinkedSectionPanelProps {
   readonly hoverTooltips: boolean
   readonly onOpen: (entry: DatasetCollectionEntry) => void
   readonly onClose: (entry: DatasetCollectionEntry) => void
+  readonly onLinkChange: (url: string, link: PanelLink) => void
+  readonly onViewReport: (url: string, view: LinkedViewState | null) => void
 }
 
 interface PanelHover {
@@ -146,6 +181,7 @@ interface PanelHover {
 
 function LinkedSectionPanel({
   entry,
+  link,
   preview,
   channel,
   coloring,
@@ -155,12 +191,21 @@ function LinkedSectionPanel({
   hoverTooltips,
   onOpen,
   onClose,
+  onLinkChange,
+  onViewReport,
 }: LinkedSectionPanelProps) {
   const label = collectionEntryLabel(entry)
   const source = useId()
   const panelRef = useRef<HTMLElement>(null)
   useFocusHandOff(panelRef)
-  const linkedView = useSyncExternalStore(channel.subscribe, channel.getView)
+  const mainView = useSyncExternalStore(channel.subscribe, channel.getView)
+  // An unlinked panel's view, kept here as it moves; it starts from the
+  // link's, again whenever the link changes.
+  const [own, setOwn] = useState(() => ({ link, view: unlinkedView(link) }))
+  if (own.link !== link) {
+    setOwn({ link, view: unlinkedView(link) })
+  }
+  const shownView = link.linked ? shownPanelView(link, mainView) : own.view
   const cells = preview?.cells ?? null
   const scores = preview?.scores ?? null
   const classes = preview?.classes ?? null
@@ -174,20 +219,23 @@ function LinkedSectionPanel({
     () => (cells === null ? 0 : fitExtentViewState(deckExtent(cells.bounds)).zoom),
     [cells],
   )
-  const viewState = useMemo(() => {
-    if (linkedView === null) {
-      return cells === null
+  const fittedView = useMemo(
+    () =>
+      cells === null
         ? null
-        : { ...fitExtentViewState(deckExtent(cells.bounds)), minZoom: -10, maxZoom: 10 }
-    }
+        : { ...fitExtentViewState(deckExtent(cells.bounds)), minZoom: -10, maxZoom: 10 },
+    [cells],
+  )
+  const viewState = useMemo(() => {
+    if (shownView === null) return fittedView
 
     return {
-      target: [linkedView.target[0], linkedView.target[1], 0] as [number, number, number],
-      zoom: linkedView.zoom,
+      target: [shownView.target[0], shownView.target[1], 0] as [number, number, number],
+      zoom: shownView.zoom,
       minZoom: -10,
       maxZoom: 10,
     }
-  }, [cells, linkedView])
+  }, [fittedView, shownView])
   const overlay = useMemo(
     () =>
       sectionOverlay(
@@ -226,10 +274,50 @@ function LinkedSectionPanel({
       const { target, zoom } = next as { target?: readonly number[]; zoom?: number }
       if (target === undefined || zoom === undefined) return
 
-      channel.publish({ target: [target[0] ?? 0, target[1] ?? 0], zoom }, source)
+      const view: LinkedViewState = { target: [target[0] ?? 0, target[1] ?? 0], zoom }
+
+      if (link.linked) {
+        channel.publish(mainViewForPanel(link.offset, view), source)
+      } else {
+        setOwn({ link, view })
+      }
     },
-    [channel, source],
+    [channel, link, source],
   )
+  // The address takes an unlinked panel's view once it rests.
+  const ownView = own.link === link ? own.view : null
+  const reportedRef = useRef<LinkedViewState | null>(unlinkedView(link))
+  useEffect(() => {
+    if (link.linked || ownView === reportedRef.current) return
+
+    const timer = setTimeout(() => {
+      reportedRef.current = ownView
+      onViewReport(entry.url, ownView)
+    }, VIEW_REPORT_DELAY_MS)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [entry.url, link.linked, onViewReport, ownView])
+  // What the panel shows now: its view, else fitted to its section.
+  const currentView = (): LinkedViewState | null =>
+    shownView ??
+    (fittedView === null
+      ? null
+      : { target: [fittedView.target[0], fittedView.target[1]], zoom: fittedView.zoom })
+  const toggleLink = () => {
+    const view = currentView()
+
+    if (link.linked) {
+      onLinkChange(entry.url, { linked: false, view })
+    } else {
+      onLinkChange(entry.url, {
+        linked: true,
+        offset:
+          view === null || mainView === null ? NO_OFFSET : offsetBetween(view, mainView),
+      })
+    }
+  }
   const [hover, setHover] = useState<PanelHover | null>(null)
   const handleHover = useCallback(
     (info: PickingInfo) => {
@@ -296,6 +384,45 @@ function LinkedSectionPanel({
           {label}
         </span>
         {stat === null ? null : <span className="viewer-tile-stat">{stat}</span>}
+        <IconButton
+          className="viewer-tile-action"
+          title={
+            link.linked
+              ? `Linked: ${label} pans and zooms with the main view. Click to unlink it`
+              : `Unlinked: ${label} pans and zooms on its own. Click to link it to the main view where it is now`
+          }
+          aria-label={`Link ${label} to the main view`}
+          aria-pressed={link.linked}
+          icon={link.linked ? <LinkIcon /> : <UnlinkIcon />}
+          onClick={toggleLink}
+        />
+        {link.linked ? (
+          <IconButton
+            className="viewer-tile-action"
+            title={
+              hasOffset(link.offset)
+                ? `Reset the offset: show ${label} at the main view's centre and zoom`
+                : `${label} is at the main view's centre and zoom`
+            }
+            aria-label={`Reset the offset of ${label}`}
+            disabled={!hasOffset(link.offset)}
+            icon={<TargetIcon />}
+            onClick={() => {
+              onLinkChange(entry.url, LINKED)
+            }}
+          />
+        ) : (
+          <IconButton
+            className="viewer-tile-action"
+            title={`Fit ${label} to the panel`}
+            aria-label={`Fit ${label}`}
+            disabled={own.view === null}
+            icon={<FitIcon />}
+            onClick={() => {
+              setOwn({ link, view: null })
+            }}
+          />
+        )}
         <Button
           className="viewer-tile-action"
           variant="ghost"
@@ -327,6 +454,10 @@ function LinkedSectionPanel({
       )}
     </section>
   )
+}
+
+function unlinkedView(link: PanelLink): LinkedViewState | null {
+  return link.linked ? null : link.view
 }
 
 function deckExtent(bounds: PreviewBounds) {

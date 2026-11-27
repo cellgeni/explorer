@@ -50,4 +50,5 @@ export {
   SideBySideIcon,
   StackIcon,
   TargetIcon,
+  UnlinkIcon,
 } from './icons'
