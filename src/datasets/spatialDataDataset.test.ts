@@ -98,6 +98,24 @@ describe('SpatialDataDataset', () => {
     ).toBe(true)
   })
 
+  it("says why gene reads are slow from its table's /X", async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture()),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+    })
+
+    // Cells 10 and 11, which have shapes, store a value each, at 4 bytes and
+    // 4 for its index; cell 99 is not placed, so not read.
+    await expect(dataset.geneReadNote({ minBytes: 0 })).resolves.toMatchObject({
+      message: expect.stringContaining(
+        '/X is stored by cell (CSR), so each gene over all 2 cells reads 16 B of values',
+      ),
+    })
+    await expect(dataset.geneReadNote()).resolves.toBeNull()
+  })
+
   it('places table rows on annotated shapes and exposes AnnData readers', async () => {
     const progress: string[] = []
     const dataset = new SpatialDataDataset({

@@ -33,6 +33,7 @@ import {
 import {
   AnnDataH5adDataset,
   type AnnDataObsAccess,
+  type GeneReadNote,
   type H5adLoadProgressReporter,
 } from './h5adDataset'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
@@ -543,6 +544,14 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
           reason: 'Plots read the expression matrix of a table, and this store has none.',
         }
       : table.estimateGeneValuesRead(genes, options)
+  }
+
+  // Why colouring by a gene is slow, from the table's /X (see
+  // AnnDataH5adDataset.geneReadNote).
+  async geneReadNote(
+    options: { readonly signal?: AbortSignal; readonly minBytes?: number } = {},
+  ): Promise<GeneReadNote | null> {
+    return (await this.tableOrNull())?.geneReadNote(options) ?? null
   }
 
   async geneValues(

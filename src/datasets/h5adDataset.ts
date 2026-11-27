@@ -255,6 +255,12 @@ interface H5adLabelCells {
 
 export type H5adLoadProgressReporter = (message: string) => void
 
+// Why gene reads are slow, and what would make them fast (geneReadNote).
+export interface GeneReadNote {
+  readonly message: string
+  readonly action: string
+}
+
 export interface AnnDataMemorySource {
   readonly label: string
   // Stops reading when `signal` aborts.
@@ -618,6 +624,10 @@ const CSR_LAZY_BATCH_MAX_VALUES = 4_000_000
 const CSR_LAZY_BATCH_MAX_GAP_VALUES = 262_144
 // The most decoded bytes of a dense /X one worker read returns.
 const DENSE_H5_READ_MAX_BYTES = 16 * 1024 * 1024
+// A gene read of every cell over this many decoded bytes is slow enough for
+// the Log to say why (geneReadNote): the size the Plots panel asks before.
+// The 12 Burnside human Xenium sections, CSR Zarr, read 24 to 197 MiB each.
+export const SLOW_GENE_READ_BYTES = 32 * 1024 * 1024
 // zarr's default chunks for a 125,955 x 12,963 float32 /X are 1,969 x 406, so
 // one cell's genes are in 32 chunks holding 98 MiB of values. Chunked by gene
 // as 125,955 x 10, one cell's genes are in all 1,297 chunks: 6.1 GiB.
@@ -1048,6 +1058,18 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   ): Promise<GeneValuesReadEstimate> {
     const { matrix, geneNames } = await h5adLayerMatrix(await this.cache(), options.layer)
     return h5adGeneValuesEstimate(matrix, geneColumns(geneNames, genes).cols)
+  }
+
+  // Why colouring every cell by a gene is slow, for the data access notes:
+  // null unless /X is read by range a cell at a time and one gene reads over
+  // `minBytes`.
+  async geneReadNote(
+    options: { readonly signal?: AbortSignal; readonly minBytes?: number } = {},
+  ): Promise<GeneReadNote | null> {
+    return h5adGeneReadNote(
+      await this.cache(options.signal),
+      options.minBytes ?? SLOW_GENE_READ_BYTES,
+    )
   }
 
   // Each gene's value in every cell (22-A). One scan of a CSR matrix reads
@@ -5000,6 +5022,56 @@ function h5adGeneValuesEstimate(
         detail: `The matrix is dense, in chunks of ${chunkShape[0].toLocaleString()} cells by ${chunkShape[1].toLocaleString()} genes: each gene reads every chunk that holds it.`,
       }
     }
+  }
+}
+
+// See geneReadNote. The rows are those a gene read of the whole view takes:
+// the placed cells (a Visium view's library, a section's rows). A matrix
+// read by range a cell at a time reads every value of those cells for each
+// gene: their CSR rows, or their dense rows in bands.
+function h5adGeneReadNote(cache: H5adCache, minBytes: number): GeneReadNote | null {
+  const { matrix } = cache
+
+  if (matrix.kind !== 'csr-lazy' && matrix.kind !== 'dense-h5') {
+    return null
+  }
+
+  let rowCount = 0
+  let values = 0
+
+  cache.coordinates.forEach((position, row) => {
+    if (!isFinitePoint(position)) return
+
+    rowCount += 1
+
+    if (matrix.kind === 'csr-lazy') {
+      const fileRow = cache.section?.rows[row] ?? row
+      values +=
+        numericValue(matrix.indptr, fileRow + 1) - numericValue(matrix.indptr, fileRow)
+    }
+  })
+
+  const bytes =
+    matrix.kind === 'csr-lazy'
+      ? values * sparseValueBytes(matrix)
+      : rowCount * matrix.cols * (matrix.values.itemSize ?? 8)
+
+  if (rowCount === 0 || bytes <= minBytes) {
+    return null
+  }
+
+  const layout =
+    matrix.kind === 'csr-lazy'
+      ? 'stored by cell (CSR)'
+      : 'dense and read in bands of whole cells'
+
+  return {
+    message: `Gene reads are slow: /X is ${layout}, so each gene over all ${countLabel(
+      rowCount,
+      cache.visium === null ? 'cell' : 'spot',
+    )} reads ${formatByteCount(bytes)} of values (uncompressed).`,
+    action:
+      'Store /X by gene (CSC) to read each gene as one slice. ROI gene stats then cannot read every gene of the selected cells.',
   }
 }
 
