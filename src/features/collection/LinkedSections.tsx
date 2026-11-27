@@ -223,6 +223,46 @@ export function LinkedSections({
   )
 }
 
+interface MainSectionHeaderProps {
+  readonly name: string | null
+  // The Layers drawer's Image eye, as the panels' own image toggles show
+  // theirs; null without an image.
+  readonly image: {
+    readonly visible: boolean
+    readonly onVisibleChange: (visible: boolean) => void
+  } | null
+}
+
+// The main view's pill while panels are beside it: its dataset's name, and
+// its image shown or hidden, the Layers drawer's Image eye.
+export function MainSectionHeader({ name, image }: MainSectionHeaderProps) {
+  const label = name ?? 'the main view'
+
+  return (
+    <div className="viewer-tile-header">
+      <span className="viewer-tile-name" title={name ?? undefined}>
+        {name}
+      </span>
+      {image === null ? null : (
+        <IconButton
+          className="viewer-tile-action"
+          title={
+            image.visible
+              ? `Hide the image of ${label} in the main view`
+              : `Show the image of ${label} in the main view`
+          }
+          aria-label={`Show the image of ${label} in the main view`}
+          aria-pressed={image.visible}
+          icon={<ImageIcon />}
+          onClick={() => {
+            image.onVisibleChange(!image.visible)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
 interface LinkedSectionPanelProps {
   readonly entry: DatasetCollectionEntry
   readonly panel: ResolvedPanel

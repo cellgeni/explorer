@@ -137,6 +137,7 @@ import type { PreviewMetadataTrack } from './features/collection/collectionPrevi
 import type { OpenTrackValues } from './features/collection/collectionPreviewStore'
 import {
   LinkedSections,
+  MainSectionHeader,
   type LinkedSectionsColoring,
 } from './features/collection/LinkedSections'
 import { SectionStackViewer } from './features/collection/SectionStackViewer'
@@ -6047,11 +6048,15 @@ export function App({ dependencies }: AppProps = {}) {
             />
           ) : null}
           {linkedSections.length === 0 ? null : (
-            <div className="viewer-tile-header">
-              <span className="viewer-tile-name" title={loadedDatasetName ?? undefined}>
-                {loadedDatasetName}
-              </span>
-            </div>
+            <MainSectionHeader
+              name={loadedDatasetName}
+              image={
+                morphologyImage === null && flatMorphologyImage === null
+                  ? null
+                  : (layerPanel.sections.find((section) => section.id === 'image') ??
+                    null)
+              }
+            />
           )}
         </div>
         {linkedSections.length === 0 ? null : (

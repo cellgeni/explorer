@@ -211,7 +211,9 @@ With sections shown beside the open dataset, `.viewer-tiles` splits the canvas
 into one tile per viewer: two in a row, three in a row, or 2 by 2, stacked
 under 860 px. The main view keeps its overlays (legend, minimap, zoom
 buttons, scale bar) in its own tile, with its dataset's name in a pill at the
-top centre. Each panel (`LinkedSections`, a `region` named after the section; a panel of
+top centre and, when it has an image, `Show the image of {name} in the main
+view` (picture, `aria-pressed`): the Layers drawer's Image eye, at hand
+beside the panels' own image toggles. Each panel (`LinkedSections`, a `region` named after the section; a panel of
 the open dataset itself, from the Image section's `Show beside`, is named
 "{label}, beside", then "{label}, beside 2", and has no `Open`)
 has a pill at its top centre with the name, its top or highest score,
