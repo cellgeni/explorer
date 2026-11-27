@@ -4,6 +4,7 @@ import {
   ANNDATA_ZARR_FIXTURE_ORIGIN,
   annDataZarrFixtureFetcher,
 } from '../test/annDataZarrFixtures'
+import { withCellMetadata } from '../test/cellMetadataFixtures'
 import { openAnnDataZarrStore } from './annDataZarrStore'
 import { AnnDataH5adDataset } from './h5adDataset'
 
@@ -183,6 +184,27 @@ describe('AnnData Zarr stores', () => {
 
     await expectTinyAnnData(dataset)
     await expect(embeddingKinds(dataset)).resolves.toContain('X_scvi')
+  })
+
+  // anndata writes an obs column missing in every cell as a categorical with
+  // a zero-length categories array, which zarrita read as an error.
+  it('opens a store with a categorical that has no categories', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/empty-category.v3.zarr`,
+      zarr: true,
+      fetcher: annDataZarrFixtureFetcher(),
+    })
+
+    await expect(dataset.annotationGroups()).resolves.toContainEqual({
+      id: 'analysis:sex',
+      label: 'sex',
+      groupingName: 'sex',
+      groupCount: 0,
+    })
+    await expect(dataset.annotations({ groupId: 'analysis:sex' })).resolves.toEqual([])
+    const [cell] = withCellMetadata(await dataset.overview())
+    expect(cell?.metadata).toMatchObject({ cluster: 'A', 'stage  ': 'early' })
+    expect(cell?.metadata).not.toHaveProperty('sex')
   })
 
   // anndata chunks a large obsm matrix two columns wide, so z is in chunks of
