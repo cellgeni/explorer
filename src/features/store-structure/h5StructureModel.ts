@@ -12,7 +12,14 @@ import {
   type H5StructureNode,
   type H5StructureNodeKind,
 } from '../../data/h5StructureTypes'
-import { formatBytes, formatCount, formatShape, nodeRole } from './storeStructureModel'
+import {
+  clipValueText,
+  float32Text,
+  formatBytes,
+  formatCount,
+  formatShape,
+  nodeRole,
+} from './storeStructureModel'
 
 // Addresses whose structure Browse File can show as HDF5: by name.
 export function isH5Url(value: string): boolean {
@@ -303,10 +310,6 @@ export function h5MaxShapeLabel(dataset: H5DatasetInfo): string | null {
         .join(' × ')
 }
 
-// Values are read as soon as a dataset is selected when their read costs at
-// most this; past it, on request.
-export const AUTO_READ_VALUES_BYTES = 4_000_000
-
 // An element of a variable-length type is stored as a global heap ID; the
 // heap holding its data is read too.
 const HEAP_ID_BYTES = 16
@@ -376,14 +379,9 @@ export function h5PreviewUnavailable(dataset: H5DatasetInfo): string | null {
   return null
 }
 
-const MAX_VALUE_CHARACTERS = 200
-
 // A value as text for the preview table.
 export function formatH5Value(value: unknown, dtype: H5Dtype): string {
-  const text = valueText(value, dtype)
-  return text.length > MAX_VALUE_CHARACTERS
-    ? `${text.slice(0, MAX_VALUE_CHARACTERS)}…`
-    : text
+  return clipValueText(valueText(value, dtype))
 }
 
 function valueText(value: unknown, dtype: H5Dtype): string {
@@ -427,19 +425,6 @@ function valueText(value: unknown, dtype: H5Dtype): string {
   if (typeof value === 'number' || typeof value === 'bigint') return value.toString()
   if (typeof value === 'boolean') return value ? 'True' : 'False'
   return JSON.stringify(value) ?? String(value)
-}
-
-// The shortest decimal that reads back as the same float32, as numpy prints
-// it, rather than the float64 it was widened to.
-function float32Text(value: number): string {
-  if (!Number.isFinite(value)) return value.toString()
-
-  for (let digits = 1; digits < 9; digits += 1) {
-    const text = Number(value.toPrecision(digits))
-    if (Math.fround(text) === value) return text.toString()
-  }
-
-  return value.toString()
 }
 
 // Groups opened at first: the root, and its child groups when the file is
