@@ -162,7 +162,10 @@ import {
   collectionEntryFor,
   type DatasetCollectionEntry,
 } from './datasets/datasetCollection'
-import type { DatasetLibraryModel } from './features/start/datasetLibraryModel'
+import {
+  collectionLinkHref,
+  type DatasetLibraryModel,
+} from './features/start/datasetLibraryModel'
 import { EXAMPLES_INDEX_URL } from './features/start/examplesIndex'
 import { useRecentDatasets } from './features/start/recentDatasets'
 import { useExamplesIndex } from './features/start/useExamplesIndex'
@@ -468,6 +471,7 @@ export function App({ dependencies }: AppProps = {}) {
       loadDatasetOverview,
       loadExamplesIndex,
       loadGenePanel,
+      openCollectionPage,
       retainDataset,
       warmDatasetForRoi,
     },
@@ -3068,6 +3072,21 @@ export function App({ dependencies }: AppProps = {}) {
       setVisiumHdRoiState,
     },
   })
+  // A dataset address that turned out to be a collection: the page leaves
+  // for the collection's link, as an example card for one does.
+  const [collectionInPlaceOfDataset, setCollectionInPlaceOfDataset] = useState<{
+    readonly href: string
+    readonly datasetUrl: string
+  } | null>(null)
+  const handleDatasetIsCollection = useCallback(
+    (collectionUrl: string, datasetUrl: string) => {
+      setCollectionInPlaceOfDataset({
+        href: collectionLinkHref(collectionUrl, window.location.pathname),
+        datasetUrl,
+      })
+    },
+    [],
+  )
   const handleBeforeDatasetLoad = useCallback(
     (datasetUrl: string) => {
       clearVisiumHdRoiState()
@@ -3926,6 +3945,7 @@ export function App({ dependencies }: AppProps = {}) {
       appendDebugEvent,
       appendFallbackNotice,
       onBeforeDatasetLoad: handleBeforeDatasetLoad,
+      onDatasetIsCollection: handleDatasetIsCollection,
       queueAutoContrast,
       recordTelemetry,
     },
@@ -4391,6 +4411,8 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const currentShareUrl = useShareableUrlHash({
     linkOpening: linkOpeningStage !== 'done',
+    leaveTo: collectionInPlaceOfDataset,
+    navigate: openCollectionPage,
     dataset: {
       annotationUrl: linkedAnnotationUrl ?? '',
       customImageOpacities,

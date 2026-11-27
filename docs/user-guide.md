@@ -34,9 +34,9 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
   rendering settings name (`defaultZ`), or the middle plane; `#z=N` on the
   image URL opens plane N, as `#c=N` opens channel N.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
-- A [dataset collection](./dataset-collections.md) of any of these, opened
-  with `?collection=<url>` in the viewer's address rather than in the form
-  (see [Collections](#collections)).
+- A [dataset collection](./dataset-collections.md) of any of these. Given
+  in the form, or as `dataset=`, it reloads the viewer as
+  `?collection=<url>` (see [Collections](#collections)).
 
 ### Choosing A Reader
 
@@ -216,9 +216,11 @@ screen comes back with the reason above the form.
 
 A [dataset collection](./dataset-collections.md) lists datasets to browse
 together, such as the sections of one study. Open one with
-`?collection=<url>` in the address. The viewer opens its first dataset and
-lists the others in a bar under the canvas, grouped by time point, donor or
-whatever the collection groups them by. Each has a preview of its cells
+`?collection=<url>` in the address; a collection's URL in the dataset form
+or as `dataset=`, or a folder whose `explorer.json` is a collection, reloads
+the viewer that way. The viewer opens its first dataset and lists the others
+in a bar under the canvas, grouped by time point, donor or whatever the
+collection groups them by. Each has a preview of its cells
 coloured by the selected genes, each up to its own 99th percentile, so you
 can see where a gene is high in every section before opening anything. To
 compare levels instead, put them all on one scale: click the number at the

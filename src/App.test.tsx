@@ -29,6 +29,11 @@ import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/vi
 import type { SpatialElement } from './datasets/spatialDataset'
 import type { MorphologyImage } from './data/morphologyImage'
 import type { TiffPyramidLoader } from './tiff/loader'
+import { DatasetIsCollectionError } from './datasets/datasetManifest'
+import type {
+  CollectionPageOpener,
+  SpatialDatasetDetector,
+} from './features/app-shell/appDependencies'
 import {
   appTestDependencies,
   appViewportRectFixture,
@@ -2902,6 +2907,35 @@ describe('App', () => {
     })
 
     expect(loadDatasetOverview).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens a collection that a dataset link names as a collection', async () => {
+    const collectionUrl = 'https://example.test/study/collection.json'
+    window.history.replaceState(
+      null,
+      '',
+      `/?dataset=${encodeURIComponent(collectionUrl)}`,
+    )
+    const detectSpatialDataset = vi.fn<SpatialDatasetDetector>(async () => {
+      throw new DatasetIsCollectionError(collectionUrl)
+    })
+    const openCollectionPage = vi.fn<CollectionPageOpener>()
+
+    render(
+      <TestApp
+        detectSpatialDataset={detectSpatialDataset}
+        openCollectionPage={openCollectionPage}
+      />,
+    )
+
+    // In place of the link, so Back does not return to it.
+    await waitFor(() => {
+      expect(openCollectionPage).toHaveBeenCalledExactlyOnceWith(
+        `/?collection=${encodeURIComponent(collectionUrl)}`,
+        true,
+      )
+    })
+    expect(screen.queryByText(/this is a dataset collection/)).not.toBeInTheDocument()
   })
 
   it('starts query-string auto-load once after the StrictMode probe settles', async () => {
