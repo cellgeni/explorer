@@ -646,7 +646,7 @@ describe('ShellLayout', () => {
       expect(screen.queryByRole('region', { name: 'Plots' })).toBeNull()
     })
 
-    it('shows the heatmap’s numbers on hover without drawing the viewer again (22-G)', () => {
+    it('shows the heatmap’s numbers on hover without drawing the viewer again (22-G)', async () => {
       stubScreenWidth(false)
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
       vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
@@ -670,11 +670,13 @@ describe('ShellLayout', () => {
           <Viewer />
         </PanelsHarness>,
       )
+      // The panel loads on first use (O21).
+      const heatmap = await within(plotsWindow()).findByRole('img', {
+        name: /^Heatmap of Actb/,
+      })
       const rendersBefore = viewerRenders
 
-      const canvas = within(plotsWindow())
-        .getByRole('img', { name: /^Heatmap of Actb/ })
-        .querySelector('canvas') as HTMLCanvasElement
+      const canvas = heatmap.querySelector('canvas') as HTMLCanvasElement
       fireEvent.pointerMove(canvas, { clientX: 5, clientY: 5 })
 
       expect(within(plotsWindow()).getByText(/^ROI 1, Actb: 4 cells/)).toBeInTheDocument()
@@ -936,7 +938,9 @@ describe('ShellLayout', () => {
           <Viewer />
         </QueryHarness>,
       )
-      const table = within(queryWindow()).getByRole('table', { name: 'Matching cells' })
+      const table = await within(queryWindow()).findByRole('table', {
+        name: 'Matching cells',
+      })
       await waitFor(() => {
         expect(
           within(table).getByRole('button', { name: 'c1' }).closest('[role="row"]'),

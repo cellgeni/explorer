@@ -1,7 +1,14 @@
-import { CellQueryPanel } from '../query/CellQueryPanel'
+import { lazy } from 'react'
+import { LazyPanel } from '../../components/LazyPanel'
 import type { CellQueryModel } from '../query/useCellQueryModel'
 import { FloatingWindow, type FloatingWindowSize } from './FloatingWindow'
 import { QUERY_WINDOW_MIN_SIZE, QUERY_WINDOW_SIZE } from './floatingWindowModel'
+
+// The conditions and table load with the window, not with the app (O21).
+const CellQueryPanel = lazy(async () => {
+  const module = await import('../query/CellQueryPanel')
+  return { default: module.CellQueryPanel }
+})
 
 // Cell Query (plan 23-D9): conditions on the cells' columns and a table of
 // the cells that match, opened from the top bar's Query toggle, to the left
@@ -48,7 +55,11 @@ export function QueryWindow({
       {/* Drawn only while open: App renders often while a dataset loads,
           and the conditions and table are not needed until then. The window
           stays mounted, so it keeps its size. */}
-      {open ? <CellQueryPanel query={query} /> : null}
+      {open ? (
+        <LazyPanel label="Cell Query">
+          <CellQueryPanel query={query} />
+        </LazyPanel>
+      ) : null}
     </FloatingWindow>
   )
 }
