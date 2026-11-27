@@ -353,15 +353,6 @@ Correctness and robustness:
       failed read of its cell details (`cellDetails()`) is noted in the
       activity log but then treated as absent for the session.
 
-Rendering:
-
-- [ ] Every expression batch recolours every cell: `packCellPointColors` runs
-      over all cells (`ViewerCore.tsx`). Above 500,000 cells
-      (`GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT`) expression is read by
-      viewport, so on large Xenium datasets this runs on pan and zoom.
-      Patching only the cells in the old and new batch would avoid it (O3).
-      Outlines are no longer restyled per batch (O4, 2026-11-25).
-
 Code structure:
 
 - [ ] `startDatasetLoad` (`useDatasetLifecycle.ts`) is one async function of
