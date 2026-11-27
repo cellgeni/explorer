@@ -77,6 +77,13 @@ by name or path` narrows the tree; a filter with a `/` matches whole paths.
   the chunks inside them for sharded v3 arrays), codecs, fill value, decoded
   size, its attributes and its Zarr metadata document, and for stores read
   over HTTP its own address, which `Copy` copies.
+- `Values` for an array, as for an HDF5 dataset: the first 100 values of a
+  1D array, or the first 100 rows and 20 columns of a 2D one, at index 0 of
+  any further dimension. Only the chunks holding them are fetched, from the
+  store the tree came from, zip and Icechunk included. They are read when the
+  array is selected if those chunks decode to at most about 4 MB (strings
+  counted at 32 bytes each); otherwise the panel says how much it may read and
+  waits for `Read Values`.
 
 Stores with consolidated metadata, zipped stores and Icechunk repositories
 list every node. Without consolidated metadata the store is walked from its

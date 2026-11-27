@@ -30,9 +30,10 @@ import {
   type ReadZarrStructureOptions,
   type ZarrStructure,
 } from '../../zarr/zarrStructure'
+import type { ZarrValuePreview } from '../../zarr/zarrValuePreview'
 import { H5FileView } from './H5StructureView'
 import { StoreStructureDrawer, StoreStructureView } from './StoreStructureDrawer'
-import { useStoreStructure } from './useStoreStructure'
+import { useStoreStructure, type ReadZarrValues } from './useStoreStructure'
 
 const STORE_URL = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`
 const fixtureFetcher = annDataZarrFixtureFetcher()
@@ -101,10 +102,14 @@ function flatStore(flat: Parameters<typeof structureFromFlatNodes>[0]['flat']) {
   })
 }
 
-function renderStoreView(structure: ZarrStructure) {
+function renderStoreView(
+  structure: ZarrStructure,
+  readValues: ReadZarrValues = () => Promise.reject(new Error('Not read in this test.')),
+) {
   render(
     <StoreStructureView
       state={{ status: 'ready', target: structure.url, value: structure }}
+      readValues={readValues}
       onRetry={() => undefined}
       onBrowseFile={() => undefined}
     />,
@@ -235,6 +240,31 @@ describe('StoreStructureDrawer', () => {
 
     fireEvent.click(screen.getByTitle('Collapse obs'))
     expect(screen.queryByTitle('Show details of obs/cluster')).not.toBeInTheDocument()
+  })
+
+  it('shows the first values of an array, read as soon as they are cheap', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Browse' }))
+    await within(drawer()).findByText('Consolidated metadata')
+
+    fireEvent.click(screen.getByTitle('Show details of obs/score'))
+    const score = screen.getByRole('region', { name: 'score' })
+    const column = await within(score).findByRole('table', { name: 'Values' })
+    expect(within(score).getByText('All 6 values.')).toBeInTheDocument()
+    // float32, as NumPy prints it.
+    expect(within(column).getByText('0.9')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTitle('Show details of X'))
+    const matrix = screen.getByRole('region', { name: 'X' })
+    const table = await within(matrix).findByRole('table', { name: 'Values' })
+    expect(within(matrix).getByText('All 24 values.')).toBeInTheDocument()
+    const cells = within(table).getAllByRole('row')[4]?.querySelectorAll('td')
+    expect(Array.from(cells ?? [], (cell) => cell.textContent)).toEqual([
+      '7',
+      '0',
+      '8',
+      '0',
+    ])
   })
 
   it('filters the tree by path', async () => {
@@ -543,6 +573,116 @@ describe('StoreStructureDrawer', () => {
     unmount()
     expect(closes).toHaveLength(1)
     expect(closes[0]).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Zarr Read Values', () => {
+  // A 100,000 × 30,000 float32 matrix in 2,000 × 1,000 chunks: its first
+  // block's chunk decodes to 8 MB, so its values wait for Read Values.
+  const store = flatStore([
+    { path: '', kind: 'group' },
+    {
+      path: 'X',
+      kind: 'array',
+      zarrFormat: 2,
+      metadata: {
+        zarr_format: 2,
+        shape: [100_000, 30_000],
+        chunks: [2_000, 1_000],
+        dtype: '<f4',
+        compressor: null,
+        filters: null,
+        fill_value: 0,
+        order: 'C',
+      },
+    },
+  ])
+
+  it('asks before reading an array whose first chunk is large', async () => {
+    const readValues = vi.fn<ReadZarrValues>(async () => ({
+      shape: [1, 2],
+      values: [1.5, 2],
+    }))
+    renderStoreView(store, readValues)
+    fireEvent.click(screen.getByTitle('Show details of X'))
+    const details = screen.getByRole('region', { name: 'X' })
+
+    expect(
+      within(details).getByText(
+        'Reading the first values may read up to about 8 MB of the store.',
+      ),
+    ).toBeInTheDocument()
+    expect(readValues).not.toHaveBeenCalled()
+
+    fireEvent.click(within(details).getByRole('button', { name: 'Read Values' }))
+
+    expect(
+      await within(details).findByRole('table', { name: 'Values' }),
+    ).toBeInTheDocument()
+    expect(
+      within(details).getByText('The first 1 × 2, of 100,000 × 30,000.'),
+    ).toBeInTheDocument()
+    expect(within(details).getByText('1.5')).toBeInTheDocument()
+    expect(readValues).toHaveBeenCalledTimes(1)
+    expect(readValues).toHaveBeenCalledWith(
+      store,
+      expect.objectContaining({ path: 'X' }),
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('says which index of a third dimension it shows', async () => {
+    const cube = flatStore([
+      { path: '', kind: 'group' },
+      {
+        path: 'cube',
+        kind: 'array',
+        zarrFormat: 2,
+        metadata: {
+          zarr_format: 2,
+          shape: [500, 50, 3],
+          chunks: [500, 50, 3],
+          dtype: '|u1',
+          compressor: null,
+          filters: null,
+          fill_value: 0,
+          order: 'C',
+        },
+      },
+    ])
+    renderStoreView(cube, async () => ({
+      shape: [100, 20, 1],
+      values: Array.from({ length: 2_000 }, () => 1),
+    }))
+    fireEvent.click(screen.getByTitle('Show details of cube'))
+
+    expect(
+      await screen.findByText(
+        'The first 100 × 20 at index 0 of dimension 3, of 500 × 50 × 3.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('reports a failed read and retries it', async () => {
+    let fail = true
+    const readValues = vi.fn<ReadZarrValues>(async (): Promise<ZarrValuePreview> => {
+      if (fail) throw new Error('Zarr chunk X/0.0 could not be read (HTTP 403).')
+      return { shape: [1, 1], values: [3] }
+    })
+    renderStoreView(store, readValues)
+    fireEvent.click(screen.getByTitle('Show details of X'))
+    const details = screen.getByRole('region', { name: 'X' })
+    fireEvent.click(within(details).getByRole('button', { name: 'Read Values' }))
+
+    const alert = await within(details).findByRole('alert')
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toHaveFocus()
+
+    fail = false
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    expect(
+      await within(details).findByRole('table', { name: 'Values' }),
+    ).toBeInTheDocument()
+    expect(within(details).getByRole('heading', { name: 'Values' })).toHaveFocus()
   })
 })
 

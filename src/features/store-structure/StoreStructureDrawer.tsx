@@ -2,16 +2,19 @@ import { useId, useLayoutEffect, useRef } from 'react'
 import { Button, Disclosure, Drawer } from '../../components/ui'
 import type { ParquetFileRef } from '../../data/parquetStructure'
 import type {
+  ZarrArraySummary,
   ZarrStructure,
   ZarrStructureNode,
   ZarrStructureNodeKind,
 } from '../../zarr/zarrStructure'
+import type { ZarrValuePreview } from '../../zarr/zarrValuePreview'
 import { H5FileView } from './H5StructureView'
 import { ParquetFileView } from './ParquetStructureView'
 import {
   formatBytes,
   formatCount,
   formatShape,
+  formatZarrValue,
   initiallyExpanded,
   nodeRole,
   nodeSummary,
@@ -22,6 +25,8 @@ import {
   structureFormatLabel,
   structureNotes,
   structureSourceLabel,
+  zarrPreviewReadBound,
+  zarrPreviewUnavailable,
 } from './storeStructureModel'
 import {
   Fact,
@@ -32,10 +37,12 @@ import {
   type StructureNodeLabel,
 } from './StructureBrowser'
 import type {
+  ReadZarrValues,
   StoreStructureState,
   StoreStructureStore,
   StructureView,
 } from './useStoreStructure'
+import { ValuesPanel, ValuesTable } from './ValuesPanel'
 
 const DRAWER_TITLES = {
   store: 'Store structure',
@@ -100,6 +107,7 @@ export function StoreStructureDrawer({ store }: { readonly store: StoreStructure
       >
         <StoreStructureView
           state={store.store}
+          readValues={store.readValues}
           onRetry={store.retry}
           onBrowseFile={store.browseFile}
         />
@@ -132,10 +140,12 @@ export function StoreStructureDrawer({ store }: { readonly store: StoreStructure
 
 export function StoreStructureView({
   state,
+  readValues,
   onRetry,
   onBrowseFile,
 }: {
   readonly state: StoreStructureState
+  readonly readValues: ReadZarrValues
   readonly onRetry: () => void
   readonly onBrowseFile: (file: ParquetFileRef) => void
 }) {
@@ -172,6 +182,7 @@ export function StoreStructureView({
         <ZarrStructureBrowser
           key={state.target}
           structure={state.value}
+          readValues={readValues}
           onBrowseFile={onBrowseFile}
         />
       )
@@ -180,9 +191,11 @@ export function StoreStructureView({
 
 function ZarrStructureBrowser({
   structure,
+  readValues,
   onBrowseFile,
 }: {
   readonly structure: ZarrStructure
+  readonly readValues: ReadZarrValues
   readonly onBrowseFile: (file: ParquetFileRef) => void
 }) {
   const notes = structureNotes(structure)
@@ -195,7 +208,13 @@ function ZarrStructureBrowser({
       filterTitle="Show the groups, arrays and files whose name contains this text, or whose path does when the text has a /"
       describe={describeZarrNode}
       renderDetails={(node) => (
-        <NodeDetails structure={structure} node={node} onBrowseFile={onBrowseFile} />
+        <NodeDetails
+          key={node.path}
+          structure={structure}
+          node={node}
+          readValues={readValues}
+          onBrowseFile={onBrowseFile}
+        />
       )}
       header={
         <>
@@ -255,10 +274,12 @@ function describeZarrNode(node: ZarrStructureNode): StructureNodeLabel {
 function NodeDetails({
   structure,
   node,
+  readValues,
   onBrowseFile,
 }: {
   readonly structure: ZarrStructure
   readonly node: ZarrStructureNode
+  readonly readValues: ReadZarrValues
   readonly onBrowseFile: (file: ParquetFileRef) => void
 }) {
   const headingId = useId()
@@ -334,6 +355,14 @@ function NodeDetails({
         <BrowseParquetFile node={node} file={parquetFile} onBrowseFile={onBrowseFile} />
       )}
       {url === null ? null : <NodeAddress url={url} />}
+      {array === undefined ? null : (
+        <ZarrValuesPanel
+          structure={structure}
+          node={node}
+          array={array}
+          readValues={readValues}
+        />
+      )}
       {attributes === null ? (
         <p className="store-structure-empty">No attributes.</p>
       ) : (
@@ -349,6 +378,38 @@ function NodeDetails({
         </Disclosure>
       )}
     </section>
+  )
+}
+
+// The array's first values: read at once when cheap, else on request.
+function ZarrValuesPanel({
+  structure,
+  node,
+  array,
+  readValues,
+}: {
+  readonly structure: ZarrStructure
+  readonly node: ZarrStructureNode
+  readonly array: ZarrArraySummary
+  readonly readValues: ReadZarrValues
+}) {
+  return (
+    <ValuesPanel<ZarrValuePreview>
+      unavailable={zarrPreviewUnavailable(array)}
+      bound={zarrPreviewReadBound(array)}
+      noun="array"
+      source="store"
+      read={(signal) => readValues(structure, node, signal)}
+      renderValues={(preview, labelledBy) => (
+        <ValuesTable
+          shape={array.shape}
+          preview={preview}
+          labelledBy={labelledBy}
+          noun="array"
+          format={(value) => formatZarrValue(value, array.dtype)}
+        />
+      )}
+    />
   )
 }
 

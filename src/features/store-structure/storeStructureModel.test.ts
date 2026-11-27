@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { structureFromFlatNodes, type ZarrStructure } from '../../zarr/zarrStructure'
+import {
+  structureFromFlatNodes,
+  summarizeZarrArray,
+  type ZarrStructure,
+} from '../../zarr/zarrStructure'
 import {
   formatBytes,
   formatJson,
   formatShape,
+  formatZarrValue,
   isZarrStoreUrl,
   nodeRole,
   nodeSummary,
@@ -11,6 +16,8 @@ import {
   parquetFileOf,
   parquetNote,
   structureNotes,
+  zarrPreviewReadBound,
+  zarrPreviewUnavailable,
 } from './storeStructureModel'
 import { filterStructure, findNode } from './structureTree'
 
@@ -249,5 +256,75 @@ describe('store structure model', () => {
       'Stopped after 1 node; the store holds more.',
       expect.stringContaining('the host does not list folders'),
     ])
+  })
+
+  it('bounds what an array preview decodes by the chunks its block touches', () => {
+    const v2 = (metadata: Record<string, unknown>) =>
+      summarizeZarrArray({ zarr_format: 2, compressor: null, filters: null, ...metadata })
+
+    // 100 × 20 of a float32 matrix in 50 × 1,000 chunks: two chunks.
+    expect(
+      zarrPreviewReadBound(
+        v2({ shape: [1_000, 5_000], chunks: [50, 1_000], dtype: '<f4' }),
+      ),
+    ).toBe(2 * 50 * 1_000 * 4)
+    // A third dimension is read at index 0 only.
+    expect(
+      zarrPreviewReadBound(
+        v2({ shape: [10, 10, 100], chunks: [10, 10, 10], dtype: '|u1' }),
+      ),
+    ).toBe(1_000)
+    // Strings are counted at 32 bytes each.
+    expect(
+      zarrPreviewReadBound(
+        v2({
+          shape: [52_000],
+          chunks: [52_000],
+          dtype: '|O',
+          filters: [{ id: 'vlen-utf8' }],
+        }),
+      ),
+    ).toBe(52_000 * 32)
+    expect(zarrPreviewReadBound(v2({ shape: [0], chunks: [10], dtype: '<f8' }))).toBe(0)
+    expect(zarrPreviewReadBound(v2({ shape: [], chunks: [], dtype: '<f8' }))).toBe(8)
+
+    // A sharded array reads the inner chunks it touches and its shard's index.
+    const sharded = summarizeZarrArray({
+      zarr_format: 3,
+      shape: [10_000, 10_000],
+      data_type: 'uint16',
+      chunk_grid: { name: 'regular', configuration: { chunk_shape: [5_000, 5_000] } },
+      codecs: [
+        {
+          name: 'sharding_indexed',
+          configuration: { chunk_shape: [100, 100], codecs: [{ name: 'bytes' }] },
+        },
+      ],
+    })
+    expect(zarrPreviewReadBound(sharded)).toBe(100 * 100 * 2 + 50 * 50 * 16)
+  })
+
+  it('writes Zarr values as NumPy prints them', () => {
+    expect(formatZarrValue(Math.fround(0.1), 'float32')).toBe('0.1')
+    expect(formatZarrValue(0.1, 'float64')).toBe('0.1')
+    expect(formatZarrValue(Number.NaN, 'float32')).toBe('NaN')
+    expect(formatZarrValue(2n ** 40n, 'int64')).toBe('1099511627776')
+    expect(formatZarrValue(true, 'bool')).toBe('True')
+    expect(formatZarrValue('cell-a', 'string (variable length)')).toBe('cell-a')
+    expect(
+      formatZarrValue(new Uint8Array([100, 101, 255]), 'bytes (variable length)'),
+    ).toBe('64:65:ff')
+    expect(formatZarrValue({ a: [1, 2] }, 'object')).toBe('{"a":[1,2]}')
+    expect(formatZarrValue('x'.repeat(300), 'string (variable length)')).toHaveLength(201)
+    expect(
+      zarrPreviewUnavailable(
+        summarizeZarrArray({
+          zarr_format: 2,
+          shape: [3],
+          chunks: [3],
+          dtype: [['a', '<i4']],
+        }),
+      ),
+    ).toMatch(/structured records/)
   })
 })

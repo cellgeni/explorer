@@ -1754,9 +1754,24 @@ Once read:
 | `Filter by name or path`      | Shows matching nodes, their ancestors (opened) and everything under a match (closed). Matches names; with a `/` in it, whole paths. Says how many match                                              |
 | `Expand All` / `Collapse All` | Opens every group / closes all but the root                                                                                                                                                          |
 | Tree                          | Groups, then folders, arrays and files, in natural name order. The root and, for stores under 200 nodes, its child groups start open. Over 200 children, `Show More` shows more                      |
-| Details                       | Path, kind, role, shape (with dimension names), data type, chunks or shards, codecs, fill value, order, decoded size, stored size, attributes, the Zarr metadata, and the node's address with `Copy` |
+| Details                       | Path, kind, role, shape (with dimension names), data type, chunks or shards, codecs, fill value, order, decoded and stored size, address with `Copy`, an array's `Values`, attributes, Zarr metadata |
 
 The selected tree node has a tint and an accent bar at its left.
+
+An array's `Values` (`ValuesPanel.tsx`, shared with the
+[HDF5 file view](#hdf5-file-view)) reads the same block as an HDF5 dataset's,
+with the same states and focus moves. `readZarrValues`
+(`src/zarr/zarrValuePreview.ts`) reads it with zarrita from the store the
+tree came from: over HTTP, from the zip or from the Icechunk repository (both
+kept open from the tree's read while cached). The array's metadata is served
+from the tree, so only the chunks the block touches are fetched. It asks first
+when those chunks decode to over 4 MB (`zarrPreviewReadBound`): for a sharded
+array the inner chunks and their shards' indexes, and variable-length elements
+counted at 32 bytes. Booleans show as `True`/`False`, float32 as numpy prints it,
+64-bit integers exactly, and variable-length bytes as h5dump writes them
+(`64:65:66`). An array of structured records is unavailable. A chunk the host
+does not have reads as the fill value, except for string arrays, which fail
+with the missing chunk's key.
 
 A path in the filter also matches as the details write it, with a leading
 `/` (`/obs/cluster`), and a dotted one as a Parquet field's path (`a.b`).

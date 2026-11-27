@@ -19,7 +19,13 @@ import {
   readZarrStructure,
   type ReadZarrStructureOptions,
   type ZarrStructure,
+  type ZarrStructureNode,
 } from '../../zarr/zarrStructure'
+import {
+  readZarrValues,
+  type ReadZarrValuesOptions,
+  type ZarrValuePreview,
+} from '../../zarr/zarrValuePreview'
 import {
   createStructuredLoadError,
   type StructuredLoadError,
@@ -44,6 +50,13 @@ export type ParquetFileState = StructureReadState<ParquetFileRef, ParquetStructu
 export type H5FileState = StructureReadState<string, H5Structure>
 
 export type StructureView = 'store' | 'file' | 'h5'
+
+// Reads the first values of an array in a store that has been read.
+export type ReadZarrValues = (
+  structure: ZarrStructure,
+  node: ZarrStructureNode,
+  signal: AbortSignal,
+) => Promise<ZarrValuePreview>
 
 // The structure drawer: Browse Store or Browse File opens it on an address,
 // and Browse File in the store's tree opens a Parquet file the store holds.
@@ -70,6 +83,7 @@ export interface StoreStructureStore {
     structure: ParquetStructure,
     signal: AbortSignal,
   ) => Promise<ParquetRowPreview>
+  readonly readValues: ReadZarrValues
   // Closes the drawer; a read under way stops.
   readonly close: () => void
   readonly retry: () => void
@@ -88,6 +102,11 @@ interface UseStoreStructureOptions {
     structure: ParquetStructure,
     options: ReadParquetRowsOptions,
   ) => Promise<ParquetRowPreview>
+  readonly readZarrValues?: (
+    structure: ZarrStructure,
+    node: ZarrStructureNode,
+    options: ReadZarrValuesOptions,
+  ) => Promise<ZarrValuePreview>
   readonly readH5?: (url: string, options: ReadH5StructureOptions) => Promise<H5Structure>
   readonly fetcher?: typeof fetch
 }
@@ -96,6 +115,7 @@ export function useStoreStructure({
   read = readZarrStructure,
   readParquet = readParquetStructure,
   readParquetRows: readRowsOf = readParquetRows,
+  readZarrValues: readValuesOf = readZarrValues,
   readH5 = readH5Structure,
   fetcher,
 }: UseStoreStructureOptions = {}): StoreStructureStore {
@@ -120,6 +140,14 @@ export function useStoreStructure({
         ...(fetcher === undefined ? {} : { fetcher }),
       }),
     [fetcher, readRowsOf],
+  )
+  const readValues = useCallback<ReadZarrValues>(
+    (structure, node, signal) =>
+      readValuesOf(structure, node, {
+        signal,
+        ...(fetcher === undefined ? {} : { fetcher }),
+      }),
+    [fetcher, readValuesOf],
   )
   // The worker reads the file itself, so `fetcher` does not apply.
   const readH5File = useCallback(
@@ -202,6 +230,7 @@ export function useStoreStructure({
     browseFile,
     back,
     readRows,
+    readValues,
     close,
     retry,
   }

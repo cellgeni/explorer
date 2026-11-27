@@ -198,9 +198,9 @@ the active source.
 When the address is a Zarr store (a `.zarr` folder or a group inside one, a
 zipped store, or an Icechunk repository), `Browse Store` next to
 `Load Dataset` lists its groups and arrays with their shapes, data types,
-chunking, codecs and attributes. For a Parquet file, `Browse File` shows
-its schema, row groups, metadata and first rows, read from the footer and the
-first pages. For an HDF5 file (`.h5`, `.h5ad`, `.loom`), it shows the groups,
+chunking, codecs and attributes, and each array's first values. For a Parquet
+file, `Browse File` shows its schema, row groups, metadata and first rows, read
+from the footer and the first pages. For an HDF5 file (`.h5`, `.h5ad`, `.loom`), it shows the groups,
 datasets, filters and attributes, and each dataset's first values, read by
 range. None of these loads the dataset, so they work for stores and files the
 viewer cannot open.

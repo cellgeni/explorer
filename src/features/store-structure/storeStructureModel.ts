@@ -1,7 +1,12 @@
+import { h5PreviewBlock } from '../../data/h5StructureTypes'
 import { isParquetFileName, type ParquetFileRef } from '../../data/parquetStructure'
 import { isIcechunkUrl } from '../../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../../zarr/omeZarrUrl'
-import type { ZarrStructure, ZarrStructureNode } from '../../zarr/zarrStructure'
+import type {
+  ZarrArraySummary,
+  ZarrStructure,
+  ZarrStructureNode,
+} from '../../zarr/zarrStructure'
 import { isZarrZipUrl } from '../../zarr/zarrZipUrl'
 import { folderFileUrl } from '../../utils/folderUrl'
 
@@ -247,6 +252,103 @@ export function parquetFileOf(
 
   // Into the path, before a query that grants the store (a signed address).
   return { url: folderFileUrl(url, 'shapes.parquet') }
+}
+
+// Values are read as soon as an array or dataset is selected when their read
+// costs at most this; past it, on request.
+export const AUTO_READ_VALUES_BYTES = 4_000_000
+
+// The bytes of a variable-length element, such as a string, are not known
+// before it is read: a length and a barcode or gene name take about this.
+const VARIABLE_ELEMENT_BYTES = 32
+// Each inner chunk of a shard has an offset and a length in its index.
+const SHARD_INDEX_ENTRY_BYTES = 16
+
+// About the most a preview of an array decodes: the chunks its block touches,
+// or for a sharded array the inner chunks and the indexes of their shards.
+// Compressed chunks are fetched smaller.
+export function zarrPreviewReadBound(array: ZarrArraySummary): number {
+  const { shape, chunks, innerChunks } = array
+  const block = h5PreviewBlock(shape)
+
+  if (block.some((size) => size === 0)) return 0
+
+  const elementBytes =
+    array.decodedBytes === undefined
+      ? VARIABLE_ELEMENT_BYTES
+      : array.decodedBytes / product(shape)
+  const grid = innerChunks ?? chunks
+  const touched = (cells: readonly number[]) =>
+    block.reduce(
+      (count, size, dimension) =>
+        count * Math.ceil(size / Math.max(1, cells[dimension] ?? size)),
+      1,
+    )
+  const chunkBytes = touched(grid) * product(grid) * elementBytes
+
+  if (innerChunks === undefined) return chunkBytes
+
+  const innerPerShard = chunks.reduce(
+    (count, size, dimension) =>
+      count * Math.ceil(size / Math.max(1, innerChunks[dimension] ?? size)),
+    1,
+  )
+  return chunkBytes + touched(chunks) * innerPerShard * SHARD_INDEX_ENTRY_BYTES
+}
+
+// Why an array's values cannot be shown, or null when they can.
+export function zarrPreviewUnavailable(array: ZarrArraySummary): string | null {
+  return array.dtype === 'structured'
+    ? 'Its elements are structured records, which the browser’s Zarr library does not read.'
+    : null
+}
+
+const MAX_VALUE_CHARACTERS = 200
+
+// A value's text, cut for the preview table.
+export function clipValueText(text: string): string {
+  return text.length > MAX_VALUE_CHARACTERS
+    ? `${text.slice(0, MAX_VALUE_CHARACTERS)}…`
+    : text
+}
+
+// An element of a Zarr array as text, as NumPy prints it.
+export function formatZarrValue(value: unknown, dtype: string): string {
+  return clipValueText(zarrValueText(value, dtype))
+}
+
+function zarrValueText(value: unknown, dtype: string): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'boolean') return value ? 'True' : 'False'
+  if (typeof value === 'number') {
+    return dtype === 'float32' ? float32Text(value) : value.toString()
+  }
+  if (typeof value === 'bigint') return value.toString()
+  if (value instanceof Uint8Array) return byteText(value)
+  return JSON.stringify(value) ?? String(value)
+}
+
+// Bytes as h5dump writes them: "64:65:66".
+function byteText(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(':')
+}
+
+// The shortest decimal that reads back as the same float32, as numpy prints
+// it, rather than the float64 it was widened to.
+export function float32Text(value: number): string {
+  if (!Number.isFinite(value)) return value.toString()
+
+  for (let digits = 1; digits < 9; digits += 1) {
+    const text = Number(value.toPrecision(digits))
+    if (Math.fround(text) === value) return text.toString()
+  }
+
+  return value.toString()
+}
+
+function product(values: readonly number[]): number {
+  return values.reduce((total, value) => total * value, 1)
 }
 
 // Groups opened at first: the root, and its child groups when the store is
