@@ -88,6 +88,26 @@
   height: 22px;
 }
 
+/* A panel is the size container of its channels popover, which stays
+   inside it, as the tile clips what overflows: centred under the panel's
+   header (itself centred in the tile), not lined up with its button. */
+.linked-section {
+  container-type: size;
+}
+
+.linked-section .viewer-tile-header .ui-popover-anchor {
+  position: static;
+}
+
+.linked-section-channels.ui-popover {
+  right: auto;
+  left: 50%;
+  max-width: min(360px, calc(100cqw - 2 * var(--space-2)));
+  max-height: calc(100cqh - 56px);
+  overflow-y: auto;
+  transform: translateX(-50%);
+}
+
 .linked-section[data-loading]::after {
   position: absolute;
   z-index: var(--z-canvas-overlay);

@@ -177,8 +177,9 @@ the canvas, a `nav` named "Collection":
   tooltip saying so, while three are shown. A shown section's button has an
   accent border.
 - `Close Collection` (×) removes the bar, `collection=`,
-  `collectionView=`, `collectionPreviewSize=`, `compare=`, `compareLink=`
-  and `sectionView=` from the address; the open dataset stays.
+  `collectionView=`, `collectionPreviewSize=`, `compare=`, `compareLink=`,
+  `compareImage=`, `compareChannels=` and `sectionView=` from the address;
+  the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).
@@ -212,8 +213,12 @@ under 860 px. The main view keeps its overlays (legend, minimap, zoom
 buttons, scale bar) in its own tile, with its dataset's name in a pill at the
 top centre. Each panel (`LinkedSections`, a `region` named after the section)
 has a pill at its top centre with the name, its top or highest score,
-`Link {label} to the main view` (a chain, `aria-pressed`; a broken chain
-unlinked), `Reset the offset of {label}` (target; disabled with no offset)
+`Show the image of {label}` (picture, `aria-pressed`; not on a section
+without cells, which shows its image at once), `Channels of {label}` (three
+sliders, once the image is read: a popover named `Image of {label}`, centred
+under the pill and kept inside the panel, with `Cells` and the Image
+section's channel controls), `Link {label} to the main view` (a chain,
+`aria-pressed`; a broken chain unlinked), `Reset the offset of {label}` (target; disabled with no offset)
 while linked or `Fit {label}` while unlinked, `Open` and `Close {label}` (×). Instead of cells: "Loading…", the reason it has no
 preview, or "Could not be read". Hovering a cell shows a small label with its
 ID and class, or the gene and score. Closing a panel, or opening its section,

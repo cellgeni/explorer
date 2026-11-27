@@ -13,6 +13,8 @@ export interface ShareablePanelLink {
   readonly values?: readonly [number, number, number]
 }
 
+export type ShareablePanelImage = 'cells' | 'only' | null
+
 export interface ShareableViewState {
   readonly target: readonly [number, number, number]
   readonly zoom: number
@@ -36,6 +38,12 @@ export interface ShareableState {
   // `compareLink=` each, null where it is not understood. Absent, each opens
   // as it does by default.
   readonly compareLinks?: readonly (ShareablePanelLink | null)[]
+  // What each of them shows of its image, in their order (`compareImage=`):
+  // `1` the image under its cells, `only` the image alone, empty neither.
+  readonly compareImages?: readonly ShareablePanelImage[]
+  // Each one's shown channels (`compareChannels=`), as `channels=` gives the
+  // main view's: `-` for none, empty (null) for the image's defaults.
+  readonly compareChannels?: readonly (readonly string[] | null)[]
   // `3d` when the collection's serial sections are stacked in 3D:
   // `sectionView=`.
   readonly sectionView?: string
@@ -172,6 +180,8 @@ export function parseShareableState(hash: string): ShareableState {
   const collectionPreviewSize = parsePositiveInteger(params.get('collectionPreviewSize'))
   const compareUrls = readStrings(params, 'compare')
   const compareLinks = params.getAll('compareLink').map(parsePanelLink)
+  const compareImages = params.getAll('compareImage').map(parsePanelImage)
+  const compareChannels = params.getAll('compareChannels').map(parsePanelChannels)
   const sectionView = readString(params, 'sectionView')
   const datasetUrl = readString(params, 'dataset')
   const datasetReader = readString(params, 'reader')
@@ -271,6 +281,14 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (compareLinks.length > 0) {
     state.compareLinks = compareLinks
+  }
+
+  if (compareImages.length > 0) {
+    state.compareImages = compareImages
+  }
+
+  if (compareChannels.length > 0) {
+    state.compareChannels = compareChannels
   }
 
   if (sectionView !== undefined) {
@@ -599,6 +617,28 @@ export function formatShareableState(state: ShareableState): string {
       params.append(
         'compareLink',
         compareLink === null ? '' : formatPanelLink(compareLink),
+      )
+    }
+  }
+
+  if (state.compareImages !== undefined) {
+    for (const compareImage of state.compareImages) {
+      params.append(
+        'compareImage',
+        compareImage === 'cells' ? '1' : compareImage === 'only' ? 'only' : '',
+      )
+    }
+  }
+
+  if (state.compareChannels !== undefined) {
+    for (const channels of state.compareChannels) {
+      params.append(
+        'compareChannels',
+        channels === null
+          ? ''
+          : channels.length === 0
+            ? '-'
+            : channels.map(escapeCsvEntry).join(','),
       )
     }
   }
@@ -1008,6 +1048,24 @@ function parsePanelLink(value: string): ShareablePanelLink | null {
   return numbers === null
     ? null
     : { linked, values: [numbers[0] ?? 0, numbers[1] ?? 0, numbers[2] ?? 0] }
+}
+
+function parsePanelImage(value: string): ShareablePanelImage {
+  const trimmed = value.trim()
+
+  return trimmed === '1' ? 'cells' : trimmed === 'only' ? 'only' : null
+}
+
+function parsePanelChannels(value: string): readonly string[] | null {
+  const trimmed = value.trim()
+
+  if (trimmed === '') return null
+  if (trimmed === '-') return []
+
+  return trimmed
+    .split(',')
+    .map((entry) => unescapeCsvEntry(entry.trim()))
+    .filter((entry) => entry.length > 0)
 }
 
 function formatPanelLink(link: ShareablePanelLink): string {

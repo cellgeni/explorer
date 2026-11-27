@@ -254,6 +254,18 @@ export function SideBySideIcon() {
   )
 }
 
+// A panel's image channels: three sliders.
+export function ChannelsIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+      <circle cx="5.5" cy="4" r="1.5" />
+      <circle cx="10.5" cy="8" r="1.5" />
+      <circle cx="7" cy="12" r="1.5" />
+    </svg>
+  )
+}
+
 // A panel beside the main view with a view of its own: the link icon broken.
 export function UnlinkIcon() {
   return (

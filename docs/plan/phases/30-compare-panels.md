@@ -172,23 +172,30 @@ another dataset opens, unless the collection keeps it as a section (D3).
   linking at an offset, reset, a link's offsets, and a section outside the
   coordinate system keeping its panel.
 
-### M2. Images In Panels (M)
+### M2. Images In Panels (M) — built 2026-11-27
 
-- B1. `loadDatasetMorphology(url, deps, signal)`: detect the dataset and
-  open its image by the per-platform pieces the load uses, with the load's
-  defaults (no link restore): a pyramid `MorphologyImage` with the
-  platform's default-channel and native-RGB flags, a flat image, or none.
-  Unit tests per platform with the existing dataset mocks.
-- B2. `usePanelImage`: per panel, load on `Image`, abort on close, retain
-  the dataset while open, channel settings (D5) and auto-contrast with its
-  own queue.
+- B1. `loadPanelImage(url, loaders, signal)` (`panelImage.ts`): detect the
+  dataset and open its image by the per-platform pieces the load uses, with
+  the manifest's defaults and nothing from the link: a pyramid
+  `MorphologyImage` with the channels shown first and whether to
+  auto-contrast (not native RGB), a flat image (Visium, Visium HD), or
+  none. The dataset is opened as the previews open it, so the image is
+  placed with their cells. A large MERSCOPE image the main view defers is
+  read when a panel asks for it. Unit tests per platform.
+- B2. `usePanelImage`: per panel, load on `Image`, abort when hidden or
+  closed, retain the dataset while shown, keep the image and its channels
+  while hidden, channel settings (`startingSettings`, D5) and auto-contrast
+  for the channels that did not take the main view's window.
 - B3. The panel draws a `MorphologyCanvas` under its deck canvas, at its
-  view, with a smaller tile cache; image-only sections fit to the image.
-- B4. Header `Image` toggle and `Channels` popover hosting
-  `MorphologyChannelControls` and `Cells`.
+  view, with a 48-tile cache; a section without cells fits to the image.
+- B4. Header `Show the image of {label}` toggle and `Channels of {label}`
+  popover with `Cells` and `MorphologyChannelControls`, centred under the
+  header and kept inside the panel (`container-type: size`).
 - B5. `compareImage=` and `compareChannels=`.
-- B6. Tests: model, the popover's controls, App tests with an image mock;
-  an e2e on a local OME-Zarr fixture.
+- B6. Tests: the loader per platform, the hook and `startingSettings`, the
+  link, and App tests for showing a panel's image, its channels and cells
+  in the link, and a link's panel image. The e2e on a local OME-Zarr
+  fixture is still to write.
 
 ### M3. The Same Image Beside (S–M)
 

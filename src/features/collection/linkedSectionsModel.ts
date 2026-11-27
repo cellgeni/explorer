@@ -1,5 +1,5 @@
 import type { LinkedViewState } from '../../components/linkedView'
-import type { ShareablePanelLink } from '../../data/shareableState'
+import type { ShareablePanelImage, ShareablePanelLink } from '../../data/shareableState'
 import {
   collectionEntryFor,
   type DatasetCollection,
@@ -34,15 +34,21 @@ export type PanelLink =
 export const LINKED: PanelLink = { linked: true, offset: NO_OFFSET }
 export const UNLINKED: PanelLink = { linked: false, view: null }
 
-// A panel as compare= and compareLink= name it. A null link is the
-// section's default, known once the collection is read.
+// What a panel shows of its section's image (plan 30-D4): the image under
+// its cells, the image alone, or none (its cells only).
+export type PanelImageMode = 'cells' | 'only' | null
+
+// A panel as compare=, compareLink=, compareImage= and compareChannels= name
+// it. A null link is the section's default, known once the collection is
+// read; null channels are the image's defaults.
 export interface ComparePanel {
   readonly url: string
   readonly link: PanelLink | null
+  readonly image?: PanelImageMode
+  readonly channels?: readonly string[] | null
 }
 
-export interface ResolvedPanel {
-  readonly url: string
+export interface ResolvedPanel extends ComparePanel {
   readonly link: PanelLink
 }
 
@@ -136,6 +142,7 @@ function resolvedPanel(
   }
 
   const resolved: ResolvedPanel = {
+    ...panel,
     url: entry.url,
     link: panel.link ?? (registered ? LINKED : UNLINKED),
   }
@@ -171,7 +178,16 @@ export function withPanelLink(
   url: string,
   link: PanelLink,
 ): readonly ComparePanel[] {
-  return shown.map(({ panel }) => (panel.url === url ? { url, link } : panel))
+  return withPanel(shown, url, { link })
+}
+
+// Changes one shown panel: its image, its channels or its link.
+export function withPanel(
+  shown: readonly ShownPanel[],
+  url: string,
+  patch: Partial<Omit<ResolvedPanel, 'url'>>,
+): readonly ComparePanel[] {
+  return shown.map(({ panel }) => (panel.url === url ? { ...panel, ...patch } : panel))
 }
 
 // Whether opening `nextUrl` in place of the open dataset keeps the view: both
@@ -239,6 +255,9 @@ export function panelsAfterOpening(
               link: link.linked
                 ? { linked: true, offset: negatedOffset(link.offset) }
                 : { linked: false, view: mainView },
+              // The open dataset shows its image in the panel if the panel
+              // showed one, with its own channels.
+              ...(swapped.panel.image == null ? {} : { image: swapped.panel.image }),
             }
           : item.panel,
       ),
@@ -318,11 +337,41 @@ function negatedOffset(offset: PanelOffset): PanelOffset {
 export function comparePanelsFromLink(
   urls: readonly string[] | undefined,
   links: readonly (ShareablePanelLink | null)[] | undefined,
+  images?: readonly ShareablePanelImage[],
+  channels?: readonly (readonly string[] | null)[],
 ): readonly ComparePanel[] {
-  return (urls ?? []).map((url, index) => ({
-    url,
-    link: panelLinkFromShareable(links?.[index] ?? null),
-  }))
+  return (urls ?? []).map((url, index) => {
+    const image = images?.[index] ?? null
+    const shown = channels?.[index] ?? null
+
+    return {
+      url,
+      link: panelLinkFromShareable(links?.[index] ?? null),
+      ...(image === null ? {} : { image }),
+      ...(shown === null ? {} : { channels: shown }),
+    }
+  })
+}
+
+// Each panel's compareImage=, none when no panel shows its image.
+export function compareImagesForLink(
+  panels: readonly ComparePanel[],
+): readonly ShareablePanelImage[] | undefined {
+  const images = panels.map((panel) => panel.image ?? null)
+
+  return images.every((image) => image === null) ? undefined : images
+}
+
+// Each panel's compareChannels=, for panels showing their image with
+// channels of their own; none when there are none.
+export function compareChannelsForLink(
+  panels: readonly ComparePanel[],
+): readonly (readonly string[] | null)[] | undefined {
+  const channels = panels.map((panel) =>
+    panel.image == null ? null : (panel.channels ?? null),
+  )
+
+  return channels.every((shown) => shown === null) ? undefined : channels
 }
 
 function panelLinkFromShareable(link: ShareablePanelLink | null): PanelLink | null {

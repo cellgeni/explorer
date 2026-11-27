@@ -1057,6 +1057,100 @@ describe('App with a dataset collection', () => {
       expect((await hashAfterWrite()).getAll('compareLink')).toEqual(['1,10,-20,1'])
     })
 
+    it('shows a panel’s image with its own channels, in the link', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}`,
+      )
+      const loader = imageLoaderFixture('https://example.test/cord/image.zarr')
+      const dataset = {
+        ...h5adDataset(),
+        image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+      }
+      const retainDataset = vi.fn(() => () => {})
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
+          retainDataset={retainDataset}
+          computeAutoChannelContrast={vi.fn(async () => ({
+            min: 0,
+            max: 255,
+            histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+          }))}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      const show = within(panel).getByRole('button', {
+        name: 'Show the image of Section 2',
+      })
+      expect(show).toHaveAttribute('aria-pressed', 'false')
+      fireEvent.click(show)
+      expect(show).toHaveAttribute('aria-pressed', 'true')
+
+      fireEvent.click(
+        await within(panel).findByRole('button', { name: 'Channels of Section 2' }),
+      )
+      const popover = within(panel).getByRole('dialog', { name: 'Image of Section 2' })
+      expect(within(popover).getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+      expect(retainDataset).toHaveBeenCalledWith(SECTION_2)
+
+      // The image alone, and no channel shown: the link keeps both.
+      fireEvent.click(within(popover).getByRole('checkbox', { name: 'Cells' }))
+      fireEvent.click(within(popover).getByRole('checkbox', { name: 'DAPI' }))
+      await waitFor(() => {
+        const hash = new URLSearchParams(window.location.hash.slice(1))
+        expect(hash.getAll('compareImage')).toEqual(['only'])
+        expect(hash.getAll('compareChannels')).toEqual(['-'])
+      })
+
+      // Hiding the image drops both from the link.
+      fireEvent.click(show)
+      await waitFor(() => {
+        const hash = new URLSearchParams(window.location.hash.slice(1))
+        expect(hash.has('compareImage')).toBe(false)
+        expect(hash.has('compareChannels')).toBe(false)
+      })
+    })
+
+    it('opens a link’s panel with its image and channels', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&compareImage=1&compareChannels=-`,
+      )
+      const loader = imageLoaderFixture('https://example.test/cord/image.zarr')
+      const dataset = {
+        ...h5adDataset(),
+        image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+      }
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
+          computeAutoChannelContrast={vi.fn(async () => ({
+            min: 0,
+            max: 255,
+            histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+          }))}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      fireEvent.click(
+        await within(panel).findByRole('button', { name: 'Channels of Section 2' }),
+      )
+      const popover = within(panel).getByRole('dialog', { name: 'Image of Section 2' })
+      expect(within(popover).getByRole('checkbox', { name: 'DAPI' })).not.toBeChecked()
+      expect(within(popover).getByRole('checkbox', { name: 'Cells' })).toBeChecked()
+    })
+
     it('names the hovered cell of a section beside, unless Settings turns tooltips off', async () => {
       window.history.replaceState(
         null,
