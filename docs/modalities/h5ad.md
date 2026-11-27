@@ -218,7 +218,9 @@ columns, since from a Zarr store each array is a request of its own.
 - String datasets become categorical tracks; empty strings are missing.
   Their distinct values are counted only up to 10,000: a column with more,
   such as cell IDs or barcodes, reports 10,001 and is listed under "More
-  columns" with the other columns of more than 500 categories.
+  columns" with the other columns of more than 500 categories. Each label is
+  compared with the first 16 values before it goes in a Set, which hashes
+  it: 0.9 s for a column of 598,222 labels with two values.
 - `nullable-string-array` groups become categorical tracks and
   `nullable-integer`/`nullable-boolean` groups continuous ones (booleans as
   0/1); masked values are missing.

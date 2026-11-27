@@ -11,3 +11,14 @@ export type NumericArrayLike =
   | Float64Array
   | BigInt64Array
   | BigUint64Array
+
+// A reader of an array's values as numbers: 64-bit integers are converted,
+// and an index past the end reads 0.
+export function numericReader(values: NumericArrayLike): (index: number) => number {
+  if (values instanceof BigInt64Array || values instanceof BigUint64Array) {
+    return (index) => Number(values[index] ?? 0n)
+  }
+
+  const numbers = values as ArrayLike<number>
+  return (index) => numbers[index] ?? 0
+}

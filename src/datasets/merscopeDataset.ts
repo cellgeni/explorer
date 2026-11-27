@@ -137,7 +137,7 @@ export interface MerscopeSummary {
 interface MerscopeOverview {
   readonly points: readonly CellOverviewPoint[]
   readonly rowById: ReadonlyMap<string, number>
-  readonly transcriptCounts: readonly number[] | null
+  readonly transcriptCounts: ArrayLike<number> | null
 }
 
 // Cell outlines for the boundary layer; elements are built only for the cells

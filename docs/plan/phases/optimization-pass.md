@@ -360,13 +360,15 @@ M2, requests:
 
 M3, main thread:
 
-- [ ] **O15. AnnData table code, in place.** (S–M) `uniqueNames` returns
+- [x] **O15. AnnData table code, in place.** (S–M) `uniqueNames` returns
       early when no name repeats; `h5adMatrixForCells` keeps its row and
       gene maps in the cache; `sparseVectorCell` stops allocating per cell
       (`h5adDataset.ts:4897`); numeric columns stay typed arrays where
       their callers allow; distinct values are counted when the annotation
       list asks for them.
   - Measure S6, and the 460-plex zip through the mirror (S9).
+  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+    [AnnData Tables Read In Place](#anndata-tables-read-in-place-2026-11-27).
 - [ ] **O16. Visium HD positions and barcode mappings in a worker.** (M) As
       for the Xenium overview: columns from a worker, not one object per
       row. Remove the whole-file mapping read nothing calls
@@ -1706,6 +1708,84 @@ Tests: `src/rendering/cellPointStyle.property.test.ts` checks, for random
 cells, batches, colour modes, bin sizes and opacities, that the colours and
 the layer's fill and line colours equal the full pass's, and that a batch
 after the first styles no cell.
+
+## AnnData Tables Read In Place (2026-11-27)
+
+Task O15. CPU profiles of the 1M-cell H5AD (S6) and of the 460-plex zip
+through its mirror (S9), on the base of this task's PR, put the table's
+main-thread work in four places:
+
+- **Colouring by a gene** read every selected cell through the matrix's
+  per-cell path (`h5adMatrixForCells`). It built a Map of every cell ID and
+  a Set and a Map per cell, and returned each cell's genes as arrays, which
+  `geneExpression` then added up. That was 0.84–0.99 s on S6 and 0.69–0.70 s
+  on the 460-plex.
+- **Counting the distinct values** of string obs columns took 0.90–0.98 s on
+  the 460-plex: its 598,222 `segmentation_method` labels hold two values,
+  and a Set hashes a string the first time it is used as a key. Compared
+  with the label before, the same labels took 14 ms.
+- **Number columns** were copied into number arrays, 67–145 ms a load.
+- **Making the cell IDs unique** (`uniqueNames`), 0.23–0.28 s a load. Almost
+  all of it is the Set of every ID, which only says whether any repeats.
+
+What changed (`src/datasets/h5adDataset.ts`):
+
+- **A gene's counts are summed row by row** (`h5adExpressionCounts`).
+  `geneExpression` takes the selection as table rows, so it needs no ID
+  lookups, and a CSR matrix, in memory or read by range, or a dense one in
+  memory, is read straight into a sum per row (`CsrRowSums`). The sums keep
+  the per-cell path's rules: a column stored twice in a row keeps its last
+  value, and genes are added in the order asked. Other layouts, and a read
+  of every gene, still take the per-cell path.
+- **The per-cell path** (`matrix()`, Cell Query and the Cell card) keeps its
+  maps of cell rows and gene columns per table rather than building them
+  for each read, and its CSR rows reuse one Set and one Map rather than
+  making two per cell.
+- **Distinct values** are compared first with the 16 values already seen,
+  and only then put in a Set (`DistinctLabels`).
+- **Number columns** stay `Float64Array`s: a column read as one is kept, and
+  others are copied once, with a loop for 64-bit integers.
+  `Float64Array.from(values, Number)` took twice as long as the number
+  arrays on the 460-plex.
+- **`uniqueNames`** returns the names as they are when none repeats, which
+  skips its second Set and its pass over the names. The Set that finds out
+  is left, and is most of the time.
+
+Measured with unminified production builds of the base (#478) and the
+branch, alternating, three runs each, with GPU drawing: S6, then coloured by
+`M03a`; and the 460-plex served from a local mirror of its EBI zip, coloured
+by `GFAP`.
+
+| Step                       | Base: busy     | Branch: busy   | Base: longest  | Branch: longest | Base: table work | Branch: table work |
+| -------------------------- | -------------- | -------------- | -------------- | --------------- | ---------------- | ------------------ |
+| S6, load                   | 1,176–1,278 ms | 1,034–1,143 ms | 367–473 ms     | 347–376 ms      | 315–349 ms       | 191–269 ms         |
+| S6, colour by `M03a`       | 1,328–1,657 ms | 306–370 ms     | 1,290–1,616 ms | 285–343 ms      | 843–986 ms       | 113–130 ms         |
+| 460-plex, load             | 2,999–3,511 ms | 1,988–2,268 ms | 888–1,088 ms   | 343–364 ms      | 1,318–1,360 ms   | 330–381 ms         |
+| 460-plex, colour by `GFAP` | 3,277–3,571 ms | 2,050–2,502 ms | 1,078–1,266 ms | 1,040–1,230 ms  | 689–702 ms       | 217–260 ms         |
+
+Table work is the time in the functions above, from CPU profiles: on a load,
+counting labels, `uniqueNames` and the number columns; on a colouring, the
+matrix read.
+
+- **S6's colouring** is one stretch of 0.29–0.34 s rather than 1.3–1.6 s;
+  the expression line shows 0.36–0.50 s after the click, against 1.39–1.85
+  s, and the page holds 0.9 GB rather than 1.2–1.3 GB.
+- **The 460-plex's colouring** still has a stretch of 1.0–1.2 s: deck.gl
+  normalising the overlay's attributes for its 571,617 expressing cells
+  (`_normalizeValue`, about 0.4 s) and garbage collection. Not this task's.
+- **The same expression lines** on both builds: 28,988 positive cells across
+  1,000,000, and 571,617 across 598,222.
+- **For O17:** the CSR scan for a gene now takes 0.11–0.13 s on S6 and
+  0.22–0.26 s on the 460-plex. Moving it to the H5 worker would save that
+  much of one stretch.
+
+Tests: `src/datasets/h5adExpressionCounts.property.test.ts` checks, for
+random CSR tables (columns stored twice, NaN and negative values, 32- and
+64-bit floats) and gene lists (repeated and missing genes), that the counts
+equal the per-cell path's. `src/datasets/h5adObsColumns.test.ts` checks the
+distinct-value counts around 16 values and the 10,000 limit, and that
+number columns, 64-bit integers included, keep their values as typed
+arrays.
 
 ## Closed Open Items
 
