@@ -647,6 +647,7 @@ describe('App with a dataset collection', () => {
     afterEach(() => {
       deckView.linked = undefined
       deckView.onLinkedChange = undefined
+      deckView.onLinkedHover = undefined
       deckView.stackLayerIds = undefined
     })
 
@@ -672,10 +673,14 @@ describe('App with a dataset collection', () => {
           'true',
         )
       })
-      // Only a section registered to the open one can be shown beside it.
+      // Every other entry can be shown beside it; one that is not
+      // registered to it has a view of its own.
       expect(
-        within(bar).queryByRole('button', { name: 'Show Atlas beside' }),
-      ).not.toBeInTheDocument()
+        within(bar).getByRole('button', { name: 'Show Atlas beside' }),
+      ).toHaveAttribute(
+        'title',
+        'Show Atlas beside the open dataset, with a view of its own',
+      )
       const toggle = within(bar).getByRole('button', { name: 'Show Section 2 beside' })
       expect(toggle).toHaveAttribute('aria-pressed', 'false')
       fireEvent.click(toggle)
@@ -715,7 +720,8 @@ describe('App with a dataset collection', () => {
       expect(swapped.get('dataset')).toBe(SECTION_2)
       expect(swapped.getAll('compare')).toEqual([SECTION_1])
 
-      // A dataset outside the coordinate system closes the panels and fits.
+      // A dataset outside the coordinate system opens fitted; the panel stays
+      // where it was, unlinked.
       fireEvent.click(within(bar).getByRole('button', { name: 'Atlas' }))
       await waitFor(() => {
         expect(within(bar).getByRole('button', { name: 'Atlas' })).toHaveAttribute(
@@ -723,11 +729,17 @@ describe('App with a dataset collection', () => {
           'true',
         )
       })
-      expect(screen.queryByRole('region', { name: 'Section 1' })).not.toBeInTheDocument()
+      const kept = screen.getByRole('region', { name: 'Section 1' })
+      expect(
+        within(kept).getByRole('button', { name: 'Link Section 1 to the main view' }),
+      ).toHaveAttribute('aria-pressed', 'false')
       await waitFor(() => {
         expect(deckView.current?.target?.[0]).toBeCloseTo(5)
       })
-      expect((await hashAfterWrite()).has('compare')).toBe(false)
+      expect(deckView.linked).toMatchObject({ target: [7, -1, 0], zoom: 3 })
+      const atlas = await hashAfterWrite()
+      expect(atlas.getAll('compare')).toEqual([SECTION_1])
+      expect(atlas.getAll('compareLink')).toEqual(['0,7,-1,3'])
     })
 
     it('keeps the sections beside the open dataset while the next one loads', async () => {
@@ -956,6 +968,190 @@ describe('App with a dataset collection', () => {
       expect((await hashAfterWrite()).has('compare')).toBe(false)
     })
 
+    it('unlinks a panel, links it again at its offset, and resets the offset', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&view=900%2C900%2C0%2C3`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      await waitFor(() => {
+        expect(deckView.linked).toMatchObject({ target: [900, 900, 0], zoom: 3 })
+      })
+      const link = within(panel).getByRole('button', {
+        name: 'Link Section 2 to the main view',
+      })
+      const reset = within(panel).getByRole('button', {
+        name: 'Reset the offset of Section 2',
+      })
+      expect(link).toHaveAttribute('aria-pressed', 'true')
+      expect(reset).toBeDisabled()
+
+      // Unlinked, the panel and the main view pan on their own.
+      fireEvent.click(link)
+      expect(link).toHaveAttribute('aria-pressed', 'false')
+      act(() => {
+        deckView.onLinkedChange?.({ viewState: { target: [910, 880, 0], zoom: 4 } })
+      })
+      expect(deckView.linked).toMatchObject({ target: [910, 880, 0], zoom: 4 })
+      expect(deckView.current).toMatchObject({ target: [900, 900, 0], zoom: 3 })
+      act(() => {
+        deckView.onChange?.({ viewState: { target: [800, 800, 0], zoom: 3 } })
+      })
+      expect(deckView.linked).toMatchObject({ target: [910, 880, 0], zoom: 4 })
+      // The address takes the panel's view once it rests.
+      await waitFor(() => {
+        expect(
+          new URLSearchParams(window.location.hash.slice(1)).getAll('compareLink'),
+        ).toEqual(['0,910,880,4'])
+      })
+
+      // Linked again where it is, it keeps its offset as they pan together.
+      fireEvent.click(link)
+      expect(link).toHaveAttribute('aria-pressed', 'true')
+      act(() => {
+        deckView.onChange?.({ viewState: { target: [700, 750, 0], zoom: 2 } })
+      })
+      expect(deckView.linked).toMatchObject({ target: [810, 830, 0], zoom: 3 })
+      act(() => {
+        deckView.onLinkedChange?.({ viewState: { target: [820, 830, 0], zoom: 3 } })
+      })
+      expect(deckView.current).toMatchObject({ target: [710, 750, 0], zoom: 2 })
+      expect((await hashAfterWrite()).getAll('compareLink')).toEqual(['1,110,80,1'])
+
+      // Reset puts it at the main view's centre and zoom.
+      expect(reset).toBeEnabled()
+      fireEvent.click(reset)
+      expect(deckView.linked).toMatchObject({ target: [710, 750, 0], zoom: 2 })
+      expect(reset).toBeDisabled()
+      expect((await hashAfterWrite()).has('compareLink')).toBe(false)
+    })
+
+    it('opens a link’s panels with their links and offsets', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&compareLink=1%2C10%2C-20%2C1&view=900%2C900%2C0%2C3`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      await screen.findByRole('region', { name: 'Section 2' })
+      await waitFor(() => {
+        expect(deckView.linked).toMatchObject({ target: [910, 880, 0], zoom: 4 })
+      })
+      expect((await hashAfterWrite()).getAll('compareLink')).toEqual(['1,10,-20,1'])
+    })
+
+    it('shows a panel’s image with its own channels, in the link', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}`,
+      )
+      const loader = imageLoaderFixture('https://example.test/cord/image.zarr')
+      const dataset = {
+        ...h5adDataset(),
+        image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+      }
+      const retainDataset = vi.fn(() => () => {})
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
+          retainDataset={retainDataset}
+          computeAutoChannelContrast={vi.fn(async () => ({
+            min: 0,
+            max: 255,
+            histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+          }))}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      const show = within(panel).getByRole('button', {
+        name: 'Show the image of Section 2',
+      })
+      expect(show).toHaveAttribute('aria-pressed', 'false')
+      fireEvent.click(show)
+      expect(show).toHaveAttribute('aria-pressed', 'true')
+
+      fireEvent.click(
+        await within(panel).findByRole('button', { name: 'Channels of Section 2' }),
+      )
+      const popover = within(panel).getByRole('dialog', { name: 'Image of Section 2' })
+      expect(within(popover).getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+      expect(retainDataset).toHaveBeenCalledWith(SECTION_2)
+
+      // The image alone, and no channel shown: the link keeps both.
+      fireEvent.click(within(popover).getByRole('checkbox', { name: 'Cells' }))
+      fireEvent.click(within(popover).getByRole('checkbox', { name: 'DAPI' }))
+      await waitFor(() => {
+        const hash = new URLSearchParams(window.location.hash.slice(1))
+        expect(hash.getAll('compareImage')).toEqual(['only'])
+        expect(hash.getAll('compareChannels')).toEqual(['-'])
+      })
+
+      // Hiding the image drops both from the link.
+      fireEvent.click(show)
+      await waitFor(() => {
+        const hash = new URLSearchParams(window.location.hash.slice(1))
+        expect(hash.has('compareImage')).toBe(false)
+        expect(hash.has('compareChannels')).toBe(false)
+      })
+    })
+
+    it('opens a link’s panel with its image and channels', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&compareImage=1&compareChannels=-`,
+      )
+      const loader = imageLoaderFixture('https://example.test/cord/image.zarr')
+      const dataset = {
+        ...h5adDataset(),
+        image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+      }
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
+          computeAutoChannelContrast={vi.fn(async () => ({
+            min: 0,
+            max: 255,
+            histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+          }))}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      fireEvent.click(
+        await within(panel).findByRole('button', { name: 'Channels of Section 2' }),
+      )
+      const popover = within(panel).getByRole('dialog', { name: 'Image of Section 2' })
+      expect(within(popover).getByRole('checkbox', { name: 'DAPI' })).not.toBeChecked()
+      expect(within(popover).getByRole('checkbox', { name: 'Cells' })).toBeChecked()
+    })
+
     it('names the hovered cell of a section beside, unless Settings turns tooltips off', async () => {
       window.history.replaceState(
         null,
@@ -975,19 +1171,24 @@ describe('App with a dataset collection', () => {
       await waitFor(() => {
         expect(deckView.linked).toBeDefined()
       })
-      const hoverFirstCell = () => {
-        act(() => {
-          deckView.onLinkedHover?.({
-            index: 0,
-            layer: { id: 'linked-section-cells' },
-            x: 10,
-            y: 10,
-          })
+      const hover = () => {
+        deckView.onLinkedHover?.({
+          index: 0,
+          layer: { id: 'linked-section-cells' },
+          x: 10,
+          y: 10,
         })
       }
+      const hoverFirstCell = () => {
+        act(hover)
+      }
 
-      hoverFirstCell()
-      expect(within(panel).getByText('cell-a')).toBeInTheDocument()
+      // Hovered again until the panel's latest render has its cells: under a
+      // loaded run the first handler can come from an earlier render.
+      await waitFor(() => {
+        hover()
+        expect(within(panel).getByText('cell-a')).toBeInTheDocument()
+      })
 
       fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
       fireEvent.click(
@@ -1150,6 +1351,91 @@ describe('App with a dataset collection', () => {
   })
 })
 
+describe('App with an image beside itself', () => {
+  const IMAGE_URL = 'https://example.test/slides/tonsil.ome.zarr'
+
+  beforeEach(() => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(IMAGE_URL)}`,
+    )
+  })
+
+  it('shows the open image again beside the main view, with its own channels', async () => {
+    const loader = imageLoaderFixture(IMAGE_URL)
+    const dataset = {
+      meta: vi.fn(async () => ({
+        platform: 'image' as const,
+        units: loader.units,
+        extent: {
+          minX: micrometers(0),
+          maxX: micrometers(80),
+          minY: micrometers(0),
+          maxY: micrometers(40),
+        },
+        capabilities: {
+          transcripts: false,
+          cellBoundaries: false,
+          pyramidImage: true,
+          multiChannel: true,
+        },
+        channels: loader.channels,
+      })),
+      image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+    }
+
+    render(
+      <TestApp
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'image' as const,
+          baseUrl: IMAGE_URL,
+          imageUrl: IMAGE_URL,
+          checked: [],
+        }))}
+        getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
+        computeAutoChannelContrast={vi.fn(async () => ({
+          min: 0,
+          max: 255,
+          histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+        }))}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(dataset.image).toHaveBeenCalledTimes(1)
+    })
+    openControls('image')
+    fireEvent.click(await screen.findByRole('button', { name: 'Show beside' }))
+
+    // The same image, linked, from the loaders the main view has open.
+    const panel = await screen.findByRole('region', { name: /, beside$/ })
+    expect(
+      within(panel).getByRole('button', { name: /^Link .* to the main view$/ }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(within(panel).queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
+    fireEvent.click(await within(panel).findByRole('button', { name: /^Channels of / }))
+    const popover = within(panel).getByRole('dialog', { name: /^Image of / })
+    expect(within(popover).getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+    expect(dataset.image).toHaveBeenCalledTimes(1)
+
+    // Its channels are its own.
+    fireEvent.click(within(popover).getByRole('checkbox', { name: 'DAPI' }))
+    const layers = screen.getByRole('complementary', { name: 'Layers' })
+    expect(within(layers).getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+    await waitFor(() => {
+      const hash = new URLSearchParams(window.location.hash.slice(1))
+      expect(hash.getAll('compare')).toEqual([IMAGE_URL])
+      expect(hash.getAll('compareImage')).toEqual(['1'])
+      expect(hash.getAll('compareChannels')).toEqual(['-'])
+    })
+
+    // Another copy is numbered.
+    fireEvent.click(screen.getByRole('button', { name: 'Show beside again' }))
+    expect(await screen.findByRole('region', { name: /, beside 2$/ })).toBeInTheDocument()
+  })
+})
+
 function imageLoaderFixture(url: string): ImagePyramidLoader {
   return {
     url,
@@ -1159,6 +1445,12 @@ function imageLoaderFixture(url: string): ImagePyramidLoader {
     tileHeight: imagePixels(256),
     numLevels: 1,
     tilesForLevel: () => [{ col: 0, row: 0 }],
+    tileBounds: () => ({
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(80),
+      maxY: micrometers(40),
+    }),
     units: {
       dataUnit: 'micrometer',
       imageUnit: 'pixel',

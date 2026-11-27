@@ -18,6 +18,7 @@ export { Tooltip, type TooltipProps } from './Tooltip'
 export {
   BoxSelectIcon,
   CameraIcon,
+  ChannelsIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CloseIcon,
@@ -50,4 +51,5 @@ export {
   SideBySideIcon,
   StackIcon,
   TargetIcon,
+  UnlinkIcon,
 } from './icons'

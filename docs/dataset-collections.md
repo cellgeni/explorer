@@ -420,9 +420,10 @@ first dataset opens. A new gene then reads 100 to 500 KB per section, about
 
 ## Side by Side
 
-Consecutive sections registered to each other can be shown side by side,
-up to four at once, with one view: pan or zoom any of them and the others
-follow.
+Any datasets of a collection can be shown side by side, up to four at once.
+Sections registered to each other open with one view: pan or zoom any of
+them and the others follow. Others open with a view each, and can be linked
+by hand.
 
 ### Registered Coordinates
 
@@ -467,10 +468,10 @@ Entries without `coordinateSystem`, such as an atlas, are opened as before.
 
 ### Showing Sections
 
-With a section of a coordinate system open, the bar shows a `Show beside`
-toggle (two columns) on every other section of that coordinate system. Turn
-it on and the section opens in a panel beside the main view; turn it off, or
-close the panel with its ×, and it goes. Up to three panels show at once: two
+With a dataset of the collection open, the bar shows a `Show beside` toggle
+(two columns) on every other dataset of the collection. Turn it on and the
+dataset opens in a panel beside the main view; turn it off, or close the
+panel with its ×, and it goes. Up to three panels show at once: two
 viewers sit side by side, three in a row, four in a 2 by 2 grid; under
 860 px they stack.
 
@@ -483,20 +484,47 @@ viewers sit side by side, three in a row, four in a 2 by 2 grid; under
   value faded. Otherwise cells are grey. Hovering a cell names it and its class or
   value, or gives its score. The
   panel's name heads it, with its top (`top 32`) or highest score.
-- **What a panel does not show.** Images, cell boundaries, transcripts and
-  the tools (selection, Magic Lens, measuring, cards) are the main view's
-  only. To use them on a section, choose `Open` in its panel: it swaps places
-  with the main view's dataset, at the same view.
-- **One view.** Each viewer shows the same point at its centre at the same
-  scale. Fit, the zoom buttons, the minimap and the keyboard act on the main
-  view, and the panels follow.
+- **Images.** The image button in a panel's header loads the section's
+  image under its cells: the image the section opens with in the main view,
+  without opening it there. The channels button beside it then lists the
+  image's channels, to show, colour and window each one in that panel alone,
+  as the Image section does for the main view; its `Cells` box hides the
+  cells to see the image alone. A panel starts from the main view's colour
+  and window for channels of the same name, so sections compare on one
+  scale, and auto-windows the others. A section without cells, such as an
+  image, shows its image at once.
+- **The open dataset beside itself.** The Image section's `Show beside`
+  opens the open dataset's own image in a panel, linked, with channels of
+  its own, to compare channel sets of one image. It takes the image the
+  main view has open rather than reading it again. It works with or without
+  a collection, and closes when another dataset opens outside the
+  collection.
+- **What a panel does not show.** Cell boundaries, transcripts and the tools
+  (selection, Magic Lens, measuring, cards) are the main view's only. To use
+  them on a section, choose `Open` in its panel: it swaps places with the
+  main view's dataset.
+- **Linked and unlinked.** A section registered to the open one (the same
+  `coordinateSystem`) opens linked: it shows the same point at its centre at
+  the same scale, and pan or zoom any linked viewer and the others follow.
+  Fit, the zoom buttons, the minimap and the keyboard act on the main view,
+  and linked panels follow. Any other section opens unlinked, fitted to its
+  own cells, and pans and zooms on its own. The chain button in a panel's
+  header links or unlinks it. Linking keeps the panel where it is, at an
+  offset from the main view: line two sections up by hand, link them, and
+  they move together. `Reset the offset` (the target button) puts a linked
+  panel at the main view's centre and zoom; an unlinked panel has `Fit` in
+  its place. Offsets move and zoom; they do not rotate.
 - **What is read.** A panel reads what a preview reads, whether the bar shows
   previews or not, before the previews in view. Images, Visium HD and large
-  plain `.h5ad` files have no preview, so their panels say why instead.
-- **Opening another section.** Choosing another section of the coordinate
-  system in the bar keeps the view and the panels; choosing a panel's section
-  swaps it with the open one. A dataset outside the coordinate system closes
-  the panels and fits the view. The panels change when the next dataset
+  plain `.h5ad` files have no preview, so their panels say why instead. A
+  panel's image is read only while it is shown, tile by tile as the main
+  view's is, with a smaller cache of decoded tiles.
+- **Opening another section.** Choosing a panel's section swaps it with the
+  open one, each viewer keeping what it shows. Choosing another section of
+  the coordinate system in the bar keeps the view and the panels. Another
+  dataset of the collection opens fitted, and the panels stay where they
+  are, unlinked. A dataset outside the collection closes the panels. The
+  panels change when the next dataset
   opens: while it loads, and if it cannot be opened or is cancelled, the open
   dataset keeps its own.
 
@@ -657,7 +685,12 @@ names, groups and depths, or to list only some:
 
 The address keeps `collection=` next to `dataset=`, so a copied link reopens
 the collection with the same dataset and view, a `compare=` for each
-section shown side by side, in order, and `sectionView=3d` while the sections
+section shown side by side, in order, with a `compareLink=` each when any
+panel is not linked or unlinked as it opens by default (`1` linked or `0`
+unlinked, then its offset or its own view as x, y and zoom), a
+`compareImage=` each when any panel shows its image (`1` under its cells,
+`only` alone) with its shown channels as `compareChannels=` (`-` for none),
+and `sectionView=3d` while the sections
 are stacked in 3D (not the 3D camera). It keeps the bar's `Expand`
 grid as `collectionView=grid`, with its `Size` as `collectionPreviewSize=`,
 and `Previews` off as `collectionView=names`, so the bar opens the same way. Opening a dataset that is not
@@ -700,9 +733,9 @@ message naming the entry.
 
 ## Known Limitations
 
-- Only sections registered to the open dataset, in one `coordinateSystem`,
-  can be shown beside it, and only their cells: no images or boundaries in
-  the panels, and no side-by-side embedding views.
+- Panels beside the open dataset show their cells and image only: no
+  boundaries or transcripts, and no side-by-side embedding views. Sections
+  that are not registered are lined up by hand, by moving and zooming only.
 - Panels draw every cell at one size, 10 µm across, so Visium spots are
   smaller than in the main view. So does the 3D stack.
 - The 3D stack shows cells only: no images, boundaries or transcripts, and

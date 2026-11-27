@@ -267,6 +267,41 @@ describe('shareableState', () => {
     ])
   })
 
+  it('round-trips how each section beside follows the main view', () => {
+    const hash = formatShareableState({
+      compareUrls: [
+        'https://example.test/s2.zarr',
+        'https://example.test/s3.zarr',
+        'https://example.test/s4.zarr',
+        'https://example.test/s5.zarr',
+      ],
+      compareLinks: [
+        { linked: true, values: [10.12345, -20, 0.5] },
+        null,
+        { linked: false },
+        { linked: false, values: [100, -50, 2] },
+      ],
+    })
+
+    expect(new URLSearchParams(hash.slice(1)).getAll('compareLink')).toEqual([
+      '1,10.123,-20,0.5',
+      '',
+      '0',
+      '0,100,-50,2',
+    ])
+    expect(parseShareableState(hash).compareLinks).toEqual([
+      { linked: true, values: [10.123, -20, 0.5] },
+      null,
+      { linked: false },
+      { linked: false, values: [100, -50, 2] },
+    ])
+    // What is not understood keeps its place, as the section's default.
+    expect(
+      parseShareableState('#compareLink=2&compareLink=1,x,0,0&compareLink=1')
+        .compareLinks,
+    ).toEqual([null, null, { linked: true }])
+  })
+
   it('round-trips the serial sections stacked in 3D', () => {
     const hash = formatShareableState({
       collectionUrl: 'https://example.test/c.json',

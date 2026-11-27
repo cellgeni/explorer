@@ -5,6 +5,16 @@ import type { RoiSelection } from './roiSelection'
 // default; version 1 wrote every field. The parser reads both.
 const HASH_VERSION = '2'
 
+// A panel beside the main view (`compareLink=`): `1` linked to it, `0` with
+// a view of its own, each followed by x, y and zoom when set: a linked
+// panel's offset from the main view, an unlinked one's view (else fitted).
+export interface ShareablePanelLink {
+  readonly linked: boolean
+  readonly values?: readonly [number, number, number]
+}
+
+export type ShareablePanelImage = 'cells' | 'only' | null
+
 export interface ShareableViewState {
   readonly target: readonly [number, number, number]
   readonly zoom: number
@@ -21,9 +31,19 @@ export interface ShareableState {
   // The width of each preview in its grid, in CSS px:
   // `collectionPreviewSize=`.
   readonly collectionPreviewSize?: number
-  // Registered sections of the collection shown beside the dataset, one
-  // `compare=` each.
+  // Sections of the collection shown beside the dataset, one `compare=`
+  // each.
   readonly compareUrls?: readonly string[]
+  // How each of them follows the main view, in their order: one
+  // `compareLink=` each, null where it is not understood. Absent, each opens
+  // as it does by default.
+  readonly compareLinks?: readonly (ShareablePanelLink | null)[]
+  // What each of them shows of its image, in their order (`compareImage=`):
+  // `1` the image under its cells, `only` the image alone, empty neither.
+  readonly compareImages?: readonly ShareablePanelImage[]
+  // Each one's shown channels (`compareChannels=`), as `channels=` gives the
+  // main view's: `-` for none, empty (null) for the image's defaults.
+  readonly compareChannels?: readonly (readonly string[] | null)[]
   // `3d` when the collection's serial sections are stacked in 3D:
   // `sectionView=`.
   readonly sectionView?: string
@@ -159,6 +179,9 @@ export function parseShareableState(hash: string): ShareableState {
   const collectionView = readString(params, 'collectionView')
   const collectionPreviewSize = parsePositiveInteger(params.get('collectionPreviewSize'))
   const compareUrls = readStrings(params, 'compare')
+  const compareLinks = params.getAll('compareLink').map(parsePanelLink)
+  const compareImages = params.getAll('compareImage').map(parsePanelImage)
+  const compareChannels = params.getAll('compareChannels').map(parsePanelChannels)
   const sectionView = readString(params, 'sectionView')
   const datasetUrl = readString(params, 'dataset')
   const datasetReader = readString(params, 'reader')
@@ -254,6 +277,18 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (compareUrls !== undefined) {
     state.compareUrls = compareUrls
+  }
+
+  if (compareLinks.length > 0) {
+    state.compareLinks = compareLinks
+  }
+
+  if (compareImages.length > 0) {
+    state.compareImages = compareImages
+  }
+
+  if (compareChannels.length > 0) {
+    state.compareChannels = compareChannels
   }
 
   if (sectionView !== undefined) {
@@ -574,6 +609,37 @@ export function formatShareableState(state: ShareableState): string {
   if (state.compareUrls !== undefined) {
     for (const compareUrl of state.compareUrls) {
       setOptionalString(params, 'compare', compareUrl, 'append')
+    }
+  }
+
+  if (state.compareLinks !== undefined) {
+    for (const compareLink of state.compareLinks) {
+      params.append(
+        'compareLink',
+        compareLink === null ? '' : formatPanelLink(compareLink),
+      )
+    }
+  }
+
+  if (state.compareImages !== undefined) {
+    for (const compareImage of state.compareImages) {
+      params.append(
+        'compareImage',
+        compareImage === 'cells' ? '1' : compareImage === 'only' ? 'only' : '',
+      )
+    }
+  }
+
+  if (state.compareChannels !== undefined) {
+    for (const channels of state.compareChannels) {
+      params.append(
+        'compareChannels',
+        channels === null
+          ? ''
+          : channels.length === 0
+            ? '-'
+            : channels.map(escapeCsvEntry).join(','),
+      )
     }
   }
 
@@ -967,6 +1033,43 @@ function setOptionalString(
 
     params.set(name, value.trim())
   }
+}
+
+function parsePanelLink(value: string): ShareablePanelLink | null {
+  const [flag, ...rest] = value.split(',')
+
+  if (flag !== '0' && flag !== '1') return null
+
+  const linked = flag === '1'
+  if (rest.length === 0) return { linked }
+
+  const numbers = parseNumberList(rest.join(','), 3)
+
+  return numbers === null
+    ? null
+    : { linked, values: [numbers[0] ?? 0, numbers[1] ?? 0, numbers[2] ?? 0] }
+}
+
+function parsePanelImage(value: string): ShareablePanelImage {
+  const trimmed = value.trim()
+
+  return trimmed === '1' ? 'cells' : trimmed === 'only' ? 'only' : null
+}
+
+function parsePanelChannels(value: string): readonly string[] | null {
+  const trimmed = value.trim()
+
+  if (trimmed === '') return null
+  if (trimmed === '-') return []
+
+  return trimmed
+    .split(',')
+    .map((entry) => unescapeCsvEntry(entry.trim()))
+    .filter((entry) => entry.length > 0)
+}
+
+function formatPanelLink(link: ShareablePanelLink): string {
+  return [link.linked ? '1' : '0', ...(link.values ?? []).map(formatHashNumber)].join(',')
 }
 
 function parseViewState(value: string | null): ShareableViewState | undefined {

@@ -43,6 +43,17 @@ export interface ImageSectionModel {
     patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
   ) => void
   readonly customLayers: CustomImageLayersModel
+  // Shows the image again in a panel beside the main view (plan 30-D8);
+  // null without an image, or in the 3D view.
+  readonly beside: ImageBesideModel | null
+}
+
+export interface ImageBesideModel {
+  // Panels of this image already shown.
+  readonly shown: number
+  // No room for another panel.
+  readonly full: boolean
+  readonly onShow: () => void
 }
 
 export interface ImageVolumeViewModel {
@@ -91,6 +102,7 @@ export interface ImageSectionModelInput {
   readonly volumeViewAvailable: boolean
   readonly volumeViewOpen: boolean
   readonly setVolumeViewOpen: (open: boolean) => void
+  readonly beside?: ImageBesideModel | null
 }
 
 // The Image section's View: one z plane at a time, or the 3D view.
@@ -128,8 +140,10 @@ export function useImageSectionModel({
   volumeViewAvailable,
   volumeViewOpen,
   setVolumeViewOpen,
+  beside = null,
 }: ImageSectionModelInput): ImageSectionModel {
   return {
+    beside: volumeViewOpen ? null : beside,
     opacity: imageLayerOpacity,
     onOpacityPercentChange: (nextPercent) => {
       setImageLayerOpacity(percentToOpacity(nextPercent))

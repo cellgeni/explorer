@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
-import { Segmented } from '../../components/ui'
+import { Button, Segmented, SideBySideIcon } from '../../components/ui'
 import { opacityToPercent } from '../../rendering/layerOpacity'
 import { MorphologyChannelControls } from '../morphology/MorphologyChannelControls'
 import { MorphologyTimePointControl } from '../morphology/MorphologyTimePointControl'
@@ -93,6 +93,33 @@ export function ImageVolumeViewControl({ image }: { readonly image: ImageSection
         }}
       />
     </div>
+  )
+}
+
+// The image again in a panel beside the main view, with channels of its own
+// (plan 30-D8).
+export function ImageBesideControl({ image }: { readonly image: ImageSectionModel }) {
+  const beside = image.beside
+
+  if (beside === null) {
+    return null
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      className="image-beside-control"
+      disabled={beside.full}
+      title={
+        beside.full
+          ? 'Up to three panels can be shown beside the main view; close one first'
+          : 'Show this image again in a panel beside the main view, linked to it, to show other channels there'
+      }
+      onClick={beside.onShow}
+    >
+      <SideBySideIcon />
+      {beside.shown > 0 ? 'Show beside again' : 'Show beside'}
+    </Button>
   )
 }
 

@@ -62,6 +62,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 27](docs/plan/phases/27-screenshot.md)                                             | Screenshot: the spatial view as a high-resolution PNG    | Done (2026-11-24)                                                          |
 | [Phase 28](docs/plan/phases/28-time-points.md)                                            | Time points: a `t` slider and Play for OME-Zarr images   | M1–M3 built (2026-11-25), PR 431; M4 not implemented                       |
 | [Phase 29](docs/plan/phases/29-python-terminal.md)                                        | Python terminal: filter and colour cells with Pyodide    | M0–M2 built (2026-11-26): M1 PRs #450–#455, M2 PR #456; H (docs, E2E) next |
+| [Phase 30](docs/plan/phases/30-compare-panels.md)                                         | Compare panels: links and offsets, images, same image    | M1–M3 built 2026-11-27: links and offsets, panel images, same image        |
 
 **Done** means a phase's tasks shipped. Most phase files also keep a Known
 Gaps list whose items stay open; [Open Items](docs/plan/open-items.md)

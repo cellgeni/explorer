@@ -2256,6 +2256,20 @@ test("has no accessibility violations in an image's channel controls @smoke", as
     await collectAxeFindings(page, `image channel controls, ${width} px`, findings)
   }
 
+  // The image again in a panel beside the main view, with its own channels
+  // in a popover (plan 30-D8).
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/#dataset=${encodeURIComponent(slide)}`)
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Image · 1 channel' }),
+  ).toBeVisible({ timeout: H5AD_LOAD_TIMEOUT_MS })
+  const image = await openControls(page, 'image')
+  await image.getByRole('button', { name: 'Show beside' }).click()
+  const panel = page.getByRole('region', { name: /, beside$/ })
+  await panel.getByRole('button', { name: /^Channels of / }).click()
+  await expect(panel.getByRole('dialog', { name: /^Image of / })).toBeVisible()
+  await collectAxeFindings(page, 'image beside, channels popover', findings)
+
   expectAxeFindingsMatchBaseline(findings)
 })
 
@@ -2302,8 +2316,14 @@ test('draws an image channel in the colour picked for it @smoke', async ({
 
 // The mean red, green and blue over the middle of the image canvas.
 async function meanImageColour(page: Page): Promise<readonly number[]> {
-  return page.evaluate(() => {
-    const canvas = document.querySelector<HTMLCanvasElement>('canvas.morphology-canvas')
+  return meanCanvasColour(page.locator('canvas.morphology-canvas'))
+}
+
+// The mean red, green and blue over the middle of the first of `canvases`,
+// or none before it is drawn.
+async function meanCanvasColour(canvases: Locator): Promise<readonly number[]> {
+  return canvases.evaluateAll((elements) => {
+    const canvas = elements[0] instanceof HTMLCanvasElement ? elements[0] : null
     const context = canvas?.getContext('2d')
     if (canvas === null || context === null || context === undefined) return []
     const width = Math.floor(canvas.width * 0.4)
@@ -2323,6 +2343,235 @@ async function meanImageColour(page: Page): Promise<readonly number[]> {
     return sums.map((sum) => sum / (width * height))
   })
 }
+
+// A 2D OME-Zarr (Zarr v2, one level) of 64 × 64 pixels at 0.5 µm under
+// `prefix`, each channel a bright ramp, named and coloured in `omero`.
+function omeZarr2dFiles(
+  prefix: string,
+  channels: readonly { readonly label: string; readonly color: string }[],
+): Record<string, Buffer> {
+  const json = (value: unknown) => Buffer.from(JSON.stringify(value))
+  const size = 64
+  const files: Record<string, Buffer> = {
+    [`${prefix}/.zgroup`]: json({ zarr_format: 2 }),
+    [`${prefix}/.zattrs`]: json({
+      multiscales: [
+        {
+          version: '0.4',
+          axes: [
+            { name: 'c', type: 'channel' },
+            { name: 'y', type: 'space', unit: 'micrometer' },
+            { name: 'x', type: 'space', unit: 'micrometer' },
+          ],
+          datasets: [
+            {
+              path: '0',
+              coordinateTransformations: [{ type: 'scale', scale: [1, 0.5, 0.5] }],
+            },
+          ],
+        },
+      ],
+      omero: {
+        channels: channels.map(({ label, color }) => ({
+          label,
+          color,
+          active: true,
+          window: { start: 0, end: 255, min: 0, max: 255 },
+        })),
+      },
+    }),
+    [`${prefix}/0/.zarray`]: json({
+      zarr_format: 2,
+      shape: [channels.length, size, size],
+      chunks: [1, size, size],
+      dtype: '|u1',
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+    }),
+  }
+  channels.forEach((_channel, index) => {
+    files[`${prefix}/0/${index}/0/0`] = Buffer.from(
+      Uint8Array.from({ length: size * size }, (_v, i) => 128 + (i % 128)),
+    )
+  })
+  return files
+}
+
+// A value of the link's hash, as the app last wrote it.
+function linkValue(page: Page, key: string): string | null {
+  return new URLSearchParams(new URL(page.url()).hash.slice(1)).get(key)
+}
+
+// Drags from the middle of `target` by `dx` pixels, as a pan.
+async function dragBy(page: Page, target: Locator, dx: number): Promise<void> {
+  const box = await target.boundingBox()
+  expect(box).not.toBeNull()
+  if (box === null) return
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + dx, y, { steps: 10 })
+  await page.mouse.up()
+}
+
+test('shows an OME-Zarr image beside itself, with channels and a link of its own @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await routeRangeFiles(
+    page,
+    '/beside-smoke',
+    omeZarr2dFiles('a.ome.zarr', [
+      { label: 'nuclei', color: 'FF0000' },
+      { label: 'membrane', color: '00FF00' },
+    ]),
+  )
+  const image = new URL('/beside-smoke/a.ome.zarr', baseURL).toString()
+  await page.goto(`/#dataset=${encodeURIComponent(image)}`)
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Image · 2 channels' }),
+  ).toBeVisible({ timeout: H5AD_LOAD_TIMEOUT_MS })
+  const main = page.locator('.viewer-main-tile')
+  const mainCanvas = main.locator('canvas.morphology-canvas')
+  await expect
+    .poll(async () => {
+      const [red = 0, green = 0] = await meanCanvasColour(mainCanvas)
+      return red > 20 && green > 20
+    })
+    .toBe(true)
+
+  // The same image beside the main view, linked, with both channels on as
+  // in the main view (plan 30-D8).
+  const section = await openControls(page, 'image')
+  await section.getByRole('button', { name: 'Show beside' }).click()
+  const panel = page.getByRole('region', { name: /, beside$/ })
+  const panelCanvas = panel.locator('canvas.morphology-canvas')
+  const linkToggle = panel.getByRole('button', { name: /^Link .* to the main view$/ })
+  await expect(linkToggle).toHaveAttribute('aria-pressed', 'true')
+  await expect
+    .poll(async () => {
+      const [red = 0, green = 0] = await meanCanvasColour(panelCanvas)
+      return red > 20 && green > 20
+    })
+    .toBe(true)
+
+  // The panel's channels are its own: membrane off there only (D5).
+  await panel.getByRole('button', { name: /^Channels of / }).click()
+  const popover = panel.getByRole('dialog', { name: /^Image of / })
+  await popover.getByRole('checkbox', { name: 'membrane' }).uncheck()
+  await page.keyboard.press('Escape')
+  await expect(popover).toBeHidden()
+  await expect
+    .poll(async () => {
+      const [red = 0, green = -1] = await meanCanvasColour(panelCanvas)
+      return red > 20 && green === 0
+    })
+    .toBe(true)
+  const [, mainGreen = 0] = await meanCanvasColour(mainCanvas)
+  expect(mainGreen).toBeGreaterThan(20)
+  await expect.poll(() => linkValue(page, 'compareChannels')).toBe('Channel:0')
+  await expect.poll(() => linkValue(page, 'view')).not.toBeNull()
+
+  // Unlinked, panning the panel leaves the main view where it is, and the
+  // link keeps the panel's own view (D2, D6).
+  await linkToggle.click()
+  await expect(linkToggle).toHaveAttribute('aria-pressed', 'false')
+  const mainView = linkValue(page, 'view')
+  await dragBy(page, panelCanvas, 120)
+  await expect.poll(() => linkValue(page, 'compareLink')).toMatch(/^0,/)
+  expect(linkValue(page, 'view')).toBe(mainView)
+
+  // Linked again where it is: an offset, which panning the panel keeps as
+  // it moves the main view; Reset drops it.
+  await linkToggle.click()
+  await expect(linkToggle).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => linkValue(page, 'compareLink')).toMatch(/^1,-?[\d.]+,/)
+  const offset = linkValue(page, 'compareLink')
+  const reset = panel.getByRole('button', { name: /^Reset the offset of / })
+  await expect(reset).toBeEnabled()
+  await dragBy(page, panelCanvas, -80)
+  await expect.poll(() => linkValue(page, 'view')).not.toBe(mainView)
+  expect(linkValue(page, 'compareLink')).toBe(offset)
+  await reset.click()
+  await expect(reset).toBeDisabled()
+  await expect.poll(() => linkValue(page, 'compareLink')).toBeNull()
+})
+
+test('shows a collection section’s image beside the open one without opening it @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await routeRangeFiles(page, '/beside-collection', {
+    ...omeZarr2dFiles('a.ome.zarr', [
+      { label: 'nuclei', color: 'FF0000' },
+      { label: 'membrane', color: '00FF00' },
+    ]),
+    ...omeZarr2dFiles('b.ome.zarr', [{ label: 'dapi', color: '0000FF' }]),
+    // Two slides, not registered: no coordinateSystem.
+    'collection.json': Buffer.from(
+      JSON.stringify({
+        version: 1,
+        name: 'Beside smoke',
+        datasets: [
+          { dataset: 'a.ome.zarr', name: 'A' },
+          { dataset: 'b.ome.zarr', name: 'B' },
+        ],
+      }),
+    ),
+  })
+  const folder = new URL('/beside-collection/', baseURL).toString()
+  const link = new URLSearchParams({
+    collection: `${folder}collection.json`,
+    dataset: `${folder}a.ome.zarr`,
+  })
+  await page.goto(`/#${link.toString()}`)
+  const bar = page.getByRole('navigation', { name: 'Collection' })
+  await expect(bar.getByRole('button', { name: 'A', exact: true })).toHaveAttribute(
+    'aria-current',
+    'true',
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+
+  // B has no cells, so its panel reads its image at once, unlinked as it
+  // is not registered to A (plan 30-D1, D4).
+  await bar.getByRole('button', { name: 'Show B beside' }).click()
+  const panel = page.getByRole('region', { name: 'B', exact: true })
+  await expect(
+    panel.getByRole('button', { name: 'Link B to the main view' }),
+  ).toHaveAttribute('aria-pressed', 'false')
+  await expect
+    .poll(async () => {
+      const [red = -1, green = -1, blue = 0] = await meanCanvasColour(
+        panel.locator('canvas.morphology-canvas'),
+      )
+      return blue > 20 && red === 0 && green === 0
+    })
+    .toBe(true)
+
+  // A stays the open dataset, its image in its own channels.
+  await expect(bar.getByRole('button', { name: 'A', exact: true })).toHaveAttribute(
+    'aria-current',
+    'true',
+  )
+  const [red = 0, green = 0, blue = -1] = await meanCanvasColour(
+    page.locator('.viewer-main-tile canvas.morphology-canvas'),
+  )
+  expect({ red: red > 20, green: green > 20, blue }).toEqual({
+    red: true,
+    green: true,
+    blue: 0,
+  })
+  expect(linkValue(page, 'dataset')).toBe(`${folder}a.ome.zarr`)
+  await expect.poll(() => linkValue(page, 'compare')).toBe(`${folder}b.ome.zarr`)
+})
 
 test('draws an imported label mask and WKT outlines over an image @smoke', async ({
   page,

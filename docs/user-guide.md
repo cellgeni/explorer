@@ -250,13 +250,18 @@ same gene or cell type. `Share` copies a link with the collection and
 the open dataset. Close the bar with its ×, or by opening a dataset that is
 not in the collection.
 
-When a collection marks consecutive sections as registered to each other
-(the same `coordinateSystem`), each of them shows a `Show beside` toggle (two
-columns) on its preview. Turn it on for up to three sections to see them
-beside the open one, with one view: pan or zoom any of them and all follow.
-The panels show cells only, coloured like the main view; choose `Open` in a
-panel to swap that section into the main view, with its image and tools, at
-the same place. A link from `Share` opens with the same sections beside the
+Every other dataset of the collection shows a `Show beside` toggle (two
+columns) on its preview. Turn it on for up to three datasets to see them
+beside the open one. Sections registered to each other (the same
+`coordinateSystem`) open linked, with one view: pan or zoom any of them and
+all follow. Others open unlinked, each fitted to its own cells. The chain
+button in a panel's header links or unlinks it; linking keeps it where it
+is, at an offset, so sections lined up by hand then move together, and the
+target button resets the offset. The panels show cells coloured like the
+main view; the image button in a panel's header loads that section's image
+under them, and the channels button beside it chooses that panel's channels,
+colours and windows. Choose `Open` in a panel to swap that section into the
+main view, with its tools. A link from `Share` opens with the same sections beside the
 dataset. See [Side by Side](./dataset-collections.md#side-by-side).
 
 When the collection also gives each of those sections its depth (`z`), the
@@ -741,6 +746,13 @@ full resolution is shown. See
 For an SVS slide, the info drawer's Slide images section shows the slide's
 label, its macro (a photograph of the whole glass slide), and its thumbnail;
 `Open` beside each opens it on its own in a new tab.
+
+To compare channels of one image side by side, choose `Show beside` in the
+Image section: the image opens again in a panel beside the main view, linked
+to it, and its channels button chooses that panel's channels, colours and
+windows, while the main view keeps its own. Up to three panels can show at
+once, and `Share` keeps them. This works for any dataset with an image, with
+or without a collection.
 
 For image-only sources, use the Image section for image channels and custom
 image layers, the Box and Lasso selection tools (with the New shape card) for
