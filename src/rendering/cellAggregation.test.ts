@@ -40,6 +40,32 @@ const cells: readonly OverviewCellDatum[] = [
 ]
 
 describe('overview cell aggregation', () => {
+  it("works out a cell array's extent once, and a new array's again", () => {
+    const cell = (x: number, y: number): OverviewCellDatum => ({
+      id: `cell-${x}-${y}`,
+      position: [x, -y, 0],
+      radiusPixels: 3,
+      fillColor: [215, 63, 124, 180],
+    })
+    const cells = [cell(1, 2), cell(5, -3)]
+    const extent = overviewCellsExtentBbox(cells)
+
+    expect(extent).toEqual({
+      minX: micrometers(1),
+      maxX: micrometers(5),
+      minY: micrometers(-3),
+      maxY: micrometers(2),
+    })
+    expect(overviewCellsExtentBbox(cells)).toBe(extent)
+    expect(overviewCellsExtentBbox([...cells, cell(9, 9)])).toEqual({
+      minX: micrometers(1),
+      maxX: micrometers(9),
+      minY: micrometers(-3),
+      maxY: micrometers(9),
+    })
+    expect(overviewCellsExtentBbox([])).toBeNull()
+  })
+
   it('bins nearby cells at overview zooms', () => {
     const aggregatedCells = aggregateOverviewCells(cells, viewState)
 

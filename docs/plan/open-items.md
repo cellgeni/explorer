@@ -84,21 +84,6 @@ Found by the [15.5-E](phases/15-interface-redesign.md#155-close-out) re-run (202
       raises a toast clear of the legend and the minimap only. Found
       2026-11-12. Partly done: under 860 px toasts rise above a docked card's
       sheet (#408, 2026-11-24).
-- [ ] The Xenium demo blocks the main thread for up to 4 s at a time in the
-      first 30 s after load; see the main-thread exceptions above. 15.5-E put
-      this on the viewport warm-up ("Preparing cell feature matrix"). CPU
-      profiles over CDP on 2026-11-12 (headless Chromium with GPU, fresh and
-      warm profiles; stalls of up to 1.8 s here) put it on the load instead:
-      hyparquet decoding `cells.parquet` for the overview (0.4–0.6 s; in a
-      worker since 2026-11-13), the first render with the overview layer
-      build (2.3–3.0 s), and the first JPEG 2000 morphology decode
-      (0.6–0.7 s; auto-contrast's, in workers since 2026-11-13). The
-      warm-up's cell query runs in DuckDB's worker. The H5 download (above)
-      was not part of these: its 1.3–1.7 s block came when the download
-      ended, 63–70 s after load, and would land in the first 30 s only above
-      about 20 MB/s. That block is gone with the fix. Of the three, only the
-      first render with the overview layer build is still on the main
-      thread; the stalls have not been measured again since.
 
 Decided after the
 [code review](phases/feature-fix-pass.md#code-review-2026-11-19-to-2026-11-24)

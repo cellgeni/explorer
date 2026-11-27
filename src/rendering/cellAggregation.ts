@@ -95,6 +95,12 @@ export function overviewCellsInBbox(
   return visibleCells
 }
 
+// The extent of each cell array read, kept while the array is: the viewer
+// and the layer data both ask for it, and on 1.4M cells each pass took
+// 12–21 ms of the load (O5 in the optimization pass). Cell arrays are not
+// changed once made.
+const extentByCells = new WeakMap<readonly OverviewCellDatum[], BBox | null>()
+
 export function overviewCellsExtentBbox(
   cells: readonly OverviewCellDatum[],
 ): BBox | null {
@@ -102,6 +108,16 @@ export function overviewCellsExtentBbox(
     return null
   }
 
+  if (extentByCells.has(cells)) {
+    return extentByCells.get(cells) ?? null
+  }
+
+  const extent = cellsExtent(cells)
+  extentByCells.set(cells, extent)
+  return extent
+}
+
+function cellsExtent(cells: readonly OverviewCellDatum[]): BBox {
   let minX = Number.POSITIVE_INFINITY
   let maxX = Number.NEGATIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY

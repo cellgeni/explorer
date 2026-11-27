@@ -1,4 +1,4 @@
-import type { GetPickingInfoParams, PickingInfo } from '@deck.gl/core'
+import type { Color, GetPickingInfoParams, PickingInfo } from '@deck.gl/core'
 import { DataFilterExtension } from '@deck.gl/extensions'
 import type { DataFilterExtensionProps } from '@deck.gl/extensions'
 import { ScatterplotLayer } from '@deck.gl/layers'
@@ -233,6 +233,28 @@ export function geneExpressionRadiusMaxPixels(
 const FALLBACK_CELL_RADIUS_MIN_MICROMETERS = 5
 const FALLBACK_CELL_RADIUS_RANGE_MICROMETERS = 5
 
+// The overview fill colour for each alpha, 150 to 240, shared by the cells
+// that have it, so no reader may change one. A colour per cell was a million
+// arrays on a million-cell dataset. They are not frozen: a frozen array is
+// another kind of array to V8, and reading both kinds in packCellPointColors
+// took 52–67 ms against 12–34 ms. A cell without a transcript count (alpha
+// NaN) gets a colour of its own, as before.
+const OVERVIEW_CELL_FILL_COLORS: readonly Color[] = Array.from(
+  { length: 91 },
+  (_, step): Color => [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 150 + step],
+)
+
+function overviewCellFillColor(alpha: number): Color {
+  return (
+    OVERVIEW_CELL_FILL_COLORS[alpha - 150] ??
+    ([...DEFAULT_OVERVIEW_CELL_FILL_RGB, alpha] as Color)
+  )
+}
+
+// Each cell's optional fields are set only when it has them, as assignments:
+// spreading `{}` or `{ field }` into the literal made up to six objects a
+// cell, which on 1.4M cells took about 0.2 s of the load and more in garbage
+// collection (O5 in the optimization pass).
 export function overviewCellsToLayerData(
   cells: readonly CellOverviewPoint[],
 ): readonly OverviewCellDatum[] {
@@ -249,27 +271,31 @@ export function overviewCellsToLayerData(
   return cells.map((cell, index) => {
     const intensity = Math.sqrt(Math.max(cell.transcriptCount, 0) / maxTranscriptCount)
     const radiusMicrometers = cellAreaToRadiusMicrometers(cell.cellArea)
-
-    return {
+    const datum: Mutable<OverviewCellDatum> = {
       id: cell.cellId ?? `overview-cell-${index}`,
       position: [cell.position.x, -cell.position.y, 0],
-      ...(cell.z === undefined ? {} : { z: cell.z }),
       radiusPixels:
         FALLBACK_CELL_RADIUS_MIN_MICROMETERS +
         intensity * FALLBACK_CELL_RADIUS_RANGE_MICROMETERS,
-      ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
-      fillColor: [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 150 + Math.round(intensity * 90)],
+      fillColor: overviewCellFillColor(150 + Math.round(intensity * 90)),
       transcriptCount: cell.transcriptCount,
-      ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
-      ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
-      ...(cell.segmentationMethod === undefined
-        ? {}
-        : { segmentationMethod: cell.segmentationMethod }),
-      ...(cell.metadata === undefined ? {} : { metadata: cell.metadata }),
-      ...(cell.readMetadata === undefined ? {} : { readMetadata: cell.readMetadata }),
     }
+
+    if (cell.z !== undefined) datum.z = cell.z
+    if (radiusMicrometers !== undefined) datum.radiusMicrometers = radiusMicrometers
+    if (cell.cellArea !== undefined) datum.cellArea = cell.cellArea
+    if (cell.nucleusCount !== undefined) datum.nucleusCount = cell.nucleusCount
+    if (cell.segmentationMethod !== undefined) {
+      datum.segmentationMethod = cell.segmentationMethod
+    }
+    if (cell.metadata !== undefined) datum.metadata = cell.metadata
+    if (cell.readMetadata !== undefined) datum.readMetadata = cell.readMetadata
+
+    return datum
   })
 }
+
+type Mutable<T> = { -readonly [Key in keyof T]: T[Key] }
 
 export function cellsWithoutVisibleBoundaryIds(
   cells: readonly OverviewCellDatum[],
