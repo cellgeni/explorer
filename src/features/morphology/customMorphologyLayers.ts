@@ -1,4 +1,5 @@
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
+import type { ShareableState } from '../../data/shareableState'
 
 const RGB_CHANNELS = [
   { name: 'Red', color: [255, 0, 0] },
@@ -36,6 +37,40 @@ export function customMorphologyLayerLoadFailed<ErrorType>(
   error: ErrorType,
 ): CustomMorphologyLayerLoadState<ErrorType> {
   return { status: 'error', url, error }
+}
+
+export interface CustomImageToOpen {
+  readonly url: string
+  readonly opacity?: number
+}
+
+// The custom image layers a load opens once its dataset is ready, set when
+// the load commits.
+export interface CustomImagesToOpen {
+  readonly datasetUrl: string
+  readonly images: readonly CustomImageToOpen[]
+}
+
+// A link's custom image layers for its dataset, else the manifest's
+// (`defaults.customImages`). A link that lists layers replaces the
+// manifest's, opacities too; one that lists none, because they are the
+// manifest's, may still set their opacities.
+export function customImagesToOpen(
+  manifestDefaults: ShareableState,
+  shared: ShareableState | null,
+): readonly CustomImageToOpen[] {
+  const linkLists = shared?.customImageUrls !== undefined
+  const urls =
+    (linkLists ? shared.customImageUrls : manifestDefaults.customImageUrls) ?? []
+  const opacities =
+    shared?.customImageOpacities ??
+    (linkLists ? undefined : manifestDefaults.customImageOpacities) ??
+    []
+
+  return urls.map((url, index) => {
+    const opacity = opacities[index]
+    return opacity === undefined ? { url } : { url, opacity }
+  })
 }
 
 export function createCustomMorphologyLayer(

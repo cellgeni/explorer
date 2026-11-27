@@ -412,23 +412,24 @@ Other platforms take no options.
 
 Display settings applied each time the dataset loads.
 
-| Key                   | Control                 | Value                                                                         |
-| --------------------- | ----------------------- | ----------------------------------------------------------------------------- |
-| `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case                 |
-| `colorCellsBy`        | `Cell color`            | `gene-expression`, `transcript-count`, `cell-area`, `annotations`, `metadata` |
-| `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey`    |
-| `geneRange`           | `Gene scale` range      | `[min, max]`, such as `[0, 40]`; `null` is Auto; max may be `"p95"`           |
-| `geneScoreMode`       | `Combine genes`         | `sum`, `mean`, `z-score`                                                      |
-| `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                              |
-| `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                              |
-| `channels`            | Image channel toggles   | Channel names (case-insensitive) or IDs to turn on                            |
-| `imageOpacity`        | `Dataset image opacity` | 0–1                                                                           |
-| `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                           |
-| `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                           |
-| `cellPointScale`      | `Cell point size`       | Multiplier above 0, snapped to the slider's steps (0.5–32)                    |
-| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                              |
-| `imageView`           | Image `View`            | `2d` / `3d`: `3d` opens an OME-Zarr z-stack in the 3D view                    |
-| `cellView`            | Cells `View`            | `2d` / `3d`: `3d` opens cells placed in 3D in the 3D view                     |
+| Key                   | Control                 | Value                                                                                |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case                        |
+| `colorCellsBy`        | `Cell color`            | `gene-expression`, `transcript-count`, `cell-area`, `annotations`, `metadata`        |
+| `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey`           |
+| `geneRange`           | `Gene scale` range      | `[min, max]`, such as `[0, 40]`; `null` is Auto; max may be `"p95"`                  |
+| `geneScoreMode`       | `Combine genes`         | `sum`, `mean`, `z-score`                                                             |
+| `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                                     |
+| `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                                     |
+| `channels`            | Image channel toggles   | Channel names (case-insensitive) or IDs to turn on                                   |
+| `imageOpacity`        | `Dataset image opacity` | 0–1                                                                                  |
+| `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                                  |
+| `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                                  |
+| `cellPointScale`      | `Cell point size`       | Multiplier above 0, snapped to the slider's steps (0.5–32)                           |
+| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                                     |
+| `imageView`           | Image `View`            | `2d` / `3d`: `3d` opens an OME-Zarr z-stack in the 3D view                           |
+| `cellView`            | Cells `View`            | `2d` / `3d`: `3d` opens cells placed in 3D in the 3D view                            |
+| `customImages`        | Custom image layers     | `[{ "url": path, "opacity": 0–1 }]`; see [Custom Image Layers](#custom-image-layers) |
 
 How defaults combine with other settings:
 
@@ -467,6 +468,48 @@ How defaults combine with other settings:
   `colorCellsBy` set to another mode, the genes are selected (for transcripts,
   or to switch to later) but cells use that mode. A share link that picks
   another `Cell color` keeps it.
+
+### Custom Image Layers
+
+`customImages` opens more images over the dataset's own, for any platform,
+as the Image section's `Custom image URL` does: a Xenium run's focus image
+with a post-Xenium H&E, for example.
+
+```json
+{
+  "version": 1,
+  "platform": "xenium",
+  "defaults": {
+    "customImages": [
+      { "url": "post-xenium/he_registered.ome.tif" },
+      { "url": "https://cdn.example.org/run-7/if_panel.ome.tif", "opacity": 0.6 }
+    ]
+  }
+}
+```
+
+- Each `url` is an OME-TIFF, TIFF, QPTIFF, SVS or OME-Zarr image, resolved
+  like a file path, and named once. `opacity` is the layer's opacity slider,
+  1 when left out.
+- The layers open one at a time, in order, once the dataset is ready. One
+  that fails is skipped and the rest still open; the Image section shows the
+  error only until the next layer starts.
+- Each image is placed by its own pixel size, from the dataset's origin, and
+  is not moved, scaled or rotated. A post-Xenium H&E must be registered to
+  the morphology image first: resampled to its frame and saved with its pixel
+  size (0.2125 µm for Xenium). The alignment CSV Xenium Explorer writes is
+  not read.
+- A link that lists custom image layers (`customImageUrl=`) opens those in
+  place of the manifest's, at the link's opacities. The app's links leave the
+  manifest's layers out while they are what is shown, list the layers when
+  the user adds or removes one, and write `customImageUrl=` alone when none
+  are left, so the manifest's do not return. A link that leaves the layers
+  out may still set their opacities (`customImageOpacity=`).
+- A collection entry that names the manifest opens its layers too, unless
+  the entry lists its own
+  ([`customImages`](./dataset-collections.md#custom-image-layers)), which
+  replace them. A section shown beside the main view shows only its own
+  image.
 
 ## Errors And Diagnostics
 

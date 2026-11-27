@@ -10,12 +10,14 @@ import {
   optionalPath,
   optionalString,
   parentUrl,
+  parseCustomImages,
   parseDefaults,
   parseImageAttachment,
   parseSource,
   resolveManifestPath,
   trimTrailingSlashes,
   type DatasetImageAttachment,
+  type DatasetManifestCustomImage,
   type DatasetManifestDefaults,
   type DatasetManifestSource,
   type Fail,
@@ -47,6 +49,7 @@ export const DATASET_COLLECTION_ENTRY_KEYS = [
   'labelColumn',
   'coordinateSystem',
   'z',
+  'customImages',
 ] as const
 
 // The dataset manifest defaults that make sense across datasets. Layer
@@ -80,6 +83,9 @@ export interface DatasetCollectionEntry {
   readonly name?: string
   readonly group?: string
   readonly image?: DatasetImageAttachment
+  // Custom image layers opened with the dataset, in place of those its
+  // manifest lists.
+  readonly customImages?: readonly DatasetManifestCustomImage[]
   // A name the collection gives to registered coordinates: entries with the
   // same one put a point at the same place in each, so they can be shown
   // side by side with one view.
@@ -159,7 +165,7 @@ export function parseDatasetCollection(
     }
 
     checkKeys(json.defaults, DATASET_COLLECTION_DEFAULT_KEYS, 'defaults.', fail)
-    defaults = parseDefaults(json.defaults, fail)
+    defaults = parseDefaults(json.defaults, rootUrl, fail)
   }
 
   return {
@@ -216,6 +222,10 @@ function parseEntries(
     const name = optionalString(entry, 'name', prefix, fail)
     const group = optionalString(entry, 'group', prefix, fail)
     const image = parseEntryImage(entry, rootUrl, prefix, fail)
+    const customImages =
+      entry.customImages === undefined
+        ? undefined
+        : parseCustomImages(entry.customImages, `${prefix}customImages`, rootUrl, fail)
     const coordinateSystem = optionalString(entry, 'coordinateSystem', prefix, fail)
     const z = optionalFiniteNumber(entry, 'z', prefix, fail)
 
@@ -231,6 +241,7 @@ function parseEntries(
       ...(name === undefined ? {} : { name }),
       ...(group === undefined ? {} : { group }),
       ...(image === undefined ? {} : { image }),
+      ...(customImages === undefined ? {} : { customImages }),
       ...(coordinateSystem === undefined ? {} : { coordinateSystem }),
       ...(z === undefined ? {} : { z }),
     }

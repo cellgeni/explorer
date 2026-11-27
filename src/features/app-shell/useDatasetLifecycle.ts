@@ -20,7 +20,11 @@ import {
   NO_ANNOTATION_GROUP_ID,
 } from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
-import { collectionImageFor, datasetImageFor } from '../../data/datasetFiles'
+import {
+  collectionCustomImagesFor,
+  collectionImageFor,
+  datasetImageFor,
+} from '../../data/datasetFiles'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import {
   morphologyImageFromPyramidLoader,
@@ -116,7 +120,11 @@ import type {
   CustomMorphologyLayer,
   CustomMorphologyLayerLoadState,
 } from '../morphology/customMorphologyLayers'
-import { IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE } from '../morphology/customMorphologyLayers'
+import {
+  IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE,
+  customImagesToOpen,
+  type CustomImagesToOpen,
+} from '../morphology/customMorphologyLayers'
 import { IDLE_MAGIC_LENS_STATE, type MagicLensState } from '../roi/magicLensModel'
 import {
   IDLE_ROI_GENE_STATS_STATE,
@@ -466,6 +474,9 @@ interface UseDatasetLifecycleSetters {
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   // The manifest's defaults, which the dataset's links leave out.
   readonly setDatasetManifestDefaults?: Setter<ShareableState>
+  // The custom image layers the dataset opens with: a link's, else its
+  // manifest's.
+  readonly setCustomImagesToOpen?: Setter<CustomImagesToOpen | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
@@ -669,6 +680,7 @@ export function useDatasetLifecycle({
     setShowTranscriptOverlay,
     setDatasetAbout,
     setDatasetManifestDefaults,
+    setCustomImagesToOpen,
     setAutoContrastChannelIds,
     setBoundaryElements,
     setNucleusBoundaryElements,
@@ -1206,6 +1218,7 @@ export function useDatasetLifecycle({
           setDatasetPlatform(null)
           setDatasetAbout?.(null)
           setDatasetManifestDefaults?.({})
+          setCustomImagesToOpen?.(null)
           setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
           setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
           setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
@@ -1392,9 +1405,16 @@ export function useDatasetLifecycle({
         }
 
         // Dataset manifest defaults sit under a shared link for this dataset:
-        // fields the link sets win, the rest come from the manifest.
+        // fields the link sets win, the rest come from the manifest. Custom
+        // image layers a collection lists for the dataset replace the
+        // manifest's.
         const manifest = detection.platform === 'unknown' ? undefined : detection.manifest
-        const manifestDefaults = manifestDefaultsToShareableState(manifest?.defaults)
+        const collectionCustomImages = collectionCustomImagesFor(detection.baseUrl)
+        const manifestDefaults = manifestDefaultsToShareableState(
+          collectionCustomImages === undefined
+            ? manifest?.defaults
+            : { ...manifest?.defaults, customImages: collectionCustomImages },
+        )
         whenCommitted(() => {
           setDatasetAbout?.(datasetManifestAbout(manifest))
           setDatasetManifestDefaults?.(manifestDefaults.state)
@@ -1402,6 +1422,16 @@ export function useDatasetLifecycle({
         const restoreState: ShareableState = {
           ...manifestDefaults.state,
           ...(shouldRestoreSharedState ? sharedState : {}),
+        }
+        const customImages = customImagesToOpen(
+          manifestDefaults.state,
+          shouldRestoreSharedState ? sharedState : null,
+        )
+
+        if (customImages.length > 0) {
+          whenCommitted(() => {
+            setCustomImagesToOpen?.({ datasetUrl: requestedUrl, images: customImages })
+          })
         }
         const restoredPlane = {
           ...(restoreState.morphologyZPlane === undefined

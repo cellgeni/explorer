@@ -102,6 +102,22 @@
         "z": {
           "type": "number",
           "description": "The section's depth in its coordinate system, in the same units as its cells (micrometres), such as its distance from the first section cut. Sections of a coordinate system with a `z` can be stacked in 3D. Give every section of a coordinate system a `z`, or none. Needs `coordinateSystem`."
+        },
+        "customImages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "$ref": "#/$defs/path",
+                "description": "OME-TIFF, TIFF, QPTIFF, SVS or OME-Zarr image, resolved like `dataset`. Each named only once."
+              },
+              "opacity": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "required": ["url"],
+            "additionalProperties": false
+          },
+          "description": "Images opened as custom image layers over the dataset's own image, in order, for any platform, in place of those the dataset's manifest lists (an empty list opens none). Each is placed by its own pixel size from the dataset's origin, so it must already be registered to the dataset. A link that lists custom image layers opens those instead."
         }
       },
       "dependentRequired": {

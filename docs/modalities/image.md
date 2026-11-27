@@ -731,6 +731,12 @@ fails, tiles are decoded and sampled on the main thread.
   white channel.
 - Layers are saved in the share URL as repeated `customImageUrl` and
   `customImageOpacity` parameters.
+- A dataset manifest's `defaults.customImages`, or a collection entry's
+  `customImages`, opens layers with the dataset (`useCustomImagesToOpen`), as
+  a link's list does; see
+  [Custom Image Layers](../dataset-manifest.md#custom-image-layers). They
+  open one at a time, after the dataset is ready, and the share link lists
+  those still opening too.
 
 ## Constants
 

@@ -296,8 +296,12 @@ import {
 import { useTimePointPlayback } from './features/morphology/useTimePointPlayback'
 import { MorphologyVolumeView } from './features/morphology/MorphologyVolumeView'
 import { morphologyVolumeLevels } from './features/morphology/useMorphologyVolumeWorkflow'
-import { customMorphologyLayerChannels } from './features/morphology/customMorphologyLayers'
+import {
+  customMorphologyLayerChannels,
+  type CustomImagesToOpen,
+} from './features/morphology/customMorphologyLayers'
 import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
+import { useCustomImagesToOpen } from './features/morphology/useCustomImagesToOpen'
 import { magicLensScopeLabel, magicLensStatusCopy } from './features/roi/magicLensModel'
 import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLensSummary'
@@ -400,10 +404,7 @@ import {
 } from './rendering/deckLayers'
 import { annotationPaletteColor } from './rendering/annotationPalette'
 import { useViewerStore } from './store/viewerStore'
-import {
-  normalizeCustomMorphologyLayerUrl,
-  type MorphologyImage,
-} from './data/morphologyImage'
+import type { MorphologyImage } from './data/morphologyImage'
 import {
   micrometers,
   micrometersPerPixelY,
@@ -934,11 +935,10 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const didApplyInitialDatasetUrlRef = useRef(false)
   const startDatasetLoadRef = useRef<StartDatasetLoad | null>(null)
-  const initialCustomImageUrlsRef = useRef<readonly string[]>(
-    initialShareableState.customImageUrls ?? [],
-  )
-  const initialCustomImageOpacitiesRef = useRef<readonly number[]>(
-    initialShareableState.customImageOpacities ?? [],
+  // A link's custom image layers for its dataset, else the manifest's, set
+  // when the dataset's load commits.
+  const [customImagesToOpen, setCustomImagesToOpen] = useState<CustomImagesToOpen | null>(
+    null,
   )
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading =
@@ -1374,21 +1374,6 @@ export function App({ dependencies }: AppProps = {}) {
     ],
     [customMorphologyLayers, morphologyImage],
   )
-  const customImageUrls = useMemo(
-    () => customMorphologyLayers.map((layer) => layer.image.url),
-    [customMorphologyLayers],
-  )
-  const customImageOpacities = useMemo(() => {
-    if (customMorphologyLayers.length === 0) {
-      return undefined
-    }
-
-    const opacities = customMorphologyLayers.map((layer) =>
-      normalizeLayerOpacity(customImageLayerOpacities[layer.image.url] ?? 1),
-    )
-
-    return opacities.some((opacity) => opacity !== 1) ? opacities : undefined
-  }, [customImageLayerOpacities, customMorphologyLayers])
   // The Image section's checkbox hides the dataset image and custom layers.
   const renderedImageOpacity = layerVisibility.image ? imageLayerOpacity : 0
   const morphologyChannelOpacities = useMemo(() => {
@@ -4030,57 +4015,35 @@ export function App({ dependencies }: AppProps = {}) {
     [customMorphologyLayers, handleRemoveCustomLayer, setCustomImageLayerOpacities],
   )
 
-  useEffect(() => {
-    if (loadedDatasetUrl === null || initialCustomImageUrlsRef.current.length === 0) {
-      return
-    }
-
-    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
-
-    if (
-      initialDatasetUrl !== undefined &&
-      initialDatasetUrl !== '' &&
-      initialDatasetUrl !== loadedDatasetUrl
-    ) {
-      return
-    }
-
-    const customImageUrls = initialCustomImageUrlsRef.current
-    const customImageOpacities = initialCustomImageOpacitiesRef.current
-    initialCustomImageUrlsRef.current = []
-    initialCustomImageOpacitiesRef.current = []
-    const requestId = loadRequestId.current
-
-    void (async () => {
-      for (const [index, customImageUrl] of customImageUrls.entries()) {
-        // The layers are the link's dataset's: another dataset opened while
-        // one loaded takes none of the rest.
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        const loaded = await handleLoadCustomLayer(customImageUrl)
-        const opacity = customImageOpacities[index]
-
-        if (!loaded || opacity === undefined) {
-          continue
-        }
-
-        try {
-          const normalizedUrl = normalizeCustomMorphologyLayerUrl(customImageUrl)
-          handleCustomImageLayerOpacityChange(normalizedUrl, opacity)
-        } catch {
-          // The load workflow already surfaced invalid URLs.
-        }
-      }
-    })()
-  }, [
-    handleCustomImageLayerOpacityChange,
-    handleLoadCustomLayer,
-    initialShareableState.datasetUrl,
-    loadRequestId,
+  const customImagesStillToOpen = useCustomImagesToOpen({
+    request: customImagesToOpen,
     loadedDatasetUrl,
-  ])
+    loadRequestIdRef: loadRequestId,
+    loadCustomLayer: handleLoadCustomLayer,
+    setLayerOpacity: handleCustomImageLayerOpacityChange,
+  })
+  // The link lists the layers open, then those still opening, so a link
+  // copied while they open names them all.
+  const customImageLayersForLink = useMemo(() => {
+    const open = customMorphologyLayers.map((layer) => ({
+      url: layer.image.url,
+      opacity: normalizeLayerOpacity(customImageLayerOpacities[layer.image.url] ?? 1),
+    }))
+    const opening = customImagesStillToOpen
+      .filter((image) => !open.some((layer) => layer.url === image.url))
+      .map((image) => ({ url: image.url, opacity: image.opacity ?? 1 }))
+
+    return [...open, ...opening]
+  }, [customImageLayerOpacities, customImagesStillToOpen, customMorphologyLayers])
+  const customImageUrls = useMemo(
+    () => customImageLayersForLink.map((layer) => layer.url),
+    [customImageLayersForLink],
+  )
+  const customImageOpacities = useMemo(() => {
+    const opacities = customImageLayersForLink.map((layer) => layer.opacity)
+
+    return opacities.some((opacity) => opacity !== 1) ? opacities : undefined
+  }, [customImageLayersForLink])
 
   // A segmentation the link names opens over the link's image; otherwise one
   // the image's manifest names (plan 25). Each image is offered one once.
@@ -4229,6 +4192,7 @@ export function App({ dependencies }: AppProps = {}) {
       setShowTranscriptOverlay,
       setDatasetAbout,
       setDatasetManifestDefaults,
+      setCustomImagesToOpen,
       setAutoContrastChannelIds,
       setBoundaryElements,
       setBoundaryState,

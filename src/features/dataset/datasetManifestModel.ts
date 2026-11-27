@@ -3,7 +3,10 @@ import type {
   DatasetManifest,
   DatasetManifestDefaults,
 } from '../../datasets/datasetManifest'
-import type { MorphologyImageChannel } from '../../data/morphologyImage'
+import {
+  normalizeCustomMorphologyLayerUrl,
+  type MorphologyImageChannel,
+} from '../../data/morphologyImage'
 import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
 import { defaultEnabledChannelIds } from '../morphology/morphologyChannels'
 import {
@@ -107,6 +110,7 @@ export function manifestDefaultsToShareableState(
   )
   const imageView = enumValue('imageView', defaults.imageView, parseImageView)
   const cellView = enumValue('cellView', defaults.cellView, parseCellView)
+  const customImages = manifestCustomImages(defaults.customImages, ignored)
 
   const fields: {
     readonly [Key in keyof ShareableState]: ShareableState[Key] | undefined
@@ -132,12 +136,43 @@ export function manifestDefaultsToShareableState(
     transcriptOverlay: defaults.transcripts,
     imageView,
     cellView,
+    ...customImages,
   }
   const state = Object.fromEntries(
     Object.entries(fields).filter(([, value]) => value !== undefined),
   ) as ShareableState
 
   return { state, ignored }
+}
+
+// `customImages` as a link lists custom image layers: URLs as the layers keep
+// them, and opacities only when one is not 1.
+function manifestCustomImages(
+  images: DatasetManifestDefaults['customImages'],
+  ignored: string[],
+): Pick<ShareableState, 'customImageUrls' | 'customImageOpacities'> {
+  if (images === undefined) {
+    return {}
+  }
+
+  const opened = images.flatMap((image) => {
+    try {
+      return [
+        { url: normalizeCustomMorphologyLayerUrl(image.url), opacity: image.opacity },
+      ]
+    } catch {
+      ignored.push(`defaults.customImages entry "${image.path}" is not an http(s) URL`)
+      return []
+    }
+  })
+  const opacities = opened.map((image) => image.opacity ?? 1)
+
+  return {
+    customImageUrls: opened.map((image) => image.url),
+    ...(opacities.some((opacity) => opacity !== 1)
+      ? { customImageOpacities: opacities }
+      : {}),
+  }
 }
 
 // `[null, "p95"]` as the range the Gene scale keeps. The parser has checked

@@ -129,6 +129,7 @@ Unknown fields are errors, as in a dataset manifest.
 | `labelColumn`       | No       | The obs column holding each cell's label value, or its polygon's ID. See [Labels](#labels). Needs `labels`                                                                    |
 | `coordinateSystem`  | No       | A name for registered coordinates, such as `patient-1`. See [Side by Side](#side-by-side)                                                                                     |
 | `z`                 | No       | The section's depth in its coordinate system, in micrometres. See [3D Stack](#3d-stack). Needs `coordinateSystem`                                                             |
+| `customImages`      | No       | Images to open over the dataset's own, for any platform: `[{ "url": path, "opacity": 0–1 }]`. See [Custom Image Layers](#custom-image-layers)                                 |
 
 - Paths resolve and are checked like
   [manifest paths](./dataset-manifest.md#paths): against `root` when set
@@ -180,11 +181,55 @@ The image then behaves as the dataset's own:
   [manifest](./dataset-manifest.md#anndata-with-an-image) instead.
 - Only AnnData tables take one. Other platforms, and Visium tables, keep their
   own image; an entry's `image` is then ignored, with a notice under
-  Fallbacks.
+  Fallbacks. To open more images over a dataset of any platform, list them
+  under [`customImages`](#custom-image-layers).
 - To check alignment, zoom in until nuclei show in the image; each cell's
   point should sit on its nucleus.
 
 See [Attached Image](./modalities/h5ad.md#attached-image) for how it is read.
+
+### Custom Image Layers
+
+`customImages` opens more images over a dataset's own, for any platform, as
+the Image section's `Custom image URL` does: each Xenium section's focus
+image with its post-Xenium H&E, for example.
+
+```json
+{
+  "version": 1,
+  "root": "https://bucket.example.org/study/",
+  "datasets": [
+    {
+      "dataset": "run-7",
+      "name": "Section 7",
+      "customImages": [
+        { "url": "run-7/post-xenium/he_registered.ome.tif" },
+        { "url": "run-7/if_panel.ome.tif", "opacity": 0.6 }
+      ]
+    },
+    {
+      "dataset": "run-8",
+      "name": "Section 8",
+      "customImages": [{ "url": "run-8/post-xenium/he_registered.ome.tif" }]
+    }
+  ]
+}
+```
+
+- Each `url` resolves like `dataset`, so against `root`, not against the
+  dataset's folder.
+- The list replaces the one the dataset's manifest gives in
+  [`defaults.customImages`](./dataset-manifest.md#custom-image-layers); an
+  empty list opens none. An entry without `customImages` opens the
+  manifest's.
+- The layers open as a manifest's do: in order, once the dataset is ready,
+  each placed by its own pixel size from the dataset's origin, so an H&E
+  must already be registered to the section. Links leave them out while they
+  are what is shown, and a link that lists its own opens those instead.
+- Like `image`, the list belongs to the collection: the dataset opened on its
+  own opens its manifest's layers, until a collection that lists some for it
+  has been read in that tab.
+- A section shown beside the main view shows only its own image.
 
 ### Labels
 

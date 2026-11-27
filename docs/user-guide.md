@@ -368,7 +368,11 @@ Hovering a nucleus shows its cell; clicking it selects the cell, and the Cell
 card lists the cell's nuclei with their area and circularity.
 
 Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
-the same channel controls as dataset morphology.
+the same channel controls as dataset morphology. A dataset manifest or a
+collection entry can list layers to open with the dataset, such as a
+registered post-Xenium H&E over the focus image (see the
+[manifest](./dataset-manifest.md#custom-image-layers) and
+[collection](./dataset-collections.md#custom-image-layers) docs).
 
 The minimap at the bottom right of the canvas shows the whole dataset (its
 image, or its cells as dots) with the current view as a box; click or drag on
