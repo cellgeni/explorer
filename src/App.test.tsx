@@ -3131,6 +3131,86 @@ describe('App', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('carries channel colours changed from the image’s in the link', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fxenium&channels=Channel%3A0%2CChannel%3A1&channelColors=Channel%3A1%3Aff00ff',
+    )
+    const dapiChannel = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+    }
+    const boundaryChannel = {
+      id: 'Channel:1',
+      index: 1,
+      name: 'Boundary',
+      color: [32, 166, 122] as const,
+      contrast: { min: 0, max: 65_535 },
+    }
+    const loader = {} as TiffPyramidLoader
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: 'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      loader,
+      channels: [dapiChannel, boundaryChannel],
+      channelLoaders: [
+        { info: dapiChannel, loader },
+        { info: boundaryChannel, loader },
+      ],
+    }))
+    const channelColors = () =>
+      new URLSearchParams(window.location.hash.slice(1)).get('channelColors')
+
+    render(
+      <TestApp
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: intToCellId(1, 1),
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+        ])}
+        loadGenePanel={vi.fn(async () => ['Actb'])}
+        loadMorphologyImage={loadMorphologyImage}
+        computeAutoChannelContrast={vi.fn(async () => ({
+          min: 0,
+          max: 1,
+          histogram: { bins: [1], maxCount: 1, min: 0, max: 1, sampleCount: 1 },
+        }))}
+      />,
+    )
+
+    // The link's colour; DAPI keeps the image's own.
+    await waitFor(() => {
+      expect(loadMorphologyImage).toHaveBeenCalled()
+    })
+    openControls('image')
+    expect(await screen.findByRole('checkbox', { name: 'Boundary' })).toBeChecked()
+    expect(screen.getByLabelText('Boundary color')).toHaveValue('#ff00ff')
+    expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
+    await waitFor(() => {
+      expect(window.location.hash).toContain('cellBounds=')
+    })
+    expect(channelColors()).toBe('Channel:1:ff00ff')
+
+    // A colour changed is written; one set back to the image's is left out.
+    fireEvent.change(screen.getByLabelText('DAPI color'), {
+      target: { value: '#ffffff' },
+    })
+    await waitFor(() => {
+      expect(channelColors()).toBe('Channel:0:ffffff,Channel:1:ff00ff')
+    })
+    fireEvent.change(screen.getByLabelText('Boundary color'), {
+      target: { value: '#20a67a' },
+    })
+    await waitFor(() => {
+      expect(channelColors()).toBe('Channel:0:ffffff')
+    })
+  })
+
   it('keeps a link in the address until its dataset opens and applies it', async () => {
     // The load applies the card, ROI, channels and z plane later, so a rewrite
     // from the state before then would drop them.

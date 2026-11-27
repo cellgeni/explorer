@@ -828,6 +828,29 @@
             "additionalProperties": false
           },
           "description": "Images opened as custom image layers over the dataset's own image, in order, as a link's customImageUrl list opens them. Each is placed by its own pixel size from the dataset's origin, so it must already be registered to the dataset. A link that lists custom image layers opens those instead."
+        },
+        "channelSettings": {
+          "type": "object",
+          "propertyNames": { "minLength": 1, "pattern": "\\S" },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "type": "string",
+                "pattern": "^\\s*#?[0-9A-Fa-f]{6}\\s*$",
+                "description": "Hex colour, such as \"#5890FF\"."
+              },
+              "contrast": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "The contrast window, [min, max], in the image's pixel values (0 to 65535 for 16-bit). max must be above min."
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Image channel colours and contrast windows, by channel name (case-insensitive) or ID. A channel given a contrast window is not auto-contrasted."
         }
       },
       "additionalProperties": false

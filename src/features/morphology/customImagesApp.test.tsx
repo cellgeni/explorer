@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
 import { imagePixels, micrometers } from '../../data/coords'
-import { clearDatasetImages } from '../../data/datasetFiles'
+import { clearCollectionDatasets } from '../../data/datasetFiles'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import { parseDatasetCollection } from '../../datasets/datasetCollection'
 import { parseDatasetManifest } from '../../datasets/datasetManifest'
@@ -149,7 +149,7 @@ describe('App with custom image layers from a dataset manifest', () => {
 
   afterEach(() => {
     window.history.replaceState(null, '', '/')
-    clearDatasetImages()
+    clearCollectionDatasets()
   })
 
   it('opens the manifest’s layers in order, and the link names them only once they change', async () => {
@@ -277,7 +277,7 @@ describe('App with custom image layers from a collection entry', () => {
 
   afterEach(() => {
     window.history.replaceState(null, '', '/')
-    clearDatasetImages()
+    clearCollectionDatasets()
   })
 
   it('opens the entry’s layers in place of the manifest’s, and the manifest’s for an entry without', async () => {

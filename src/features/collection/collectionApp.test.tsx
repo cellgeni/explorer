@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
 import { imagePixels, micrometers } from '../../data/coords'
-import { clearDatasetImages } from '../../data/datasetFiles'
+import { clearCollectionDatasets } from '../../data/datasetFiles'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import { parseDatasetCollection } from '../../datasets/datasetCollection'
 import { initialViewerState, useViewerStore } from '../../store/viewerStore'
@@ -142,7 +142,7 @@ describe('App with a dataset collection', () => {
   afterEach(() => {
     window.history.replaceState(null, '', '/')
     vi.unstubAllGlobals()
-    clearDatasetImages()
+    clearCollectionDatasets()
   })
 
   it('opens the first dataset with the defaults and keeps the genes when switching', async () => {
@@ -1365,7 +1365,7 @@ describe('App with a dataset collection', () => {
     })
   })
 
-  it('opens a linked dataset over the image and labels its entry names', async () => {
+  it('opens a linked dataset over the image, with the channel settings, and labels its entry names', async () => {
     window.history.replaceState(
       null,
       '',
@@ -1385,6 +1385,9 @@ describe('App with a dataset collection', () => {
           },
           { dataset: '1dpi-a.h5ad', name: '1 dpi A' },
         ],
+        defaults: {
+          channelSettings: { dapi: { color: '#FF00FF', contrast: [10, 200] } },
+        },
       },
       COLLECTION_URL,
     )
@@ -1401,17 +1404,18 @@ describe('App with a dataset collection', () => {
       image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
     }
     const detect = vi.fn(detectSpatialDataset)
+    const computeAutoChannelContrast = vi.fn(async () => ({
+      min: 0,
+      max: 255,
+      histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+    }))
 
     render(
       <TestApp
         loadCollection={loadCollection}
         detectSpatialDataset={detect}
         getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
-        computeAutoChannelContrast={vi.fn(async () => ({
-          min: 0,
-          max: 255,
-          histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
-        }))}
+        computeAutoChannelContrast={computeAutoChannelContrast}
       />,
     )
 
@@ -1435,6 +1439,12 @@ describe('App with a dataset collection', () => {
     await waitFor(() => {
       expect(screen.getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
     })
+    // The collection's colour and window, which the link does not carry,
+    // and no auto contrast over the window.
+    expect(screen.getByLabelText('DAPI color')).toHaveValue('#ff00ff')
+    expect(screen.getByLabelText('DAPI minimum')).toHaveValue(10)
+    expect(screen.getByLabelText('DAPI maximum')).toHaveValue(200)
+    expect(computeAutoChannelContrast).not.toHaveBeenCalled()
     // Its labels are its cell boundaries, shown by default.
     openControls('cell-appearance')
     expect(screen.getByLabelText('Cell boundaries')).toBeChecked()

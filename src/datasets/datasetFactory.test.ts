@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  clearDatasetImages,
+  clearCollectionDatasets,
   datasetFileLabelFor,
   datasetFileUrl,
   datasetFileUrlFor,
   datasetManifestFor,
-  registerCollectionImages,
+  registerCollectionDatasets,
   setDatasetManifest,
 } from '../data/datasetFiles'
 import { clearFolderListings, isListedAsMissing } from '../data/folderListing'
@@ -898,7 +898,7 @@ describe('spatial dataset detection', () => {
       expect(plain).toBeInstanceOf(AnnDataH5adDataset)
       expect((plain as AnnDataH5adDataset).attachedImage).toBeUndefined()
 
-      registerCollectionImages(collection('a-raw.zarr'))
+      registerCollectionDatasets(collection('a-raw.zarr'))
       const withImage = await cachedSpatialDataset(url)
       expect(withImage).not.toBe(plain)
       expect((withImage as AnnDataH5adDataset).attachedImage).toEqual({
@@ -910,12 +910,12 @@ describe('spatial dataset detection', () => {
       await expect(cachedSpatialDataset(`${url}/`)).resolves.toBe(withImage)
 
       // A later collection listing the dataset without an image replaces it.
-      registerCollectionImages(collection())
+      registerCollectionDatasets(collection())
       await expect(cachedSpatialDataset(url)).resolves.toBe(plain)
 
       // Polygon labels bring their format and units, and are a different
       // dataset.
-      registerCollectionImages(
+      registerCollectionDatasets(
         parseDatasetCollection(
           {
             version: 1,
@@ -943,7 +943,7 @@ describe('spatial dataset detection', () => {
         labelsCoordinates: 'micrometers',
       })
     } finally {
-      clearDatasetImages()
+      clearCollectionDatasets()
       vi.unstubAllGlobals()
     }
   })
@@ -975,7 +975,7 @@ describe('spatial dataset detection', () => {
       // The manifest belongs to the URL, so the same instance comes back.
       await expect(cachedSpatialDataset(url)).resolves.toBe(fromManifest)
 
-      registerCollectionImages(
+      registerCollectionDatasets(
         parseDatasetCollection(
           { version: 1, datasets: [{ dataset: 'a.json', image: 'b.ome.tif' }] },
           'https://example.test/sections/collection.json',
@@ -987,7 +987,7 @@ describe('spatial dataset detection', () => {
         coordinates: 'micrometers',
       })
     } finally {
-      clearDatasetImages()
+      clearCollectionDatasets()
       setDatasetManifest(url, undefined)
       vi.unstubAllGlobals()
     }

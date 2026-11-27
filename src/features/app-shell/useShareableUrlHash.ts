@@ -105,6 +105,7 @@ interface ShareableLayerHashOptions {
   readonly showScaleBar: boolean
   readonly cellBoundaryOpacity: number
   readonly morphologyEnabledChannelIds: readonly string[] | undefined
+  readonly morphologyChannelColors: ShareableState['morphologyChannelColors']
   readonly morphologyZPlane: number | undefined
   readonly morphologyTimePoint: number | undefined
   readonly imageView: string | undefined
@@ -306,6 +307,7 @@ export function useShareableUrlHash({
     imageOpacity,
     measurementUnit,
     morphologyEnabledChannelIds,
+    morphologyChannelColors,
     morphologyZPlane,
     morphologyTimePoint,
     imageView,
@@ -491,6 +493,7 @@ export function useShareableUrlHash({
           ...(morphologyEnabledChannelIds === undefined
             ? {}
             : { morphologyEnabledChannelIds }),
+          ...(morphologyChannelColors === undefined ? {} : { morphologyChannelColors }),
           ...(morphologyZPlane === undefined ? {} : { morphologyZPlane }),
           ...(morphologyTimePoint === undefined ? {} : { morphologyTimePoint }),
           ...(imageView === undefined ? {} : { imageView }),
@@ -599,6 +602,7 @@ export function useShareableUrlHash({
     showScaleBar,
     cellBoundaryOpacity,
     morphologyEnabledChannelIds,
+    morphologyChannelColors,
     morphologyZPlane,
     morphologyTimePoint,
     imageView,

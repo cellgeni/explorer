@@ -168,7 +168,7 @@
     },
     "defaults": {
       "type": "object",
-      "description": "Display settings for the first dataset opened from the collection. A shared link's own values take precedence; after that, switching datasets keeps the current genes and colouring.",
+      "description": "Display settings for the first dataset opened from the collection, except channelSettings, which every dataset's image takes. A shared link's own values take precedence; after that, switching datasets keeps the current genes and colouring.",
       "properties": {
         "genes": {
           "type": "array",
@@ -247,6 +247,29 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "The Cell point size multiplier, from 0.5 to 32; other values snap to the nearest slider step."
+        },
+        "channelSettings": {
+          "type": "object",
+          "propertyNames": { "minLength": 1, "pattern": "\\S" },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "type": "string",
+                "pattern": "^\\s*#?[0-9A-Fa-f]{6}\\s*$",
+                "description": "Hex colour, such as \"#5890FF\"."
+              },
+              "contrast": {
+                "type": "array",
+                "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "The contrast window, [min, max], in the image's pixel values (0 to 65535 for 16-bit). max must be above min."
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Image channel colours and contrast windows, by channel name (case-insensitive) or ID. A channel given a contrast window is not auto-contrasted."
         }
       },
       "additionalProperties": false

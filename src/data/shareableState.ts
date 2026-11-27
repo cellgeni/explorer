@@ -128,6 +128,11 @@ export interface ShareableState {
   readonly showScaleBar?: boolean
   readonly cellBoundaryOpacity?: number
   readonly morphologyEnabledChannelIds?: readonly string[]
+  // Image channel colours changed from those the channels open with, by
+  // channel ID: `channelColors=` as `id:rrggbb` entries.
+  readonly morphologyChannelColors?: Readonly<
+    Record<string, readonly [number, number, number]>
+  >
   // Zero-based z plane of a z-stack dataset image.
   readonly morphologyZPlane?: number
   // Zero-based time point of a time series dataset image (plan 28): `t=`.
@@ -242,6 +247,7 @@ export function parseShareableState(hash: string): ShareableState {
   const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')?.map(
     unescapeCsvEntry,
   )
+  const morphologyChannelColors = parseChannelColors(params.get('channelColors'))
   const morphologyZPlane = parseNonNegativeInteger(params.get('z'))
   const morphologyTimePoint = parseNonNegativeInteger(params.get('t'))
   const imageView = readString(params, 'imageView')
@@ -490,6 +496,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (morphologyEnabledChannelIds !== undefined) {
     state.morphologyEnabledChannelIds = morphologyEnabledChannelIds
+  }
+
+  if (morphologyChannelColors !== undefined) {
+    state.morphologyChannelColors = morphologyChannelColors
   }
 
   if (morphologyZPlane !== undefined) {
@@ -812,6 +822,17 @@ export function formatShareableState(state: ShareableState): string {
     )
   }
 
+  const channelColors = Object.entries(state.morphologyChannelColors ?? {})
+
+  if (channelColors.length > 0) {
+    params.set(
+      'channelColors',
+      channelColors
+        .map(([id, color]) => escapeCsvEntry(`${id}:${formatHexColor(color)}`))
+        .join(','),
+    )
+  }
+
   if (state.morphologyZPlane !== undefined && Number.isFinite(state.morphologyZPlane)) {
     params.set('z', Math.max(0, Math.floor(state.morphologyZPlane)).toString())
   }
@@ -1078,6 +1099,43 @@ function parsePanelImage(value: string): ShareablePanelImage {
   const trimmed = value.trim()
 
   return trimmed === '1' ? 'cells' : trimmed === 'only' ? 'only' : null
+}
+
+// `Channel:0:ff00ff,Channel:3:d73f7c`: each entry's colour follows its last
+// `:`, so the channel ID may hold colons. Malformed entries are skipped.
+function parseChannelColors(
+  value: string | null,
+): Readonly<Record<string, readonly [number, number, number]>> | undefined {
+  if (value === null) return undefined
+
+  const colors: Record<string, readonly [number, number, number]> = {}
+
+  for (const entry of value.split(',')) {
+    const unescaped = unescapeCsvEntry(entry.trim())
+    const separator = unescaped.lastIndexOf(':')
+    const id = unescaped.slice(0, separator)
+    const hex = /^[\da-f]{6}$/i.exec(unescaped.slice(separator + 1))?.[0]
+
+    if (separator > 0 && hex !== undefined) {
+      colors[id] = [
+        Number.parseInt(hex.slice(0, 2), 16),
+        Number.parseInt(hex.slice(2, 4), 16),
+        Number.parseInt(hex.slice(4, 6), 16),
+      ]
+    }
+  }
+
+  return Object.keys(colors).length === 0 ? undefined : colors
+}
+
+function formatHexColor(color: readonly [number, number, number]): string {
+  return color
+    .map((component) =>
+      Math.max(0, Math.min(255, Math.round(component)))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')
 }
 
 function parsePanelChannels(value: string): readonly string[] | null {

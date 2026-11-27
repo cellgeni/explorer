@@ -136,11 +136,21 @@ export interface DatasetManifestDefaults {
   // Images opened as custom image layers, in order, as a link's
   // `customImageUrl` list opens them.
   readonly customImages?: readonly DatasetManifestCustomImage[]
+  // Image channels' colours and contrast windows, by channel name (any case)
+  // or ID.
+  readonly channelSettings?: Readonly<Record<string, DatasetManifestChannelSetting>>
 }
 
 // A custom image layer the dataset opens with, and its opacity.
 export interface DatasetManifestCustomImage extends DatasetManifestFile {
   readonly opacity?: number
+}
+
+export interface DatasetManifestChannelSetting {
+  readonly color?: readonly [number, number, number]
+  // The contrast window, [min, max], in the image's pixel values. A channel
+  // with one is not auto-contrasted.
+  readonly contrast?: readonly [number, number]
 }
 
 // Where the data comes from, shown in the info drawer so viewers can find,
@@ -953,9 +963,12 @@ export const DATASET_MANIFEST_DEFAULT_KEYS = [
   ...DEFAULT_POSITIVE_NUMBER_KEYS,
   'geneRange',
   'customImages',
+  'channelSettings',
 ] as const
 
 export const DATASET_MANIFEST_CUSTOM_IMAGE_KEYS = ['url', 'opacity'] as const
+
+export const DATASET_MANIFEST_CHANNEL_SETTING_KEYS = ['color', 'contrast'] as const
 
 // The field checks below are shared with the collection parser
 // (datasetCollection.ts), so both formats report errors the same way.
@@ -1089,6 +1102,10 @@ export function parseDefaults(
     )
   }
 
+  if (value.channelSettings !== undefined) {
+    defaults.channelSettings = parseChannelSettings(value.channelSettings, fail)
+  }
+
   return defaults as DatasetManifestDefaults
 }
 
@@ -1143,6 +1160,82 @@ export function parseCustomImages(
       ...(entry.opacity === undefined ? {} : { opacity: entry.opacity as number }),
     }
   })
+}
+
+// "#5890FF", or "5890FF" as OME-Zarr omero metadata writes colours.
+const CHANNEL_COLOR_PATTERN = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i
+
+function parseChannelSettings(
+  value: unknown,
+  fail: Fail,
+): Readonly<Record<string, DatasetManifestChannelSetting>> {
+  if (!isRecord(value)) {
+    return fail('"defaults.channelSettings" must be an object of channel names or IDs.')
+  }
+
+  const settings: Record<string, DatasetManifestChannelSetting> = {}
+  const names = new Set<string>()
+
+  for (const [rawName, entry] of Object.entries(value)) {
+    const name = rawName.trim()
+    const field = `defaults.channelSettings.${rawName}`
+
+    if (name === '') {
+      fail('"defaults.channelSettings" names a channel with a blank name.')
+    }
+
+    if (names.has(name.toLowerCase())) {
+      fail(`"defaults.channelSettings" names the channel "${name}" more than once.`)
+    }
+
+    names.add(name.toLowerCase())
+
+    if (!isRecord(entry)) {
+      fail(`"${field}" must be an object.`)
+    }
+
+    const record = entry as Record<string, unknown>
+    checkKeys(record, DATASET_MANIFEST_CHANNEL_SETTING_KEYS, `${field}.`, fail)
+    const color =
+      typeof record.color === 'string'
+        ? CHANNEL_COLOR_PATTERN.exec(record.color.trim())
+        : null
+
+    if (record.color !== undefined && color === null) {
+      fail(`"${field}.color" must be a hex colour, such as "#5890FF".`)
+    }
+
+    const contrast = record.contrast
+
+    if (
+      contrast !== undefined &&
+      (!Array.isArray(contrast) ||
+        contrast.length !== 2 ||
+        !contrast.every((end) => typeof end === 'number' && Number.isFinite(end)) ||
+        (contrast[1] as number) <= (contrast[0] as number))
+    ) {
+      fail(
+        `"${field}.contrast" must be [min, max] in the image's pixel values, with max above min.`,
+      )
+    }
+
+    settings[name] = {
+      ...(color === null
+        ? {}
+        : {
+            color: [
+              Number.parseInt(color[1] as string, 16),
+              Number.parseInt(color[2] as string, 16),
+              Number.parseInt(color[3] as string, 16),
+            ],
+          }),
+      ...(contrast === undefined
+        ? {}
+        : { contrast: [contrast[0], contrast[1]] as [number, number] }),
+    }
+  }
+
+  return settings
 }
 
 // "p95": above 0, up to 100, as the viewer's links write it.

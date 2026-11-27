@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
 import { imagePixels, micrometers } from '../../data/coords'
-import { clearDatasetImages } from '../../data/datasetFiles'
+import { clearCollectionDatasets } from '../../data/datasetFiles'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import {
   parseDatasetManifest,
@@ -123,7 +123,7 @@ describe('App with a z-stack image', () => {
 
   afterEach(() => {
     window.history.replaceState(null, '', '/')
-    clearDatasetImages()
+    clearCollectionDatasets()
   })
 
   it('opens the 3D view a link asks for, and leaves it out of the link in 2D', async () => {

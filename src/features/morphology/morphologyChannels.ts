@@ -1,5 +1,6 @@
 import type { ChannelHistogram } from '../../data/morphologyContrast'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
+import type { DatasetManifestChannelSetting } from '../../datasets/datasetManifest'
 
 export interface MorphologyChannelSetting {
   readonly id: string
@@ -8,7 +9,20 @@ export interface MorphologyChannelSetting {
   readonly contrastMin: number
   readonly contrastMax: number
   readonly histogram?: ChannelHistogram
+  // The dataset manifest or collection set the window, so it is not
+  // auto-contrasted when the image loads or the channel is turned on.
+  readonly contrastSet?: true
+  // The colour the dataset manifest or collection sets, which the channel
+  // opens with in place of the image's own. A link writes the colours that
+  // differ from it, or from the image's own without it.
+  readonly defaultColor?: readonly [number, number, number]
 }
+
+// Channel colours and windows a dataset manifest or collection sets, by
+// channel name (any case) or ID.
+export type MorphologyChannelDefaults = Readonly<
+  Record<string, DatasetManifestChannelSetting>
+>
 
 export function morphologyPatchLabel(
   patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
@@ -28,28 +42,128 @@ export function morphologyPatchLabel(
   return 'Channel updated'
 }
 
+interface CreateMorphologyChannelSettingsOptions {
+  readonly enabledChannelIds?: readonly string[]
+  readonly channelDefaults?: MorphologyChannelDefaults
+  // A link's colours, by channel ID, over the defaults.
+  readonly channelColors?: MorphologyChannelColors
+}
+
+export type MorphologyChannelColors = Readonly<
+  Record<string, readonly [number, number, number]>
+>
+
 export function createMorphologyChannelSettings(
   image: MorphologyImage,
-  options: { readonly enabledChannelIds?: readonly string[] } = {},
+  options: CreateMorphologyChannelSettingsOptions = {},
 ): readonly MorphologyChannelSetting[] {
   return createMorphologyChannelSettingsFromChannels(image.channelLoaders, options)
 }
 
 export function createMorphologyChannelSettingsFromChannels(
   channels: readonly MorphologyImageChannel[],
-  options: { readonly enabledChannelIds?: readonly string[] } = {},
+  options: CreateMorphologyChannelSettingsOptions = {},
 ): readonly MorphologyChannelSetting[] {
   const enabledChannelIds =
     options.enabledChannelIds === undefined ? null : new Set(options.enabledChannelIds)
 
-  return channels.map((channel, index) => ({
-    id: channel.info.id,
-    enabled:
-      enabledChannelIds === null ? index === 0 : enabledChannelIds.has(channel.info.id),
-    color: channel.info.color,
-    contrastMin: channel.info.contrast.min,
-    contrastMax: channel.info.contrast.max,
-  }))
+  return channels.map((channel, index) => {
+    const defaults = channelDefaultsFor(channel, options.channelDefaults)
+    const defaultColor = defaults?.color
+
+    return {
+      id: channel.info.id,
+      enabled:
+        enabledChannelIds === null ? index === 0 : enabledChannelIds.has(channel.info.id),
+      color:
+        options.channelColors?.[channel.info.id] ?? defaultColor ?? channel.info.color,
+      ...(defaultColor === undefined ? {} : { defaultColor }),
+      ...(defaults?.contrast === undefined
+        ? {
+            contrastMin: channel.info.contrast.min,
+            contrastMax: channel.info.contrast.max,
+          }
+        : {
+            contrastMin: defaults.contrast[0],
+            contrastMax: defaults.contrast[1],
+            contrastSet: true,
+          }),
+    }
+  })
+}
+
+// A channel's entry by its ID, else by its name in any case.
+function channelDefaultsFor(
+  channel: MorphologyImageChannel,
+  defaults: MorphologyChannelDefaults | undefined,
+): DatasetManifestChannelSetting | undefined {
+  if (defaults === undefined) {
+    return undefined
+  }
+
+  const name = channel.info.name.toLowerCase()
+
+  return (
+    defaults[channel.info.id] ??
+    Object.entries(defaults).find(([key]) => key.toLowerCase() === name)?.[1]
+  )
+}
+
+// The colours a link carries: those of the channels whose colour is not the
+// one they open with.
+export function changedMorphologyChannelColors(
+  channels: readonly MorphologyImageChannel[],
+  settings: readonly MorphologyChannelSetting[],
+): MorphologyChannelColors {
+  const changed: Record<string, readonly [number, number, number]> = {}
+
+  for (const channel of channels) {
+    const setting = settings.find((candidate) => candidate.id === channel.info.id)
+    const defaultColor = setting?.defaultColor ?? channel.info.color
+
+    if (
+      setting !== undefined &&
+      setting.color.some((component, index) => component !== defaultColor[index])
+    ) {
+      changed[channel.info.id] = setting.color
+    }
+  }
+
+  return changed
+}
+
+// The names and IDs of the settings that match no channel.
+export function unmatchedMorphologyChannelDefaults(
+  channels: readonly MorphologyImageChannel[],
+  defaults: MorphologyChannelDefaults | undefined,
+): readonly string[] {
+  return Object.keys(defaults ?? {}).filter(
+    (key) =>
+      !channels.some(
+        (channel) =>
+          channel.info.id === key ||
+          channel.info.name.toLowerCase() === key.toLowerCase(),
+      ),
+  )
+}
+
+// A collection's settings over the dataset manifest's, channel by channel.
+export function mergeMorphologyChannelDefaults(
+  manifest: MorphologyChannelDefaults | undefined,
+  collection: MorphologyChannelDefaults | undefined,
+): MorphologyChannelDefaults | undefined {
+  if (manifest === undefined || collection === undefined) {
+    return collection ?? manifest
+  }
+
+  const collectionNames = new Set(Object.keys(collection).map((key) => key.toLowerCase()))
+
+  return {
+    ...Object.fromEntries(
+      Object.entries(manifest).filter(([key]) => !collectionNames.has(key.toLowerCase())),
+    ),
+    ...collection,
+  }
 }
 
 // Multiplexed images (QPTIFF, CODEX OME-TIFF) can have dozens of channels.
@@ -57,7 +171,8 @@ export function createMorphologyChannelSettingsFromChannels(
 // with more channels than this opens with only the first few on, and only the
 // channels that are on are auto-contrasted when it loads. Native RGB (H&E
 // slides) is drawn without a window, so it is never auto-contrasted; doing so
-// would decode every tile of the coarsest level on the main thread.
+// would decode every tile of the coarsest level on the main thread. Nor are
+// channels whose window a dataset manifest or collection sets.
 export const MAX_DEFAULT_ENABLED_CHANNELS = 6
 
 export function defaultEnabledChannelIds(
@@ -71,16 +186,22 @@ export function channelsToAutoContrastOnLoad(
   settings: readonly MorphologyChannelSetting[],
 ): readonly MorphologyImageChannel[] {
   const windowed = channels.filter((channel) => !isTrueColorChannel(channel))
+  const setIds = new Set(
+    settings
+      .filter((setting) => setting.contrastSet === true)
+      .map((setting) => setting.id),
+  )
+  const unset = windowed.filter((channel) => !setIds.has(channel.info.id))
 
   if (channels.length <= MAX_DEFAULT_ENABLED_CHANNELS) {
-    return windowed
+    return unset
   }
 
   const enabledIds = new Set(
     settings.filter((setting) => setting.enabled).map((setting) => setting.id),
   )
 
-  return windowed.filter((channel) => enabledIds.has(channel.info.id))
+  return unset.filter((channel) => enabledIds.has(channel.info.id))
 }
 
 function isTrueColorChannel(channel: MorphologyImageChannel): boolean {
@@ -96,6 +217,7 @@ export function needsAutoContrastOnEnable(
 ): boolean {
   return (
     channel.info.alphaFromIntensity !== false &&
+    setting?.contrastSet !== true &&
     setting?.histogram === undefined &&
     (setting?.contrastMin ?? channel.info.contrast.min) === channel.info.contrast.min &&
     (setting?.contrastMax ?? channel.info.contrast.max) === channel.info.contrast.max

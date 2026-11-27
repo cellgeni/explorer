@@ -91,6 +91,33 @@ describe('startingSettings', () => {
     expect(settings.map((setting) => setting.enabled)).toEqual([false, true, true])
   })
 
+  it('takes the colours and windows the manifest or collection sets, under the main view’s', () => {
+    const { settings } = startingSettings(CHANNELS, undefined, null, MAIN, {
+      DAPI: { color: [88, 144, 255], contrast: [0, 828] },
+      cd45: { color: [32, 166, 122], contrast: [0, 1_440] },
+    })
+
+    expect(settings.slice(0, 2)).toEqual([
+      // The main view's DAPI.
+      {
+        id: 'Channel:0',
+        enabled: false,
+        color: [0, 0, 255],
+        contrastMin: 10,
+        contrastMax: 500,
+      },
+      {
+        id: 'Channel:1',
+        enabled: false,
+        color: [32, 166, 122],
+        defaultColor: [32, 166, 122],
+        contrastMin: 0,
+        contrastMax: 1_440,
+        contrastSet: true,
+      },
+    ])
+  })
+
   it('shows the channels the link names, by ID or name', () => {
     const { settings } = startingSettings(
       CHANNELS,

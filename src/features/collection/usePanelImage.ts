@@ -8,6 +8,7 @@ import type {
 import {
   channelsToAutoContrastOnLoad,
   createMorphologyChannelSettingsFromChannels,
+  type MorphologyChannelDefaults,
   type MorphologyChannelSetting,
 } from '../morphology/morphologyChannels'
 import type { PanelImage } from './panelImage'
@@ -210,6 +211,7 @@ export function usePanelImage({
             image.enabledChannelIds,
             startRef.current.channelSelection,
             startRef.current.mainChannels,
+            image.channelDefaults,
           )
           done({ ...IDLE, status: 'ready', image, settings })
 
@@ -245,23 +247,25 @@ export function usePanelImage({
   return { ...state, updateChannel, autoContrast }
 }
 
-// A panel's first channel settings: the image's defaults, with the main
-// view's colour, window and shown state for each channel of the same name
-// (case aside); the link's channels, when it names them, say which are on.
+// A panel's first channel settings: the image's defaults, with the colours
+// and windows its dataset manifest or collection sets, then the main view's
+// colour, window and shown state for each channel of the same name (case
+// aside); the link's channels, when it names them, say which are on.
 export function startingSettings(
   channels: readonly MorphologyImageChannel[],
   defaultEnabledIds: readonly string[] | undefined,
   selection: readonly string[] | null,
   main: MainImageChannels | null,
+  channelDefaults?: MorphologyChannelDefaults,
 ): {
   readonly settings: readonly MorphologyChannelSetting[]
   // The channels that took the main view's settings.
   readonly matched: ReadonlySet<string>
 } {
-  const defaults = createMorphologyChannelSettingsFromChannels(
-    channels,
-    defaultEnabledIds === undefined ? {} : { enabledChannelIds: defaultEnabledIds },
-  )
+  const defaults = createMorphologyChannelSettingsFromChannels(channels, {
+    ...(defaultEnabledIds === undefined ? {} : { enabledChannelIds: defaultEnabledIds }),
+    ...(channelDefaults === undefined ? {} : { channelDefaults }),
+  })
   const mainByName = new Map<string, MorphologyChannelSetting>()
 
   for (const channel of main?.channels ?? []) {
@@ -298,6 +302,7 @@ export function startingSettings(
       color: fromMain.color,
       contrastMin: fromMain.contrastMin,
       contrastMax: fromMain.contrastMax,
+      ...(fromMain.contrastSet === true ? { contrastSet: true as const } : {}),
     }
   })
 

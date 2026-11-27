@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import {
+  type MorphologyChannelSetting,
+  changedMorphologyChannelColors,
   channelsToAutoContrastOnLoad,
   createMorphologyChannelSettings,
   defaultEnabledChannelIds,
   MAX_DEFAULT_ENABLED_CHANNELS,
+  mergeMorphologyChannelDefaults,
   morphologyPatchLabel,
   needsAutoContrastOnEnable,
   normalizeChannelContrast,
+  unmatchedMorphologyChannelDefaults,
 } from './morphologyChannels'
 
 describe('morphologyChannels', () => {
@@ -81,6 +85,107 @@ describe('morphologyChannels', () => {
         contrastMax: 150,
       },
     ])
+  })
+
+  it('takes the colours and windows a manifest or collection sets, by ID or name', () => {
+    const channels = testChannels(3)
+    const image = { channelLoaders: channels } as unknown as MorphologyImage
+    const settings = createMorphologyChannelSettings(image, {
+      channelDefaults: {
+        c0: { color: [88, 144, 255], contrast: [0, 828] },
+        // Names match in any case.
+        'CHANNEL 1': { color: [32, 166, 122] },
+        missing: { contrast: [0, 10] },
+      },
+    })
+
+    expect(settings).toEqual([
+      {
+        id: 'c0',
+        enabled: true,
+        color: [88, 144, 255],
+        defaultColor: [88, 144, 255],
+        contrastMin: 0,
+        contrastMax: 828,
+        contrastSet: true,
+      },
+      {
+        id: 'c1',
+        enabled: false,
+        color: [32, 166, 122],
+        defaultColor: [32, 166, 122],
+        contrastMin: 0,
+        contrastMax: 65_535,
+      },
+      {
+        id: 'c2',
+        enabled: false,
+        color: [255, 255, 255],
+        contrastMin: 0,
+        contrastMax: 65_535,
+      },
+    ])
+    // A set window is kept when the image loads and when the channel is
+    // turned on.
+    expect(
+      channelsToAutoContrastOnLoad(channels, settings).map((channel) => channel.info.id),
+    ).toEqual(['c1', 'c2'])
+    expect(
+      needsAutoContrastOnEnable(channels[0] as MorphologyImageChannel, {
+        ...(settings[0] as MorphologyChannelSetting),
+        contrastMin: 0,
+        contrastMax: 65_535,
+      }),
+    ).toBe(false)
+    expect(
+      unmatchedMorphologyChannelDefaults(channels, {
+        c0: {},
+        'channel 2': {},
+        missing: {},
+      }),
+    ).toEqual(['missing'])
+  })
+
+  it("opens with a link's colours and gives the link the colours changed since", () => {
+    const channels = testChannels(3)
+    const image = { channelLoaders: channels } as unknown as MorphologyImage
+    const settings = createMorphologyChannelSettings(image, {
+      channelDefaults: { c0: { color: [88, 144, 255] }, c1: { color: [32, 166, 122] } },
+      channelColors: { c1: [255, 0, 255], c2: [0, 255, 255] },
+    })
+
+    expect(settings.map((setting) => setting.color)).toEqual([
+      [88, 144, 255],
+      [255, 0, 255],
+      [0, 255, 255],
+    ])
+    // Changed from the manifest's colour, or the image's own without one.
+    expect(changedMorphologyChannelColors(channels, settings)).toEqual({
+      c1: [255, 0, 255],
+      c2: [0, 255, 255],
+    })
+    // Set back to the colour the channel opens with, it is left out.
+    expect(
+      changedMorphologyChannelColors(
+        channels,
+        settings.map((setting) =>
+          setting.id === 'c1' ? { ...setting, color: [32, 166, 122] as const } : setting,
+        ),
+      ),
+    ).toEqual({ c2: [0, 255, 255] })
+  })
+
+  it("puts a collection's channel settings over the dataset manifest's", () => {
+    const manifest = {
+      DAPI: { color: [0, 0, 255] as const, contrast: [0, 100] as const },
+      '18S': { color: [255, 255, 0] as const },
+    }
+
+    expect(mergeMorphologyChannelDefaults(manifest, undefined)).toBe(manifest)
+    expect(mergeMorphologyChannelDefaults(undefined, manifest)).toBe(manifest)
+    expect(
+      mergeMorphologyChannelDefaults(manifest, { dapi: { color: [88, 144, 255] } }),
+    ).toEqual({ '18S': { color: [255, 255, 0] }, dapi: { color: [88, 144, 255] } })
   })
 
   it('turns on at most the first few channels of a multiplexed image', () => {

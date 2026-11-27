@@ -82,6 +82,7 @@ another host:
     "colorCellsBy": "cell-area",
     "cellBoundaries": false,
     "channels": ["DAPI"],
+    "channelSettings": { "DAPI": { "color": "#5890FF", "contrast": [0, 828] } },
     "imageOpacity": 0.8
   }
 }
@@ -412,24 +413,25 @@ Other platforms take no options.
 
 Display settings applied each time the dataset loads.
 
-| Key                   | Control                 | Value                                                                                |
-| --------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
-| `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case                        |
-| `colorCellsBy`        | `Cell color`            | `gene-expression`, `transcript-count`, `cell-area`, `annotations`, `metadata`        |
-| `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey`           |
-| `geneRange`           | `Gene scale` range      | `[min, max]`, such as `[0, 40]`; `null` is Auto; max may be `"p95"`                  |
-| `geneScoreMode`       | `Combine genes`         | `sum`, `mean`, `z-score`                                                             |
-| `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                                     |
-| `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                                     |
-| `channels`            | Image channel toggles   | Channel names (case-insensitive) or IDs to turn on                                   |
-| `imageOpacity`        | `Dataset image opacity` | 0–1                                                                                  |
-| `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                                  |
-| `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                                  |
-| `cellPointScale`      | `Cell point size`       | Multiplier above 0, snapped to the slider's steps (0.5–32)                           |
-| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                                     |
-| `imageView`           | Image `View`            | `2d` / `3d`: `3d` opens an OME-Zarr z-stack in the 3D view                           |
-| `cellView`            | Cells `View`            | `2d` / `3d`: `3d` opens cells placed in 3D in the 3D view                            |
-| `customImages`        | Custom image layers     | `[{ "url": path, "opacity": 0–1 }]`; see [Custom Image Layers](#custom-image-layers) |
+| Key                   | Control                           | Value                                                                                |
+| --------------------- | --------------------------------- | ------------------------------------------------------------------------------------ |
+| `genes`               | Gene selection                    | Gene names; must match the gene panel exactly, including case                        |
+| `colorCellsBy`        | `Cell color`                      | `gene-expression`, `transcript-count`, `cell-area`, `annotations`, `metadata`        |
+| `geneColorScale`      | `Gene scale`                      | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey`           |
+| `geneRange`           | `Gene scale` range                | `[min, max]`, such as `[0, 40]`; `null` is Auto; max may be `"p95"`                  |
+| `geneScoreMode`       | `Combine genes`                   | `sum`, `mean`, `z-score`                                                             |
+| `cellBoundaries`      | `Cell boundaries`                 | `true` / `false`                                                                     |
+| `nucleusBoundaries`   | `Nucleus boundaries`              | `true` / `false`                                                                     |
+| `channels`            | Image channel toggles             | Channel names (case-insensitive) or IDs to turn on                                   |
+| `channelSettings`     | Image channel colour and contrast | Per channel name (case-insensitive) or ID: `color` and `contrast`. See below         |
+| `imageOpacity`        | `Dataset image opacity`           | 0–1                                                                                  |
+| `cellFillOpacity`     | `Cell fill opacity`               | 0–1                                                                                  |
+| `cellBoundaryOpacity` | `Cell boundary opacity`           | 0–1                                                                                  |
+| `cellPointScale`      | `Cell point size`                 | Multiplier above 0, snapped to the slider's steps (0.5–32)                           |
+| `transcripts`         | `Show transcripts`                | `true` / `false` (Xenium, Atera)                                                     |
+| `imageView`           | Image `View`                      | `2d` / `3d`: `3d` opens an OME-Zarr z-stack in the 3D view                           |
+| `cellView`            | Cells `View`                      | `2d` / `3d`: `3d` opens cells placed in 3D in the 3D view                            |
+| `customImages`        | Custom image layers               | `[{ "url": path, "opacity": 0–1 }]`; see [Custom Image Layers](#custom-image-layers) |
 
 How defaults combine with other settings:
 
@@ -445,6 +447,15 @@ How defaults combine with other settings:
   string opacity, stop the load.
 - `channels` entries that match no channel leave the platform's default
   channels on. An empty list turns every channel off.
+- `channelSettings` gives channels a colour, as hex such as `"#5890FF"` (the
+  `#` is optional, as OME-Zarr writes colours), and a contrast window,
+  `[min, max]` in the image's pixel values (0 to 65535 for a 16-bit image),
+  such as `{ "DAPI": { "color": "#5890FF", "contrast": [0, 828] } }`. Each
+  setting is optional. A channel with a window is not auto-contrasted when
+  the image loads or when it is turned on; its `Auto` button still is. The
+  settings apply every time the image loads, from a link too: a link records
+  only the colours changed from them (`channelColors`), and no windows. Names
+  that match no channel are listed in the log.
 - Opacities, `transcripts` and `geneRange` are app-wide controls: they keep
   their value when another dataset without these defaults is loaded next, so
   sections compare on one scale. A link for a dataset whose manifest sets a
