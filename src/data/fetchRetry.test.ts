@@ -331,45 +331,58 @@ describe('fetchWithRetry (O7)', () => {
   })
 
   it('waits for a request queued behind another while the host sends that one bytes', async () => {
-    let streamed = false
-    let sent = 0
-    const calls: string[] = []
-    const fetcher = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      calls.push(String(input))
-      if (String(input).endsWith('/slow.bin')) {
-        // A chunk every 20 ms for 240 ms, each sooner than the 40 ms timeout.
-        return new Response(
-          new ReadableStream<Uint8Array<ArrayBuffer>>({
-            async pull(controller) {
-              await new Promise((resolve) => setTimeout(resolve, 20))
-              sent += 1
-              if (sent > 12) {
-                streamed = true
-                controller.close()
-              } else {
-                controller.enqueue(new Uint8Array([sent]))
-              }
-            },
-          }),
-        )
-      }
+    // Fake timers: on a loaded machine a real 20 ms timer can run late enough
+    // that the host looks quiet for the 40 ms timeout, and the queued request
+    // is sent again.
+    vi.useFakeTimers()
 
-      // As Chromium holds a request while the host's connections are busy.
-      await vi.waitFor(
-        () => {
-          if (!streamed) throw new Error('queued')
-        },
-        { timeout: 2_000, interval: 5 },
+    try {
+      let streamed = () => {}
+      const slowEnded = new Promise<void>((resolve) => {
+        streamed = resolve
+      })
+      let sent = 0
+      const calls: string[] = []
+      const fetcher = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+        calls.push(String(input))
+        if (String(input).endsWith('/slow.bin')) {
+          // A chunk every 20 ms for 240 ms, each sooner than the 40 ms timeout.
+          return new Response(
+            new ReadableStream<Uint8Array<ArrayBuffer>>({
+              async pull(controller) {
+                await new Promise((resolve) => setTimeout(resolve, 20))
+                sent += 1
+                if (sent > 12) {
+                  streamed()
+                  controller.close()
+                } else {
+                  controller.enqueue(new Uint8Array([sent]))
+                }
+              },
+            }),
+          )
+        }
+
+        // As Chromium holds a request while the host's connections are busy.
+        await slowEnded
+        if (init.signal?.aborted === true) throw init.signal.reason
+        return new Response(new Uint8Array([9]))
+      }) as typeof fetch
+      const slow = fetchWithRetry('https://example.org/slow.bin', {}, options(fetcher))
+      const queued = fetchWithRetry(
+        'https://example.org/queued.bin',
+        {},
+        options(fetcher),
       )
-      if (init.signal?.aborted === true) throw init.signal.reason
-      return new Response(new Uint8Array([9]))
-    }) as typeof fetch
-    const slow = fetchWithRetry('https://example.org/slow.bin', {}, options(fetcher))
-    const queued = fetchWithRetry('https://example.org/queued.bin', {}, options(fetcher))
+      const slowBody = slow.then((response) => response.arrayBuffer())
 
-    await (await slow).arrayBuffer()
-    expect(bytes(await (await queued).arrayBuffer())).toEqual([9])
-    expect(calls.filter((url) => url.endsWith('/queued.bin'))).toHaveLength(1)
+      await vi.runAllTimersAsync()
+      await slowBody
+      expect(bytes(await (await queued).arrayBuffer())).toEqual([9])
+      expect(calls.filter((url) => url.endsWith('/queued.bin'))).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("hears of bytes the page's other realms get from a host", async () => {
