@@ -11,7 +11,6 @@ import {
 } from '../data/coords'
 import {
   DEFAULT_CHANNEL_COLORS,
-  defaultChannelColor,
   type ImagePyramidChannelInfo,
   type ImagePyramidChunkGrid,
   type ImagePyramidChunkRead,
@@ -1808,11 +1807,6 @@ function buildOmeZarrChannels(options: {
     omeroChannels,
     options.array.dtype,
   )
-  const indexColored = hasBioformats2rawIndexColors(
-    options.attrs,
-    omeroChannels,
-    channelCount,
-  )
   const dtypeContrast = contrastForDataType(options.array.dtype)
   const zPlanes =
     options.sizeZ === undefined
@@ -1825,6 +1819,9 @@ function buildOmeZarrChannels(options: {
     const defaultColor = grayscale
       ? undefined
       : DEFAULT_CHANNEL_COLORS[index % DEFAULT_CHANNEL_COLORS.length]
+    const color = rgbChannel?.color ??
+      parseOmeroColor(omeroChannel?.color) ??
+      defaultColor ?? [255, 255, 255]
     const omeroLabel =
       typeof omeroChannel?.label === 'string' && omeroChannel.label.trim() !== ''
         ? omeroChannel.label.trim()
@@ -1837,10 +1834,6 @@ function buildOmeZarrChannels(options: {
         ? omeroLabel
         : undefined
     const name = ownName ?? rgbChannel?.name ?? `Channel ${index + 1}`
-    const color = rgbChannel?.color ??
-      (indexColored
-        ? defaultChannelColor({ index, name })
-        : (parseOmeroColor(omeroChannel?.color) ?? defaultColor)) ?? [255, 255, 255]
 
     return {
       id: `Channel:${index}`,
@@ -1885,40 +1878,6 @@ function isNativeRgbChannelSet(
     return (
       isRgbChannelLabel(label, channel) ||
       colorsEqual(parseOmeroColor(omeroChannel?.color), channel.color)
-    )
-  })
-}
-
-// bioformats2raw colours a channel whose OME-XML gives no colour or wavelength
-// red, green or blue by its index, so the DAPI channel of a converted Xenium
-// morphology OME-TIFF, channel 0, is red. Such channels take the colours an
-// OME-TIFF channel without one gets. bioformats2raw names its downsampling in
-// the multiscale metadata: Bio-Formats' SimpleImageScaler or an OpenCV method.
-function hasBioformats2rawIndexColors(
-  attrs: Readonly<Record<string, unknown>>,
-  omeroChannels: readonly Record<string, unknown>[],
-  channelCount: number,
-): boolean {
-  const multiscales = (objectRecord(attrs.ome) ?? attrs).multiscales
-  const method = Array.isArray(multiscales)
-    ? objectRecord(objectRecord(multiscales[0])?.metadata)?.method
-    : undefined
-
-  if (
-    typeof method !== 'string' ||
-    (method !== 'loci.common.image.SimpleImageScaler' &&
-      !method.startsWith('org.opencv.imgproc.Imgproc.')) ||
-    channelCount < 2 ||
-    omeroChannels.length !== channelCount
-  ) {
-    return false
-  }
-
-  return omeroChannels.every((channel, index) => {
-    const indexColor = RGB_CHANNELS[index % RGB_CHANNELS.length]?.color
-
-    return (
-      indexColor !== undefined && colorsEqual(parseOmeroColor(channel.color), indexColor)
     )
   })
 }
