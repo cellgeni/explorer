@@ -16,6 +16,10 @@ import {
   genePanelLoadFailed,
   genePanelLoadReady,
   genePanelLoadStarted,
+  genePanelSearchColumnFailed,
+  genePanelSearchColumnReady,
+  genePanelSearchColumnStarted,
+  geneSearchColumnLabel,
   geneExpressionModeLabel,
   geneExpressionBatchScaleKey,
   geneExpressionScaleDomainWith,
@@ -75,6 +79,84 @@ describe('geneControlsModel', () => {
       url: 'https://example.test/output',
       error,
     })
+  })
+
+  it('picks the var column the gene search matches besides the names', () => {
+    const url = 'https://example.test/cellxgene.h5ad'
+    const columns = [
+      { key: '_index', index: true },
+      { key: 'feature_biotype', index: false },
+    ]
+    const ready = genePanelLoadReady(
+      url,
+      ['MYH7'],
+      new Map([['MYH7', 'ENSG00000092054']]),
+      { columns, column: '_index' },
+    )
+
+    expect(ready).toMatchObject({ search: { columns, column: '_index' } })
+    // A table without text columns has no picker.
+    expect(
+      genePanelLoadReady(url, ['MYH7'], new Map(), { columns: [], column: null }),
+    ).not.toHaveProperty('search')
+
+    // The old column is matched until the new one is read.
+    const pending = genePanelSearchColumnStarted(ready, url, 'feature_biotype')
+    expect(pending).toMatchObject({
+      aliases: new Map([['MYH7', 'ENSG00000092054']]),
+      search: { columns, column: '_index', pending: 'feature_biotype' },
+    })
+    expect(
+      genePanelSearchColumnReady(
+        pending,
+        url,
+        'feature_biotype',
+        new Map([['MYH7', 'protein_coding']]),
+      ),
+    ).toEqual({
+      status: 'ready',
+      url,
+      genes: ['MYH7'],
+      aliases: new Map([['MYH7', 'protein_coding']]),
+      search: { columns, column: 'feature_biotype' },
+    })
+    expect(
+      genePanelSearchColumnFailed(pending, url, 'feature_biotype', 'Could not read'),
+    ).toMatchObject({
+      aliases: new Map([['MYH7', 'ENSG00000092054']]),
+      search: { columns, column: '_index', error: 'Could not read' },
+    })
+
+    // None drops the aliases at once, and a later read of another column is
+    // not applied.
+    const none = genePanelSearchColumnStarted(pending, url, null)
+    expect(none).toEqual({
+      status: 'ready',
+      url,
+      genes: ['MYH7'],
+      search: { columns, column: null },
+    })
+    expect(
+      genePanelSearchColumnReady(none, url, 'feature_biotype', new Map([['MYH7', 'x']])),
+    ).toBe(none)
+
+    // Picking the column already matched clears a pending read and its error.
+    expect(genePanelSearchColumnStarted(pending, url, '_index')).toMatchObject({
+      search: { columns, column: '_index' },
+    })
+    expect(genePanelSearchColumnStarted(pending, url, '_index')).not.toHaveProperty(
+      'search.pending',
+    )
+
+    // Another dataset's panel is left alone.
+    expect(genePanelSearchColumnStarted(ready, 'https://example.test/other', null)).toBe(
+      ready,
+    )
+    expect(geneSearchColumnLabel(columns[0]!)).toBe('Index')
+    expect(geneSearchColumnLabel({ key: 'gene_ids', index: true })).toBe(
+      'gene_ids (index)',
+    )
+    expect(geneSearchColumnLabel(columns[1]!)).toBe('feature_biotype')
   })
 
   it('constructs gene expression transitions', () => {

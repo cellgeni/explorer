@@ -124,6 +124,13 @@
   overflow-wrap: anywhere;
 }
 
+.gene-search-column-note {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  overflow-wrap: anywhere;
+}
+
 .gene-set-list {
   display: grid;
   gap: 4px;

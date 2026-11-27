@@ -3,6 +3,7 @@ import type {
   GeneExpressionLoadMode,
 } from '../../data/geneExpressionLod'
 import { escapeLinkPart, unescapeLinkPart } from '../../data/shareableState'
+import type { GeneSearchColumn, GeneSearchColumns } from '../../datasets/h5adDataset'
 import type {
   GeneExpressionBatch,
   GeneExpressionBatchTiming,
@@ -28,8 +29,18 @@ export type GenePanelState<ErrorType = unknown> =
       // Another name each gene can be searched by, such as an H5AD gene's
       // Ensembl ID when it is listed by symbol.
       readonly aliases?: ReadonlyMap<string, string>
+      // The var columns `aliases` can come from (AnnData tables with any).
+      readonly search?: GeneSearchColumnState
     }
   | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
+
+// `column` is the one `aliases` holds.
+export interface GeneSearchColumnState extends GeneSearchColumns {
+  // A column being read to replace it.
+  readonly pending?: string
+  // Why the last column picked could not be read.
+  readonly error?: string
+}
 
 export const IDLE_GENE_PANEL_STATE: GenePanelState<never> = { status: 'idle' }
 
@@ -103,13 +114,105 @@ export function genePanelLoadReady(
   url: string,
   genes: readonly string[],
   aliases?: ReadonlyMap<string, string>,
+  searchColumns?: GeneSearchColumns,
 ): GenePanelState<never> {
   return {
     status: 'ready',
     url,
     genes: [...genes].sort((left, right) => left.localeCompare(right)),
     ...(aliases === undefined || aliases.size === 0 ? {} : { aliases }),
+    ...(searchColumns === undefined || searchColumns.columns.length === 0
+      ? {}
+      : { search: searchColumns }),
   }
+}
+
+// Picks the var column the search matches besides the names: null matches
+// the names only, at once; a column is read first, and the search keeps
+// matching the last one until then. States for another panel stay as they
+// are.
+export function genePanelSearchColumnStarted<ErrorType>(
+  state: GenePanelState<ErrorType>,
+  url: string,
+  column: string | null,
+): GenePanelState<ErrorType> {
+  if (state.status !== 'ready' || state.url !== url || state.search === undefined) {
+    return state
+  }
+
+  const { columns } = state.search
+
+  if (column === null) {
+    return readyGenePanel(state, undefined, { columns, column: null })
+  }
+
+  return {
+    ...state,
+    search:
+      column === state.search.column
+        ? { columns, column }
+        : { columns, column: state.search.column, pending: column },
+  }
+}
+
+export function genePanelSearchColumnReady<ErrorType>(
+  state: GenePanelState<ErrorType>,
+  url: string,
+  column: string,
+  aliases: ReadonlyMap<string, string>,
+): GenePanelState<ErrorType> {
+  if (!isSearchColumnPending(state, url, column)) {
+    return state
+  }
+
+  return readyGenePanel(state, aliases, { columns: state.search.columns, column })
+}
+
+export function genePanelSearchColumnFailed<ErrorType>(
+  state: GenePanelState<ErrorType>,
+  url: string,
+  column: string,
+  error: string,
+): GenePanelState<ErrorType> {
+  if (!isSearchColumnPending(state, url, column)) {
+    return state
+  }
+
+  return {
+    ...state,
+    search: { columns: state.search.columns, column: state.search.column, error },
+  }
+}
+
+type ReadyGenePanelState = Extract<GenePanelState<never>, { readonly status: 'ready' }>
+
+// The panel with other aliases, from `search`'s column.
+function readyGenePanel(
+  state: ReadyGenePanelState,
+  aliases: ReadonlyMap<string, string> | undefined,
+  search: GeneSearchColumnState,
+): ReadyGenePanelState {
+  return {
+    status: 'ready',
+    url: state.url,
+    genes: state.genes,
+    ...(aliases === undefined || aliases.size === 0 ? {} : { aliases }),
+    search,
+  }
+}
+
+function isSearchColumnPending<ErrorType>(
+  state: GenePanelState<ErrorType>,
+  url: string,
+  column: string,
+): state is ReadyGenePanelState & { readonly search: GeneSearchColumnState } {
+  return state.status === 'ready' && state.url === url && state.search?.pending === column
+}
+
+// The var index by its key, unless it has the default one.
+export function geneSearchColumnLabel(column: GeneSearchColumn): string {
+  if (!column.index) return column.key
+  return column.key === '_index' ? 'Index' : `${column.key} (index)`
 }
 
 export function genePanelLoadFailed<ErrorType>(

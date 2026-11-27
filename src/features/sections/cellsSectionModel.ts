@@ -69,6 +69,9 @@ export interface GeneSelectionModel {
   // The score mode a saved gene set keeps.
   readonly scoreMode: GeneExpressionScoreMode
   readonly onToggle: (gene: string) => void
+  // Picks the var column the search matches besides the names (null for
+  // none), from the panel's `search`.
+  readonly onSearchColumnChange: (column: string | null) => void
   // Replaces the selection and colours cells by it.
   readonly onApply: (
     genes: readonly string[],
@@ -161,6 +164,7 @@ export interface CellsSectionModelInput {
   >
   readonly setGeneExpressionScaleRange: Dispatch<SetStateAction<GeneScaleRange>>
   readonly setGeneExpressionScoreMode: Dispatch<SetStateAction<GeneExpressionScoreMode>>
+  readonly setGeneSearchColumn: (column: string | null) => void
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
   readonly setSavedGeneSets: Dispatch<SetStateAction<readonly SavedGeneSet[]>>
@@ -216,6 +220,7 @@ export function useCellsSectionModel({
   setGeneExpressionScaleDomain,
   setGeneExpressionScaleRange,
   setGeneExpressionScoreMode,
+  setGeneSearchColumn,
   setManualTranscriptExactRequestKey,
   setObservationColorMode,
   setSavedGeneSets,
@@ -319,6 +324,7 @@ export function useCellsSectionModel({
       selected: selectedGenes,
       scoreMode: geneExpressionScoreMode,
       onToggle: toggleGene,
+      onSearchColumnChange: setGeneSearchColumn,
       onApply: applyGenes,
       savedSets: savedGeneSets,
       onSavedSetsChange: setSavedGeneSets,
