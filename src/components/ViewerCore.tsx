@@ -43,6 +43,7 @@ import {
   type ViewerSelectionHighlight,
 } from './viewerSelectionModel'
 import type { ViewerLegendSection } from './viewerLegendTypes'
+import type { LegendPlacement } from './viewerLegendPlacement'
 import {
   CellBoundaryHoverTooltip,
   GridCellHoverTooltip,
@@ -318,6 +319,7 @@ export function ViewerCore({
   onCancelLoadingTask,
   legendSections = EMPTY_LEGEND_SECTIONS,
   legend = true,
+  legendMovable = true,
   showZoomLevel = false,
   selectionHighlight = null,
   onClearSelection,
@@ -448,6 +450,7 @@ export function ViewerCore({
       {...(onCancelLoadingTask === undefined ? {} : { onCancelLoadingTask })}
       legendSections={legend ? legendSections : EMPTY_LEGEND_SECTIONS}
       screenshotLegendSections={legendSections}
+      legendMovable={legendMovable}
       showZoomLevel={showZoomLevel}
       selectionHighlight={selectionHighlight}
       {...(onClearSelection === undefined ? {} : { onClearSelection })}
@@ -550,6 +553,7 @@ interface ViewerSurfaceProps {
   readonly legendSections: readonly ViewerLegendSection[]
   // The legend's sections whether or not Settings shows it, for screenshots.
   readonly screenshotLegendSections: readonly ViewerLegendSection[]
+  readonly legendMovable: boolean
   readonly showZoomLevel: boolean
   readonly selectionHighlight: ViewerSelectionHighlight | null
   readonly onClearSelection?: () => void
@@ -650,6 +654,7 @@ function ViewerSurface({
   onCancelLoadingTask,
   legendSections,
   screenshotLegendSections,
+  legendMovable,
   showZoomLevel,
   selectionHighlight,
   onClearSelection,
@@ -708,6 +713,9 @@ function ViewerSurface({
   onMagicLensLeave,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
+  // Where the legend was moved to, kept while it is hidden or has nothing to
+  // show, and on narrow screens, which keep it in the stack.
+  const [legendPlacement, setLegendPlacement] = useState<LegendPlacement | null>(null)
   // Dismiss takes its banner away; focus goes to the view.
   const keepFocusOnDismiss = useKeepFocus(() => frameRef.current)
   const keyboardHelpId = useId()
@@ -2668,43 +2676,49 @@ function ViewerSurface({
       loadingTasks.length === 0 &&
       viewportMessage === null &&
       deviceLoss.notice === null ? null : (
-        <div className="viewport-notification-stack">
-          <ViewerLegend
-            sections={legendSections}
-            onCategoryVisibilityChange={onLegendCategoryVisibilityChange}
-            onShowMore={onLegendShowMore}
-            onPythonClear={onLegendPythonClear}
-          />
-          <LoadingIndicator tasks={loadingTasks} onCancel={onCancelLoadingTask} />
-          {viewportMessage === null ? null : viewportMessage.kind === 'error' ? (
-            <div className="viewport-message viewport-message-error">
-              <p aria-live="assertive">{viewportMessage.text}</p>
-              <IconButton
-                title="Dismiss"
-                icon={<CloseIcon />}
-                onClick={() => {
-                  keepFocusOnDismiss()
-                  setDismissedViewportError(viewportMessage.text)
-                }}
-              />
-            </div>
-          ) : (
-            <p className="viewport-message" aria-live="polite">
-              {viewportMessage.text}
-            </p>
-          )}
-          {deviceLoss.notice === null ? null : (
-            <div
-              className={`viewport-message ${deviceLoss.notice === 'stopped' ? 'viewport-message-error' : 'viewport-message-notice'}`}
-            >
-              <p role="status">{DEVICE_LOSS_NOTICES[deviceLoss.notice]}</p>
-              <IconButton
-                title="Dismiss"
-                icon={<CloseIcon />}
-                onClick={deviceLoss.dismissNotice}
-              />
-            </div>
-          )}
+        // Over the whole view, so a legend moved out of the stack is placed
+        // in the view.
+        <div className="viewport-notification-layer">
+          <div className="viewport-notification-stack">
+            <ViewerLegend
+              sections={legendSections}
+              onCategoryVisibilityChange={onLegendCategoryVisibilityChange}
+              onShowMore={onLegendShowMore}
+              onPythonClear={onLegendPythonClear}
+              placement={legendMovable ? legendPlacement : null}
+              onPlacementChange={legendMovable ? setLegendPlacement : undefined}
+            />
+            <LoadingIndicator tasks={loadingTasks} onCancel={onCancelLoadingTask} />
+            {viewportMessage === null ? null : viewportMessage.kind === 'error' ? (
+              <div className="viewport-message viewport-message-error">
+                <p aria-live="assertive">{viewportMessage.text}</p>
+                <IconButton
+                  title="Dismiss"
+                  icon={<CloseIcon />}
+                  onClick={() => {
+                    keepFocusOnDismiss()
+                    setDismissedViewportError(viewportMessage.text)
+                  }}
+                />
+              </div>
+            ) : (
+              <p className="viewport-message" aria-live="polite">
+                {viewportMessage.text}
+              </p>
+            )}
+            {deviceLoss.notice === null ? null : (
+              <div
+                className={`viewport-message ${deviceLoss.notice === 'stopped' ? 'viewport-message-error' : 'viewport-message-notice'}`}
+              >
+                <p role="status">{DEVICE_LOSS_NOTICES[deviceLoss.notice]}</p>
+                <IconButton
+                  title="Dismiss"
+                  icon={<CloseIcon />}
+                  onClick={deviceLoss.dismissNotice}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </>

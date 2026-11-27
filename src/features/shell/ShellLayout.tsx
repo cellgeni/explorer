@@ -588,11 +588,14 @@ function useCanvasCornerSizes(
 }
 
 // The stack is a fixed-width column; what covers the canvas is its widest
-// child, such as a 260 px legend without the loading list.
+// child, such as a 260 px legend without the loading list, but not a legend
+// moved out of it into the view.
 function contentRight(element: Element): number {
   return Math.max(
     element.getBoundingClientRect().left,
-    ...Array.from(element.children, (child) => child.getBoundingClientRect().right),
+    ...Array.from(element.children)
+      .filter((child) => !child.classList.contains('is-moved'))
+      .map((child) => child.getBoundingClientRect().right),
   )
 }
 

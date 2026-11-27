@@ -381,7 +381,8 @@ resized or read):
 - Points, outlines and text keep their size against the frame, so the PNG
   looks as the screen does, only sharper.
 - The marks are drawn from their models at the PNG's scale. The legend leaves
-  out its controls and the classes hidden on the map. Tooltips, the
+  out its controls and the classes hidden on the map, and is drawn at the
+  bottom left wherever it was moved to on screen. Tooltips, the
   crosshair, the readouts, tool hints, a shape or measurement being drawn,
   the minimap and the zoom buttons are left out.
 
@@ -1461,6 +1462,20 @@ for each of these, scales first and category lists last:
 
 Transcript count, the default, has no legend. Hidden cells drop their legend.
 
+Dragging the header moves the legend anywhere in the view
+(`useLegendMove.ts`, `viewerLegendPlacement.ts`); a click without a drag still
+collapses it. The grip at the header's right (`Move the legend`) moves it
+20 px per arrow key and reads out where it is ("88 px from the top, 128 px
+from the right"). A moved legend keeps to the corner nearer its centre as the
+window resizes or the legend opens and closes, and stays 12 px inside the
+view, its list scrolling where the view is short. Dropping it in the
+bottom-left corner, Home on the grip or a double-click on it puts it back
+above the loading indicator. The place lasts while the legend is hidden or
+has nothing to show, and across datasets, but not a reload. Cards and toasts
+stop treating the bottom-left corner as taken while it is moved. Under 860 px
+it stays in the corner, without the grip, and goes back to its place on a
+wider screen.
+
 ### Navigation
 
 Mouse: drag to pan, scroll or pinch to zoom, double-click to zoom in. Zoom is
@@ -1992,6 +2007,8 @@ stylesheet's narrow rules use too) the shell folds up:
   once the screen is 860 px or wider.
 - A full-width panel's grip changes only its height (up and down arrow
   keys), so the width it has on a wider screen stays.
+- The legend stays at the bottom left and cannot be moved; one moved on a
+  wider screen goes back to its place there.
 
 On any screen, a popover from the top bar (the menus, Help, Settings and the
 tools' options) opens under its button but stays 8 px inside the window

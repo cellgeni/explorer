@@ -82,6 +82,9 @@ export interface ViewerCoreProps {
   readonly legendSections?: readonly ViewerLegendSection[]
   // Settings › Show legend; off hides the legend but not the loading list.
   readonly legend?: boolean
+  // Whether the legend can be moved out of the bottom-left stack; not on
+  // narrow screens, where it stays above the docked cards.
+  readonly legendMovable?: boolean
   // The selected cell, spot or bin, marked over the canvas. Esc on the canvas
   // calls onClearSelection.
   readonly selectionHighlight?: ViewerSelectionHighlight | null

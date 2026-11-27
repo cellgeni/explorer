@@ -1,6 +1,9 @@
-import { memo, useState } from 'react'
+import { memo, useId, useRef, useState } from 'react'
 import { SHOW_ONLY_HINT, showOnlyClick } from '../utils/altClick'
-import { ChevronDownIcon, CloseIcon } from './ui'
+import { ChevronDownIcon, CloseIcon, GripIcon, IconButton } from './ui'
+import { classNames } from './ui/classNames'
+import { useLegendMove } from './useLegendMove'
+import { legendPlacementText, type LegendPlacement } from './viewerLegendPlacement'
 import {
   LEGEND_CATEGORY_LIMIT,
   type CategoryLegendSection,
@@ -26,37 +29,84 @@ interface ViewerLegendProps {
   readonly onShowMore?: ((sectionId: string) => void) | undefined
   // A Python layer's clear button, with the item's id.
   readonly onPythonClear?: ((itemId: string) => void) | undefined
+  // Where it was moved to; null keeps it in the bottom-left stack.
+  readonly placement?: LegendPlacement | null | undefined
+  // Given, it can be moved: by dragging its header, or from its grip.
+  readonly onPlacementChange?: ((placement: LegendPlacement | null) => void) | undefined
 }
 
-// The canvas legend in the bottom-left stack. It sits next to the deck.gl
-// canvas, never inside it, so collapsing it or hovering it does not redraw
-// the map.
+function keepPlacement() {}
+
+// The canvas legend in the bottom-left stack, or wherever in the view it was
+// moved to. It sits next to the deck.gl canvas, never inside it, so
+// collapsing it, hovering it or dragging it does not redraw the map.
 export const ViewerLegend = memo(function ViewerLegend({
   sections,
   onCategoryVisibilityChange,
   onShowMore,
   onPythonClear,
+  placement = null,
+  onPlacementChange,
 }: ViewerLegendProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const legendRef = useRef<HTMLElement>(null)
+  const positionId = useId()
+  const movable = onPlacementChange !== undefined
+  const move = useLegendMove(
+    legendRef,
+    sections.length > 0,
+    movable ? placement : null,
+    onPlacementChange ?? keepPlacement,
+  )
 
   if (sections.length === 0) {
     return null
   }
 
   return (
-    <section className="viewer-legend" aria-label="Legend">
-      <button
-        type="button"
-        className="viewer-legend-toggle"
-        aria-expanded={!collapsed}
-        title={collapsed ? 'Show the legend' : 'Hide the legend'}
-        onClick={() => {
-          setCollapsed((current) => !current)
-        }}
+    <section
+      ref={legendRef}
+      className={classNames(
+        'viewer-legend',
+        move.moved && 'is-moved',
+        move.dragging && 'is-dragging',
+      )}
+      style={move.style}
+      aria-label="Legend"
+    >
+      <div
+        className={classNames('viewer-legend-header', movable && 'is-movable')}
+        {...(movable ? move.headerProps : {})}
       >
-        <span>Legend</span>
-        <ChevronDownIcon />
-      </button>
+        <button
+          type="button"
+          className="viewer-legend-toggle"
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Show the legend' : 'Hide the legend'}
+          onClick={() => {
+            setCollapsed((current) => !current)
+          }}
+        >
+          <span>Legend</span>
+          <ChevronDownIcon />
+        </button>
+        {movable ? (
+          <IconButton
+            className="viewer-legend-move"
+            title="Move the legend: drag its header, or use the arrow keys. Double-click or Home puts it back."
+            aria-label="Move the legend"
+            aria-describedby={positionId}
+            icon={<GripIcon />}
+            {...move.gripProps}
+          />
+        ) : null}
+      </div>
+      {/* The grip's value: read with it, and again after each move. */}
+      {movable ? (
+        <span id={positionId} className="visually-hidden" aria-live="polite">
+          {legendPlacementText(move.drawn)}
+        </span>
+      ) : null}
       {collapsed ? null : (
         <div className="viewer-legend-body">
           {sections.map((section) =>
