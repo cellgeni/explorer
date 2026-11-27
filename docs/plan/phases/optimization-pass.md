@@ -314,7 +314,12 @@ M2, requests:
   - Probe every Visium HD bin size at once. Built in
     [#469](https://github.com/cellgeni/explorer/pull/469):
     [Shorter Request Chains On Load](#shorter-request-chains-on-load-2026-11-26).
-  - Pass the probe's size to hyparquet, so it skips its `HEAD`.
+  - Pass the probe's size to hyparquet, so it skips its `HEAD`. Not
+    adopted: Chromium already answers that `HEAD` from its cache. The
+    overview's reads waited for each other in that cache instead, and
+    Parquet Range reads now skip it, in
+    [#472](https://github.com/cellgeni/explorer/pull/472):
+    [Parquet Range Reads Skip The HTTP Cache](#parquet-range-reads-skip-the-http-cache).
   - Read AnnData Zarr obs columns, and embeddings, a few at a time.
   - Read a Xenium gene's three arrays together, and read the next
     transcript tiles ahead, within the point limit
@@ -1436,11 +1441,12 @@ Task O11, one PR per group of reads that waited for each other.
 
 [#469](https://github.com/cellgeni/explorer/pull/469). Detecting a Visium HD
 folder probed its tiers one after another, three requests for 2 µm, then
-8 µm, then 16 µm, and only then the eight segmented-output files (`probeVisiumHdBins`, `datasetFactory.ts`): four
-rounds of requests. They are now sent together, and their probes are still
-listed a tier at a time, then the segmented outputs, so a detection error
-reads as before. A manifest's own bins are still checked as listed, with
-the segmented outputs probed alongside them
+8 µm, then 16 µm, and only then the eight segmented-output files
+(`probeVisiumHdBins`, `datasetFactory.ts`): four rounds of requests. They
+are now sent together, and their probes are still listed a tier at a time,
+then the segmented outputs, so a detection error reads as before. A
+manifest's own bins are still checked as listed, with the segmented outputs
+probed alongside them
 ([Detection](../../modalities/visium-hd.md#detection)).
 
 There is no Visium HD folder in the fixtures, and the hosted reference is
@@ -1455,6 +1461,67 @@ all seventeen at once, and saves about three round trips.
 Test: `src/datasets/datasetFactory.test.ts` holds each output probe until
 released and counts the rounds: four (3, 3, 3 and 8 requests) before, one
 (17) after.
+
+### Parquet Range Reads Skip The HTTP Cache
+
+[#472](https://github.com/cellgeni/explorer/pull/472). The second group was
+to give hyparquet the Range probe's size, so that it would not send a
+`HEAD` for it. Built and measured, that saved nothing on hosts that send
+validators, as nearly all do: Chromium answers the `HEAD` from the probe's
+cached response (in 0 ms on the demo), so the footer read started as soon
+either way. From the first request to the host it started at 163–174 ms
+before and 170–224 ms after on the demo, and at 915–944 ms and 918–935 ms
+on the synthetic folder at 300 ms a request. Only from a host without
+validators did the footer read start a round trip sooner (1.22–1.24 s to
+0.94–0.95 s, in single runs). It is not adopted.
+
+Measuring it showed where the overview's time went. hyparquet asks for a
+file's column chunks together, but Chromium's HTTP cache lets one Range
+request to a URL through at a time, each when the one before has its
+headers. On the demo the 14 reads of `cells.parquet` went out about 100 ms
+apart, and at 300 ms a request the synthetic folder's 157 went one after
+another. The Parquet readers' Range requests now skip the cache
+(`cache: 'no-store'`, `rangeReadsWithoutHttpCache` in
+`src/data/rangeFetch.ts`), as TIFF tiles, Zarr shards and zip ranges
+already did. Their `HEAD`s keep it.
+
+Production builds of the base (`96187ad`, #469) and the branch, alternating,
+three runs each, with GPU drawing. Each run opens the Xenium dataset, then
+opens it again in a second tab, and times the overview's reads of
+`cells.parquet` (its `fetch` requests; DuckDB's are XHR) from the first
+request to the host:
+
+| Load                                                          | Base: first   | Branch: first | Base: second  | Branch: second |
+| ------------------------------------------------------------- | ------------- | ------------- | ------------- | -------------- |
+| Synthetic 1.4M-cell folder, 300 ms a request, with validators | 25.55–25.66 s | 9.11–9.25 s   | 25.55–25.57 s | 8.56–8.71 s    |
+| Xenium demo, hosted                                           | 3.17–3.77 s   | 3.14–3.90 s   | 3.14–4.06 s   | 2.66–3.47 s    |
+
+- **The demo** is limited by its host's bandwidth rather than by round
+  trips, so the change shows at higher latency.
+- **The HTTP cache** did not make a second load faster before, since
+  Chromium answered few of the overview's Range reads from it. The range
+  server answered 193 of a first load's 205 `cells.parquet` requests before
+  and 202 after, and 154 of a second load's 219 before and 166–174 of
+  198–224 after.
+- **Not timed:** the other readers given the same fetch (SpatialData
+  shapes, imported vector segmentations, Visium HD's overview and barcode
+  mappings). Their fixtures have one row group each.
+- **Checked on the way:** after the overview, DuckDB reads `cells.parquet`
+  again, one request at a time: 2.4–4.3 s on the demo and 5.5–19.9 s at
+  300 ms a request. That is the ROI warm-up's query for up to 5,000 cells
+  in view; on the demo the Log's "ROI warmup cells ready: 5,000 in 2.9 s"
+  matched a 2.87 s span of those reads. It is not the dataset's extent,
+  which outlines wait for through `dataset.meta()`: DuckDB answers
+  `readXeniumExtent`'s minima and maxima from the footer's statistics
+  (`EXPLAIN ANALYZE` shows no scan). Reading the extent with hyparquet
+  instead was tried, and outlines on a zoomed-in link came no sooner
+  (15.9–17.4 s against 15.0–17.3 s on the demo, 17.0–17.4 s against
+  17.0–17.1 s on the synthetic folder at 300 ms), so it is not adopted.
+
+Test: `src/data/hyparquetCells.test.ts` checks that the overview's reads
+over HTTP send their `HEAD` through the cache and their Range requests
+past it, and fails on the base. `src/data/rangeFetch.test.ts` covers the
+fetch.
 
 ## Closed Open Items
 

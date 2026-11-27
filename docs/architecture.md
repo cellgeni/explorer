@@ -605,6 +605,11 @@ to every later load of the file. A short range cached before this check
 `cache: 'no-store'` (`cacheFooterByteRanges` with a `fetcher`), as zip and
 TIFF ranges already were: the warm-up and the reader ask for the same footer
 at once, and Chromium can cut short one of two identical Range requests.
+The Parquet readers' other Range reads skip the cache too
+(`rangeReadsWithoutHttpCache`, `src/data/rangeFetch.ts`): a reader asks for
+a file's column chunks together, and Chromium let them out one at a time,
+each when the one before had its headers. Their `HEAD` keeps the cache,
+which answers it from the Range probe's response.
 
 A load that several callers wait on (range probes, opening an H5 matrix or
 Visium HD's `feature_slice.h5` in its worker, Visium HD barcode mappings) is a

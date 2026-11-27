@@ -12,6 +12,7 @@ import {
   defaultPersistentByteRangeCache,
   fetchKeepingValidator,
 } from './persistentByteRangeCache'
+import { rangeReadsWithoutHttpCache } from './rangeFetch'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { CellId } from './cellid'
@@ -199,7 +200,7 @@ async function fileFromUrl(
   const fetcher = fetchKeepingValidator(options.fetcher)
   const file = await asyncBufferFromUrl({
     url: options.url,
-    fetch: fetcher.fetch,
+    fetch: rangeReadsWithoutHttpCache(fetcher.fetch),
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
   const byteRangeCache =
