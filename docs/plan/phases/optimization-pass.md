@@ -383,10 +383,12 @@ M3, main thread:
       O15's numbers.
   - Built in [#485](https://github.com/cellgeni/explorer/pull/485):
     [A CSR Matrix Kept In The H5 Worker](#a-csr-matrix-kept-in-the-h5-worker-2026-11-27).
-- [ ] **O18. Large CSV files in a worker.** (S) Time both parses at a
+- [x] **O18. Large CSV files in a worker.** (S) Time both parses at a
       million rows, and move them to a worker if either blocks for more
       than 200 ms. The two `parseCsvRows` read quotes and delimiters
       differently, so merging them is not part of this task.
+  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+    [CSV Files Parsed In A Worker](#csv-files-parsed-in-a-worker-2026-11-27).
 
 M4, memory:
 
@@ -1915,6 +1917,60 @@ Tests: `src/datasets/h5adDataset.test.ts` reads a CSR H5AD by range through
 the in-process worker and checks a gene's counts, gene values, the cells'
 genes and the estimate, and that the page asked the worker to keep `/X` and
 never read `/X/data` or `/X/indices` whole.
+
+## CSV Files Parsed In A Worker (2026-11-27)
+
+Task O18. At a million rows, in Node, an embedding's projection parsed in
+0.46–0.66 s (`parseAnalysisEmbeddingCsv`, 32 MB) and an annotation file in
+1.18–1.32 s (`parseCustomAnnotationImport`, 40 MB), both well over the
+task's 200 ms. In the app, on the base of this task's PR:
+
+- **Loading the synthetic Xenium folder's UMAP** (1.4 million rows, 42 MB,
+  written for this measurement) was one stretch of 0.54–0.91 s, 0.32 s of
+  it the parse.
+- **Opening S6 with a 1M-row file in `annotationUrl=`** (`cell_id`, a
+  20-class `cluster` and a numeric `score`, 31 MB) held the main thread for
+  1.23–1.25 s at once, 0.70 s of it the parse.
+
+What changed:
+
+- **A worker parses both** (`src/data/csvTablesWorker.ts`,
+  `src/workers/csvTables.worker.ts`), with the parsers unchanged. A worker
+  is started for each file and exits once it has answered; where there is
+  no `Worker`, or it fails to start, the parse runs on the main thread.
+- **It sends columns back**: a projection's IDs and two `Float64Array`s, and
+  each imported track's IDs and values, which the page makes into objects.
+  In Node, receiving a million `{ cellId, value }` objects took 0.22–0.24 s
+  on the main thread, and columns with the objects made from them 22–40 ms.
+- **An annotation import is asynchronous**: it is dropped if another dataset
+  opens while the file is parsed, and holds its file's name meanwhile, so a
+  file whose name slugs alike is numbered apart. A parse error keeps its
+  name, which the import's error message is chosen by.
+- The embedding loader takes the parser as an option; the app passes the
+  worker's, so the worker does not import the module that starts it.
+
+Measured with unminified production builds of the base (#485) and the
+branch, alternating, three runs each, with GPU drawing.
+
+| Step                                    | Base: busy     | Branch: busy   | Base: longest  | Branch: longest |
+| --------------------------------------- | -------------- | -------------- | -------------- | --------------- |
+| S6 load with a 1M-row `annotationUrl=`  | 2,147–2,265 ms | 1,646–1,670 ms | 1,228–1,252 ms | 574–587 ms      |
+| Xenium, Load Embeddings (1.4M-row UMAP) | 1,004–1,079 ms | 567–596 ms     | 538–911 ms     | 341–425 ms      |
+
+- **Receiving** costs 25–29 ms of page time, and making the points 34 ms.
+- **What is left is not parsing.** The import's stretch is mostly checking
+  the file's IDs against the dataset's (`checkImportedCellIds`, 0.33 s for a
+  million look-ups) and colouring by the new classes. The embedding's is
+  mostly a Set of the 1.4 million point IDs that the status line makes
+  (`embeddingPointIds`, 0.20 s).
+- The page holds 778 MB after the import, against 967–972 MB, and 721–738
+  MB after the embedding, against 919–933 MB.
+
+Tests: `src/data/csvTablesWorker.test.ts` runs the worker's handler across a
+structured clone: the projection's columns make the main thread's points,
+missing headers are named, the import (with a formula-guarded label and an
+empty value) equals the main thread's, a format error keeps its name, a
+failed worker falls back, and an abort ends the worker.
 
 ## Closed Open Items
 

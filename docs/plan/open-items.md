@@ -56,7 +56,9 @@ Other gaps found in the review:
       [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13).
       Not listed until 2026-11-16: an annotation file named by
       `annotationUrl=` (`customAnnotations.ts`) and an embedding's projection
-      CSV (`analysisEmbeddings.ts`) are parsed there too.
+      CSV (`analysisEmbeddings.ts`) were parsed there too; since O18
+      (2026-11-27) a worker parses them
+      ([CSV Files Parsed In A Worker](phases/optimization-pass.md#csv-files-parsed-in-a-worker-2026-11-27)).
 - [ ] Per-URL caches that are never released (found 2026-11-16): one
       h5wasm worker per matrix file (`h5MatrixCache` in `gex.ts`, which also
       keeps `h5WorkerFile.ts`'s `FinalizationRegistry` from closing it), the

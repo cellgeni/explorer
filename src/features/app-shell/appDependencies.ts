@@ -8,6 +8,7 @@ import {
   loadDatasetAnalysisEmbeddings,
   type LoadDatasetAnalysisEmbeddingsOptions,
 } from '../../data/analysisEmbeddings'
+import { csvTablesInWorker } from '../../data/csvTablesWorker'
 import { loadDatasetGeneExpression } from '../../data/geneExpression'
 import { loadDatasetOverview } from '../../data/datasetOverview'
 import {
@@ -381,7 +382,12 @@ export const defaultAppDependencies = {
     loadAnnotationGroups: loadDatasetAnnotationGroups,
   },
   analysis: {
-    loadAnalysisEmbeddings: loadDatasetAnalysisEmbeddings,
+    // A projection is parsed in a worker (O18).
+    loadAnalysisEmbeddings: (baseUrl, options) =>
+      loadDatasetAnalysisEmbeddings(baseUrl, {
+        parseColumns: csvTablesInWorker.embeddingColumns,
+        ...options,
+      }),
   },
   roi: {
     loadRoiCells: loadDatasetRoiCells,
