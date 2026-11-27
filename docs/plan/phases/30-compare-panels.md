@@ -194,8 +194,11 @@ another dataset opens, unless the collection keeps it as a section (D3).
 - B5. `compareImage=` and `compareChannels=`.
 - B6. Tests: the loader per platform, the hook and `startingSettings`, the
   link, and App tests for showing a panel's image, its channels and cells
-  in the link, and a link's panel image. The e2e on a local OME-Zarr
-  fixture is still to write.
+  in the link, and a link's panel image. Two e2e smoke tests on local
+  two-channel OME-Zarr fixtures check the drawn pixels: the image beside
+  itself with a channel off in the panel only, unlinking, linking at an
+  offset and reset; and an unregistered collection section's image in its
+  panel while the first stays open.
 
 ### M3. The Same Image Beside (S–M) — built 2026-11-27
 
