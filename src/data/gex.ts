@@ -558,6 +558,11 @@ export async function selectedGeneRowsFromCellFeatureMatrixZarr(
     matrix.geneFeatureIndices,
     selectedGenes,
   )
+  // The cell IDs are read alongside the features. They are kept per matrix
+  // for its other readers, so a read made for a matrix without
+  // feature-major arrays is not wasted.
+  const cellIdDataRead = loadZarrMatrixCellIdData(url)
+  cellIdDataRead.catch(() => undefined)
   let features: readonly SelectedGeneFeatureRows[]
 
   try {
@@ -570,7 +575,7 @@ export async function selectedGeneRowsFromCellFeatureMatrixZarr(
     throw error
   }
 
-  const cellIdData = await loadZarrMatrixCellIdData(url)
+  const cellIdData = await cellIdDataRead
   const stride = matrix.cellIdStride
   options.onStageTiming?.(
     geneExpressionStageTiming(
@@ -880,17 +885,18 @@ async function loadZarrMatrixUncached(url: string): Promise<ZarrMatrixCache> {
   const featureTypes = readStringArrayAttribute(attrs, 'feature_types')
   const geneFeatureIndices = createGeneFeatureIndex(geneNames, featureTypes)
   const filteredGeneNames = geneNames.filter((_, index) => geneFeatureIndices.has(index))
-  const cellIdArray = await zarr.open(cellFeatures.resolve('cell_id'), { kind: 'array' })
+  // Opened together: from the zip each is a round trip or two, and a missing
+  // one is found in the zip's directory without a request (O11).
+  const [cellIdArray, cscIndptrArray, cscIndices, cscData] = await Promise.all([
+    zarr.open(cellFeatures.resolve('cell_id'), { kind: 'array' }),
+    openZarrArrayOrNull(cellFeatures, 'csc/indptr'),
+    openZarrArrayOrNull(cellFeatures, 'csc/indices'),
+    openZarrArrayOrNull(cellFeatures, 'csc/data'),
+  ])
   const nCells = expectShapeDimension(cellIdArray.shape, 0, 'cell_features/cell_id')
   const cellIdStride = cellIdArray.shape[1] ?? 2
-  const cscIndptrArray = await openZarrArrayOrNull(cellFeatures, 'csc/indptr')
   const [cscIndicesArray, cscDataArray] =
-    cscIndptrArray === null
-      ? [null, null]
-      : await Promise.all([
-          openZarrArrayOrNull(cellFeatures, 'csc/indices'),
-          openZarrArrayOrNull(cellFeatures, 'csc/data'),
-        ])
+    cscIndptrArray === null ? [null, null] : [cscIndices, cscData]
 
   return {
     cellFeatures,
@@ -1038,32 +1044,43 @@ async function gexFromFeatureMajorCellFeatureMatrix(
 }
 
 // Reads each feature's expressing cell rows and counts from the
-// feature-major arrays.
+// feature-major arrays. From the zipped store each read is two round trips,
+// the entry's local header and then its bytes, so the reads that do not wait
+// on each other go together (O11 in the optimization pass): the three
+// arrays' metadata, then every feature's pointers in one read, then each
+// feature's indices and data. Features are still read one at a time, since
+// neighbouring genes often share a chunk, which the byte-range cache then
+// holds for the next.
 async function readFeatureMajorRows(
   matrix: ZarrMatrixCache,
   features: readonly { readonly gene: string; readonly index: number }[],
 ): Promise<readonly SelectedGeneFeatureRows[]> {
-  const indptrArray = await zarr.open(matrix.cellFeatures.resolve('indptr'), {
-    kind: 'array',
-  })
-  const indicesArray = await zarr.open(matrix.cellFeatures.resolve('indices'), {
-    kind: 'array',
-  })
-  const dataArray = await zarr.open(matrix.cellFeatures.resolve('data'), {
-    kind: 'array',
-  })
+  const [indptrArray, indicesArray, dataArray] = await Promise.all(
+    (['indptr', 'indices', 'data'] as const).map((name) =>
+      zarr.open(matrix.cellFeatures.resolve(name), { kind: 'array' }),
+    ),
+  )
+
+  if (
+    indptrArray === undefined ||
+    indicesArray === undefined ||
+    dataArray === undefined ||
+    features.length === 0
+  ) {
+    return []
+  }
+
+  const firstIndex = Math.min(...features.map((feature) => feature.index))
+  const lastIndex = Math.max(...features.map((feature) => feature.index))
+  const pointers = expectUint32Array(
+    (await zarr.get(indptrArray, [zarr.slice(firstIndex, lastIndex + 2)])).data,
+    `cell_features/indptr features ${firstIndex}-${lastIndex}`,
+  )
   const rows: SelectedGeneFeatureRows[] = []
 
   for (const feature of features) {
-    const indptrChunk = await zarr.get(indptrArray, [
-      zarr.slice(feature.index, feature.index + 2),
-    ])
-    const indptr = expectUint32Array(
-      indptrChunk.data,
-      `cell_features/indptr feature ${feature.index}`,
-    )
-    const start = Number(indptr[0] ?? 0)
-    const end = Number(indptr[1] ?? start)
+    const start = Number(pointers[feature.index - firstIndex] ?? 0)
+    const end = Number(pointers[feature.index - firstIndex + 1] ?? start)
 
     if (end <= start) {
       rows.push({
@@ -1074,16 +1091,17 @@ async function readFeatureMajorRows(
       continue
     }
 
+    const [indices, data] = await Promise.all([
+      zarr.get(indicesArray, [zarr.slice(start, end)]),
+      zarr.get(dataArray, [zarr.slice(start, end)]),
+    ])
     rows.push({
       gene: feature.gene,
       rows: expectUint32Array(
-        (await zarr.get(indicesArray, [zarr.slice(start, end)])).data,
+        indices.data,
         `cell_features/indices feature ${feature.index}`,
       ),
-      counts: expectUint32Array(
-        (await zarr.get(dataArray, [zarr.slice(start, end)])).data,
-        `cell_features/data feature ${feature.index}`,
-      ),
+      counts: expectUint32Array(data.data, `cell_features/data feature ${feature.index}`),
     })
   }
 

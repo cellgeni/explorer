@@ -237,7 +237,10 @@ prune row groups.
    matrix. For up to 32 genes it first lists the genes' expressing rows from
    the feature-major arrays (`selectedGeneRowsFromCellFeatureMatrixZarr`), then
    reads the numeric columns of the cells in the box with DuckDB and joins them
-   by row. A few rows are checked by `cell_id` once per dataset; if
+   by row. The arrays are opened together, every gene's pointers come from one
+   read, and a gene's indices and data are read together, with the cell IDs
+   alongside; genes are read one at a time, since neighbours often share a
+   chunk. A few rows are checked by `cell_id` once per dataset; if
    `cells.parquet` and the matrix do not list cells in the same order, it falls
    back to step 3.
 3. Otherwise it selects the cells in the box with DuckDB and calls
