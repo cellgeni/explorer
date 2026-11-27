@@ -320,7 +320,10 @@ M2, requests:
     Parquet Range reads now skip it, in
     [#472](https://github.com/cellgeni/explorer/pull/472):
     [Parquet Range Reads Skip The HTTP Cache](#parquet-range-reads-skip-the-http-cache).
-  - Read AnnData Zarr obs columns, and embeddings, a few at a time.
+  - Read AnnData Zarr obs columns, and embeddings, a few at a time. Built
+    in [#475](https://github.com/cellgeni/explorer/pull/475):
+    [AnnData Zarr Arrays Read Together](#anndata-zarr-arrays-read-together).
+    No embeddings are read one after another.
   - Read a Xenium gene's three arrays together, and read the next
     transcript tiles ahead, within the point limit
     (`transcriptZarr.ts:208`).
@@ -1522,6 +1525,56 @@ Test: `src/data/hyparquetCells.test.ts` checks that the overview's reads
 over HTTP send their `HEAD` through the cache and their Range requests
 past it, and fails on the base. `src/data/rangeFetch.test.ts` covers the
 fetch.
+
+### AnnData Zarr Arrays Read Together
+
+[#475](https://github.com/cellgeni/explorer/pull/475). Opening an AnnData
+table read its arrays one after another (`readH5adCacheFromGroup`,
+`h5adDataset.ts`):
+
+1. the obs index's values, then its mask;
+2. the var index's values, then its mask;
+3. the coordinates;
+4. each obs column in turn, a categorical's codes and then its categories.
+
+From a Zarr store each array is a request, so the tiny fixture took 11
+rounds after its metadata. Now the obs and var indexes are read together,
+and the coordinates with the obs columns. The columns are read four at a
+time, in their order, and a column's arrays together. Where reads are
+started together they are still awaited in their old order, so a broken
+store reports the same error.
+
+Production builds of the base (`a4341d6`, #472) and the branch,
+alternating, three runs each, with the fixtures served by
+`scripts/range-server.mjs` at 300 ms a request. From the first request to
+the host, to the last; both builds sent the same requests:
+
+| Store                                      | Base: rounds | Branch: rounds | Base: last request | Branch: last request |
+| ------------------------------------------ | ------------ | -------------- | ------------------ | -------------------- |
+| `anndata-zarr/tiny.zarr`                   | 12–13        | 5              | 4.08–4.14 s        | 1.66 s               |
+| `anndata-zarr/stack.zarr`                  | 12–13        | 5              | 4.06–4.13 s        | 1.92–1.93 s          |
+| `spatialdata/image_cells.zarr` (its table) | 14           | 7–8            | 7.23–7.25 s        | 4.73–4.74 s          |
+
+The gene search was ready at 1.74 s rather than 4.15–4.20 s on the tiny
+store, and at 2.90–2.95 s rather than 5.44–5.45 s on the SpatialData
+store.
+
+- **H5AD files** read the same way. Read with h5wasm, in memory or in the
+  H5 worker, their reads are taken one at a time, so nothing changes; read
+  through a kerchunk or Icechunk reference, each is a request, and they go
+  together as from a Zarr store (not timed).
+- **Embeddings** are not read one after another. The app asks for one
+  kind at a time, and an AnnData table reads only that one.
+- **Lead, not taken:** for Xenium and Visium HD the analysis CSV loader
+  (`loadDatasetAnalysisEmbeddings`) ignores the kind asked for, and reads
+  every kind's CSV in turn, UMAP then t-SNE. Reading them together would
+  not show the view any sooner where the host's bandwidth is the limit;
+  reading only the kind asked for would, but the view's list of kinds
+  comes from what was read.
+
+Test: `src/datasets/h5adDataset.test.ts` holds the tiny store's requests and
+answers them a round at a time: its metadata takes 3 rounds, and took 11 on
+the base.
 
 ## Closed Open Items
 

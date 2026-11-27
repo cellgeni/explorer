@@ -2047,6 +2047,82 @@ describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
   })
 })
 
+// Holds each request until every request sent so far is answered together,
+// as one round trip, and counts the rounds an action takes. A round's
+// requests are those sent until none has been sent for 100 ms: decoding the
+// first chunks loads codecs, so the next round can take a while to start.
+function fetchInRounds(fetcher: typeof fetch) {
+  const waiting: (() => Promise<unknown>)[] = []
+  const held = ((input: RequestInfo | URL, init?: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      waiting.push(() => fetcher(input, init).then(resolve, reject))
+    })) as typeof fetch
+
+  async function roundsUntil(action: Promise<unknown>): Promise<number> {
+    let done = false
+    let failure: { readonly error: unknown } | null = null
+    void action.then(
+      () => {
+        done = true
+      },
+      (error: unknown) => {
+        done = true
+        failure = { error }
+      },
+    )
+    let rounds = 0
+
+    while (!done) {
+      let seen = -1
+      while (!done && (waiting.length === 0 || waiting.length !== seen)) {
+        seen = waiting.length
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+
+      if (!done) {
+        rounds += 1
+        await Promise.all(waiting.splice(0).map((answer) => answer()))
+      }
+    }
+
+    if (failure !== null) {
+      throw (failure as { readonly error: unknown }).error
+    }
+
+    return rounds
+  }
+
+  return { fetcher: held, roundsUntil }
+}
+
+describe('AnnDataH5adDataset reads from a Zarr store in few rounds (O11)', () => {
+  it('reads the indexes together, then the coordinates and obs columns', async () => {
+    const requests: string[] = []
+    const { fetcher, roundsUntil } = fetchInRounds(
+      annDataZarrFixtureFetcher({ requests }),
+    )
+    const dataset = new AnnDataH5adDataset({
+      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`,
+      zarr: true,
+      fetcher,
+    })
+
+    // The consolidated metadata, the two indexes' values and masks, then the
+    // coordinates and the obs columns. It took 11 rounds when each of those
+    // arrays waited for the one before, and each column's categories for its
+    // codes.
+    expect(await roundsUntil(dataset.meta())).toBe(3)
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        '/tiny.zarr/obs/cluster/codes/0',
+        '/tiny.zarr/obs/cluster/categories/0',
+        '/tiny.zarr/obsm/spatial/0.0',
+      ]),
+    )
+    await expect(dataset.meta()).resolves.toMatchObject({ platform: 'h5ad' })
+  })
+})
+
 describe('AnnDataH5adDataset layers and raw (plan 29)', () => {
   // Genes Actb, Gad1 and Gapdh, as X; raw adds Sst.
   const LAYERS: TinyH5adOptions = {
