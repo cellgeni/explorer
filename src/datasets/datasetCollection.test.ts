@@ -199,6 +199,56 @@ describe('parseDatasetCollection', () => {
     ])
   })
 
+  it('lists custom image layers for a dataset, resolved like the dataset', () => {
+    const collection = parse({
+      version: 1,
+      root: 'https://bucket.example.test/xenium/',
+      datasets: [
+        {
+          dataset: 'run-7',
+          customImages: [
+            { url: 'run-7/post-xenium/he_registered.ome.tif' },
+            { url: 'https://cdn.example.test/if.zarr', opacity: 0.6 },
+          ],
+        },
+        { dataset: 'run-8', customImages: [] },
+        { dataset: 'run-9' },
+      ],
+    })
+
+    expect(collection.datasets.map((entry) => entry.customImages)).toEqual([
+      [
+        {
+          path: 'run-7/post-xenium/he_registered.ome.tif',
+          url: 'https://bucket.example.test/xenium/run-7/post-xenium/he_registered.ome.tif',
+        },
+        {
+          path: 'https://cdn.example.test/if.zarr',
+          url: 'https://cdn.example.test/if.zarr',
+          opacity: 0.6,
+        },
+      ],
+      [],
+      undefined,
+    ])
+    expect(
+      parseError({
+        version: 1,
+        datasets: [
+          { dataset: 'a' },
+          { dataset: 'b', customImages: [{ url: 'he.tif', opacity: -1 }] },
+        ],
+      }),
+    ).toBe(
+      'collection.json: "datasets[1].customImages[0].opacity" must be a number from 0 to 1.',
+    )
+    expect(
+      parseError({ version: 1, datasets: [{ dataset: 'a', customImages: 'he.tif' }] }),
+    ).toBe(
+      'collection.json: "datasets[0].customImages" must be an array of objects with a "url".',
+    )
+  })
+
   it('rejects bad image entries', () => {
     expect(
       parseError({ version: 1, datasets: [{ dataset: 'a', image: 's3://bucket/a' }] }),

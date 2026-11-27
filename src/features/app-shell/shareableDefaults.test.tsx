@@ -155,6 +155,40 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
     })
   })
 
+  it('leaves out the manifest’s custom image layers and writes a list that differs', () => {
+    const he = 'https://example.test/he.ome.tif'
+    const fluorescence = 'https://example.test/if.zarr'
+    const manifest = manifestDefaultsToShareableState({
+      customImages: [
+        { path: he, url: he },
+        { path: fluorescence, url: fluorescence, opacity: 0.6 },
+      ],
+    }).state
+
+    expect(
+      withoutShareableDefaults(
+        { customImageUrls: [he, fluorescence], customImageOpacities: [1, 0.6] },
+        manifest,
+      ),
+    ).toEqual({})
+    // The same layers at other opacities: each written, 1 included, as the
+    // manifest's would otherwise return.
+    expect(
+      withoutShareableDefaults({ customImageUrls: [he, fluorescence] }, manifest),
+    ).toEqual({ customImageOpacities: [1, 1] })
+    // Another list replaces the manifest's whole; none is written empty.
+    expect(withoutShareableDefaults({ customImageUrls: [he] }, manifest)).toEqual({
+      customImageUrls: [he],
+    })
+    expect(
+      parseShareableState(
+        formatShareableState(withoutShareableDefaults({ customImageUrls: [] }, manifest)),
+      ).customImageUrls,
+    ).toEqual([])
+    // Without a manifest list, no layers leave the link silent.
+    expect(withoutShareableDefaults({ customImageUrls: [] })).toEqual({})
+  })
+
   it('compares the colour mode with the one a manifest’s genes open in', () => {
     // As examples/bia/S-BIAD2376.json: genes without colorCellsBy open in
     // Gene expression.

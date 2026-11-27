@@ -133,6 +133,14 @@ export interface DatasetManifestDefaults {
   readonly imageView?: string
   // `3d` opens cells placed in 3D in the 3D view.
   readonly cellView?: string
+  // Images opened as custom image layers, in order, as a link's
+  // `customImageUrl` list opens them.
+  readonly customImages?: readonly DatasetManifestCustomImage[]
+}
+
+// A custom image layer the dataset opens with, and its opacity.
+export interface DatasetManifestCustomImage extends DatasetManifestFile {
+  readonly opacity?: number
 }
 
 // Where the data comes from, shown in the info drawer so viewers can find,
@@ -412,7 +420,7 @@ export function parseDatasetManifest(
   const name = optionalString(json, 'name', '', fail)
   const description = optionalString(json, 'description', '', fail)
   const source = parseSource(json.source, fail)
-  const defaults = parseDefaults(json.defaults, fail)
+  const defaults = parseDefaults(json.defaults, rootUrl, fail)
   const base: DatasetManifestBase = {
     url: manifestUrl,
     rootUrl,
@@ -944,7 +952,10 @@ export const DATASET_MANIFEST_DEFAULT_KEYS = [
   ...DEFAULT_OPACITY_KEYS,
   ...DEFAULT_POSITIVE_NUMBER_KEYS,
   'geneRange',
+  'customImages',
 ] as const
+
+export const DATASET_MANIFEST_CUSTOM_IMAGE_KEYS = ['url', 'opacity'] as const
 
 // The field checks below are shared with the collection parser
 // (datasetCollection.ts), so both formats report errors the same way.
@@ -981,8 +992,10 @@ export function parseSource(
   return source
 }
 
+// `baseUrl` resolves the paths of `customImages`.
 export function parseDefaults(
   value: unknown,
+  baseUrl: string,
   fail: Fail,
 ): DatasetManifestDefaults | undefined {
   if (value === undefined) {
@@ -1042,7 +1055,7 @@ export function parseDefaults(
       continue
     }
 
-    if (typeof entry !== 'number' || !Number.isFinite(entry) || entry < 0 || entry > 1) {
+    if (!isOpacity(entry)) {
       fail(`"defaults.${key}" must be a number from 0 to 1.`)
     }
 
@@ -1067,7 +1080,69 @@ export function parseDefaults(
     defaults.geneRange = parseGeneRange(value.geneRange, fail)
   }
 
+  if (value.customImages !== undefined) {
+    defaults.customImages = parseCustomImages(
+      value.customImages,
+      'defaults.customImages',
+      baseUrl,
+      fail,
+    )
+  }
+
   return defaults as DatasetManifestDefaults
+}
+
+function isOpacity(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+}
+
+// A manifest's `defaults.customImages`, or a collection entry's
+// `customImages`, named `field` in errors.
+export function parseCustomImages(
+  value: unknown,
+  field: string,
+  baseUrl: string,
+  fail: Fail,
+): readonly DatasetManifestCustomImage[] {
+  if (!Array.isArray(value)) {
+    return fail(`"${field}" must be an array of objects with a "url".`)
+  }
+
+  const urls = new Set<string>()
+
+  return value.map((entry: unknown, index) => {
+    const name = `${field}[${index}]`
+
+    if (!isRecord(entry)) {
+      return fail(`"${name}" must be an object with a "url".`)
+    }
+
+    checkKeys(entry, DATASET_MANIFEST_CUSTOM_IMAGE_KEYS, `${name}.`, fail)
+    const path = optionalPath(entry, 'url', `${name}.`, fail)
+
+    if (path === undefined) {
+      return fail(`"${name}.url" is required.`)
+    }
+
+    const url = resolve(baseUrl, path)
+
+    // The viewer opens an image once, so a second entry would be dropped.
+    if (urls.has(url)) {
+      return fail(`"${name}.url" names an image an earlier entry names: ${path}.`)
+    }
+
+    urls.add(url)
+
+    if (entry.opacity !== undefined && !isOpacity(entry.opacity)) {
+      fail(`"${name}.opacity" must be a number from 0 to 1.`)
+    }
+
+    return {
+      path,
+      url,
+      ...(entry.opacity === undefined ? {} : { opacity: entry.opacity as number }),
+    }
+  })
 }
 
 // "p95": above 0, up to 100, as the viewer's links write it.

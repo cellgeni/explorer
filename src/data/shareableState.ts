@@ -57,6 +57,8 @@ export interface ShareableState {
   readonly annotationUrl?: string
   // Annotation sets loaded from the dataset itself, such as graphclust.
   readonly annotationGroupIds?: readonly string[]
+  // Empty (`customImageUrl=` alone) when the user removed the custom image
+  // layers the dataset's manifest opens.
   readonly customImageUrls?: readonly string[]
   readonly customImageOpacities?: readonly number[]
   // A segmentation imported onto an image (plan 25): `segmentation=` its URL,
@@ -193,7 +195,9 @@ export function parseShareableState(hash: string): ShareableState {
   const datasetReader = readString(params, 'reader')
   const annotationUrl = readString(params, 'annotationUrl')
   const annotationGroupIds = readEscapedCsv(params, 'groups')
-  const customImageUrls = readStrings(params, 'customImageUrl')
+  const customImageUrls = params.has('customImageUrl')
+    ? (readStrings(params, 'customImageUrl') ?? [])
+    : undefined
   const customImageOpacities = readUnitNumbers(params, 'customImageOpacity')
   const segmentationUrl = readString(params, 'segmentation')
   const segmentationFormat = readString(params, 'segmentationFormat')
@@ -675,6 +679,10 @@ export function formatShareableState(state: ShareableState): string {
   if (state.customImageUrls !== undefined) {
     for (const customImageUrl of state.customImageUrls) {
       setOptionalString(params, 'customImageUrl', customImageUrl, 'append')
+    }
+
+    if (state.customImageUrls.length === 0) {
+      params.append('customImageUrl', '')
     }
   }
 

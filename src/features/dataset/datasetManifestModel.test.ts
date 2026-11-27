@@ -96,6 +96,37 @@ describe('manifestDefaultsToShareableState', () => {
     })
   })
 
+  it('lists custom image layers as a link does, opacities only when one is not 1', () => {
+    const image = (url: string, opacity?: number) => ({
+      path: url,
+      url,
+      ...(opacity === undefined ? {} : { opacity }),
+    })
+
+    expect(
+      manifestDefaultsToShareableState({
+        customImages: [
+          image('https://example.test/HE.ome.tif'),
+          image('https://example.test/if.zarr', 0.6),
+        ],
+      }),
+    ).toEqual({
+      state: {
+        customImageUrls: [
+          'https://example.test/HE.ome.tif',
+          'https://example.test/if.zarr',
+        ],
+        customImageOpacities: [1, 0.6],
+      },
+      ignored: [],
+    })
+    expect(
+      manifestDefaultsToShareableState({
+        customImages: [image('https://example.test/he.ome.tif', 1)],
+      }).state,
+    ).toEqual({ customImageUrls: ['https://example.test/he.ome.tif'] })
+  })
+
   it('keeps only the defaults a shared link leaves unset', () => {
     expect(
       manifestDefaultsNotShared(

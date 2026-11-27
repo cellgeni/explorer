@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { parseDatasetCollection } from '../datasets/datasetCollection'
 import { parseDatasetManifest } from '../datasets/datasetManifest'
-import { datasetFileUrl, datasetFileUrlFor, setDatasetManifest } from './datasetFiles'
+import {
+  clearDatasetImages,
+  collectionCustomImagesFor,
+  datasetFileUrl,
+  datasetFileUrlFor,
+  registerCollectionImages,
+  setDatasetManifest,
+} from './datasetFiles'
 
 const FOLDER = 'https://acct.blob.core.windows.net/c/xenium?sv=2024&sig=abc'
 const TOKEN = '?sv=2024&sig=abc'
@@ -34,5 +42,34 @@ describe('dataset file URLs', () => {
     expect(datasetFileUrl(FOLDER, 'analysis/umap/projection.csv')).toBe(
       `https://acct.blob.core.windows.net/c/xenium/analysis/umap/projection.csv${TOKEN}`,
     )
+  })
+})
+
+describe('collection custom image layers', () => {
+  afterEach(() => {
+    clearDatasetImages()
+  })
+
+  const collection = (customImages?: unknown) =>
+    parseDatasetCollection(
+      {
+        version: 1,
+        datasets: [
+          { dataset: 'run-7/', ...(customImages === undefined ? {} : { customImages }) },
+        ],
+      },
+      'https://example.test/study/collection.json',
+    )
+
+  it('keeps a collection’s list per dataset until another collection lists the dataset', () => {
+    registerCollectionImages(collection([{ url: 'run-7/he.ome.tif' }]))
+
+    expect(collectionCustomImagesFor('https://example.test/study/run-7')).toEqual([
+      { path: 'run-7/he.ome.tif', url: 'https://example.test/study/run-7/he.ome.tif' },
+    ])
+
+    // A later collection without a list for the dataset drops it.
+    registerCollectionImages(collection())
+    expect(collectionCustomImagesFor('https://example.test/study/run-7')).toBeUndefined()
   })
 })

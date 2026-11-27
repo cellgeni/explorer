@@ -697,6 +697,71 @@ describe('parseDatasetManifest', () => {
     expect(defaults({ zoom: 2 })).toContain('unknown field "defaults.zoom"')
   })
 
+  it('reads custom image layers, resolving their paths like files', () => {
+    expect(
+      parse({
+        version: 1,
+        platform: 'xenium',
+        root: 'https://data.example.test/run-7/',
+        defaults: {
+          customImages: [
+            { url: 'post-xenium/he_registered.ome.tif' },
+            { url: ' https://cdn.example.test/if.zarr ', opacity: 0.6 },
+          ],
+        },
+      }).defaults,
+    ).toEqual({
+      customImages: [
+        {
+          path: 'post-xenium/he_registered.ome.tif',
+          url: 'https://data.example.test/run-7/post-xenium/he_registered.ome.tif',
+        },
+        {
+          path: 'https://cdn.example.test/if.zarr',
+          url: 'https://cdn.example.test/if.zarr',
+          opacity: 0.6,
+        },
+      ],
+    })
+    // Without a root, paths are the manifest folder's.
+    expect(
+      parse({
+        version: 1,
+        platform: 'image',
+        files: { image: 'slide.ome.tif' },
+        defaults: { customImages: [{ url: 'he.ome.tif' }] },
+      }).defaults?.customImages?.[0]?.url,
+    ).toBe('https://example.test/runs/sample-1/he.ome.tif')
+
+    const customImages = (value: unknown) =>
+      parseError({ version: 1, platform: 'xenium', defaults: { customImages: value } })
+
+    expect(customImages('he.ome.tif')).toContain(
+      '"defaults.customImages" must be an array of objects with a "url"',
+    )
+    expect(customImages(['he.ome.tif'])).toContain(
+      '"defaults.customImages[0]" must be an object with a "url"',
+    )
+    expect(customImages([{ opacity: 0.5 }])).toContain(
+      '"defaults.customImages[0].url" is required',
+    )
+    expect(customImages([{ url: 's3://bucket/he.ome.tif' }])).toContain(
+      '"defaults.customImages[0].url" must be a relative path or an http(s) URL',
+    )
+    expect(customImages([{ url: 'he.ome.tif', opacity: 2 }])).toContain(
+      '"defaults.customImages[0].opacity" must be a number from 0 to 1',
+    )
+    expect(customImages([{ url: 'he.ome.tif', name: 'H&E' }])).toContain(
+      'unknown field "defaults.customImages[0].name"',
+    )
+    expect(
+      customImages([
+        { url: 'he.ome.tif' },
+        { url: 'https://example.test/runs/sample-1/he.ome.tif' },
+      ]),
+    ).toContain('"defaults.customImages[1].url" names an image an earlier entry names')
+  })
+
   it('reads where the data comes from and checks the source fields', () => {
     expect(
       parse({

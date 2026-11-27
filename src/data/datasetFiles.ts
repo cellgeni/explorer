@@ -7,6 +7,7 @@ import {
   type DatasetFileRole,
   type DatasetImageAttachment,
   type DatasetManifest,
+  type DatasetManifestCustomImage,
   type DatasetManifestFile,
 } from '../datasets/datasetManifest'
 import { dropDatasets } from '../datasets/datasetCache'
@@ -45,6 +46,8 @@ export function datasetManifestFor(baseUrl: string): DatasetManifest | undefined
 // their placement) after the collection closes; a later collection listing
 // the same dataset replaces them.
 const datasetImages = new Map<string, DatasetImageAttachment>()
+// The custom image layers they list, kept the same way.
+const datasetCustomImages = new Map<string, readonly DatasetManifestCustomImage[]>()
 
 export function registerCollectionImages(collection: DatasetCollection): void {
   for (const entry of collection.datasets) {
@@ -54,6 +57,12 @@ export function registerCollectionImages(collection: DatasetCollection): void {
       datasetImages.delete(key)
     } else {
       datasetImages.set(key, entry.image)
+    }
+
+    if (entry.customImages === undefined) {
+      datasetCustomImages.delete(key)
+    } else {
+      datasetCustomImages.set(key, entry.customImages)
     }
   }
 }
@@ -72,9 +81,18 @@ export function collectionImageFor(baseUrl: string): DatasetImageAttachment | un
   return datasetImages.get(datasetUrlKey(baseUrl))
 }
 
+// The custom image layers a collection lists for the dataset, which replace
+// its manifest's.
+export function collectionCustomImagesFor(
+  baseUrl: string,
+): readonly DatasetManifestCustomImage[] | undefined {
+  return datasetCustomImages.get(datasetUrlKey(baseUrl))
+}
+
 // For tests.
 export function clearDatasetImages(): void {
   datasetImages.clear()
+  datasetCustomImages.clear()
 }
 
 // URL of a file inside a dataset. Relative paths resolve against the

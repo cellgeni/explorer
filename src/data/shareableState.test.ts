@@ -164,6 +164,20 @@ describe('shareableState', () => {
     expect(parseShareableState(hash).morphologyEnabledChannelIds).toEqual([])
   })
 
+  it('round-trips no custom image layers, in place of a manifest’s', () => {
+    const hash = formatShareableState({
+      datasetUrl: 'https://example.test/output',
+      customImageUrls: [],
+    })
+
+    expect(new URLSearchParams(hash.slice(1)).getAll('customImageUrl')).toEqual([''])
+    expect(parseShareableState(hash).customImageUrls).toEqual([])
+    expect(
+      parseShareableState('#xv=2&dataset=https%3A%2F%2Fexample.test%2Foutput')
+        .customImageUrls,
+    ).toBeUndefined()
+  })
+
   it('round-trips the Visium image, library, and off-tissue choice', () => {
     const hash = formatShareableState({
       visiumImage: 'lowres',

@@ -812,6 +812,22 @@
             { "type": "string", "pattern": "^\\s*(?:2d|3d)\\s*$" }
           ],
           "description": "The Cells section's View: 3d shows cells placed in 3D (a third column of AnnData obsm spatial) in the 3D view."
+        },
+        "customImages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "$ref": "#/$defs/path",
+                "description": "OME-TIFF, TIFF, QPTIFF, SVS or OME-Zarr image. Each name only once."
+              },
+              "opacity": { "$ref": "#/$defs/opacity" }
+            },
+            "required": ["url"],
+            "additionalProperties": false
+          },
+          "description": "Images opened as custom image layers over the dataset's own image, in order, as a link's customImageUrl list opens them. Each is placed by its own pixel size from the dataset's origin, so it must already be registered to the dataset. A link that lists custom image layers opens those instead."
         }
       },
       "additionalProperties": false

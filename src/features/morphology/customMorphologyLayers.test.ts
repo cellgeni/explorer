@@ -9,6 +9,7 @@ import {
   customMorphologyLayerLabel,
   customMorphologyLayerLoadFailed,
   customMorphologyLayerLoadStarted,
+  customImagesToOpen,
   isCustomMorphologyLayerChannelId,
 } from './customMorphologyLayers'
 
@@ -197,5 +198,45 @@ describe('customMorphologyLayers', () => {
     expect(layer.image).toBe(image)
     expect(layer.image.loader).toBe(imageLoader)
     expect(layer.channels[0]?.loader).toBe(channelLoader)
+  })
+})
+
+describe('customImagesToOpen', () => {
+  const manifest = {
+    customImageUrls: ['https://example.test/he.ome.tif', 'https://example.test/if.zarr'],
+    customImageOpacities: [1, 0.6],
+  }
+
+  it('opens the manifest’s layers when the link lists none', () => {
+    expect(customImagesToOpen(manifest, null)).toEqual([
+      { url: 'https://example.test/he.ome.tif', opacity: 1 },
+      { url: 'https://example.test/if.zarr', opacity: 0.6 },
+    ])
+    // The link's opacities for the manifest's layers.
+    expect(
+      customImagesToOpen(manifest, {
+        datasetUrl: 'https://example.test/run',
+        customImageOpacities: [0.5, 0.25],
+      }),
+    ).toEqual([
+      { url: 'https://example.test/he.ome.tif', opacity: 0.5 },
+      { url: 'https://example.test/if.zarr', opacity: 0.25 },
+    ])
+  })
+
+  it('opens only the link’s layers, at the link’s opacities, when it lists any', () => {
+    expect(
+      customImagesToOpen(manifest, {
+        datasetUrl: 'https://example.test/run',
+        customImageUrls: ['https://example.test/other.ome.tif'],
+      }),
+    ).toEqual([{ url: 'https://example.test/other.ome.tif' }])
+    expect(
+      customImagesToOpen(manifest, {
+        datasetUrl: 'https://example.test/run',
+        customImageUrls: [],
+      }),
+    ).toEqual([])
+    expect(customImagesToOpen({}, null)).toEqual([])
   })
 })

@@ -89,7 +89,38 @@ export function withoutShareableDefaults(
   const coordinateUnit = state.coordinateUnit ?? DEFAULT_SHAREABLE_STATE.coordinateUnit
   if (state.measurementUnit === coordinateUnit) delete result.measurementUnit
 
+  // Custom image layers go as one list: a link without one opens the
+  // manifest's, with the link's opacities if it has them; a link with one
+  // opens only its own, so it keeps an empty list (`customImageUrl=`) when
+  // the user removed the manifest's.
+  const imageUrls = state.customImageUrls
+  if (
+    imageUrls !== undefined &&
+    sameValue(imageUrls, datasetDefaults.customImageUrls ?? [])
+  ) {
+    delete result.customImageUrls
+    const opacities = layerOpacities(state.customImageOpacities, imageUrls.length)
+    if (
+      sameValue(
+        opacities,
+        layerOpacities(datasetDefaults.customImageOpacities, imageUrls.length),
+      )
+    ) {
+      delete result.customImageOpacities
+    } else {
+      result.customImageOpacities = opacities
+    }
+  }
+
   return result as ShareableState
+}
+
+// One opacity per layer: those left out are 1.
+function layerOpacities(
+  opacities: readonly number[] | undefined,
+  count: number,
+): readonly number[] {
+  return Array.from({ length: count }, (_, index) => opacities?.[index] ?? 1)
 }
 
 function sameValue(value: unknown, defaultValue: unknown): boolean {
