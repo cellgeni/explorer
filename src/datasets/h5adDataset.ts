@@ -261,6 +261,21 @@ export interface GeneReadNote {
   readonly action: string
 }
 
+// A var column the gene search can match besides the gene names.
+export interface GeneSearchColumn {
+  // The var key it is read from.
+  readonly key: string
+  // Whether it is the var index.
+  readonly index: boolean
+}
+
+// The var columns the gene search can match, and the one it matches (null for
+// none).
+export interface GeneSearchColumns {
+  readonly columns: readonly GeneSearchColumn[]
+  readonly column: string | null
+}
+
 export interface AnnDataMemorySource {
   readonly label: string
   // Stops reading when `signal` aborts.
@@ -339,6 +354,7 @@ interface H5adCache {
   readonly cellIds: readonly string[]
   readonly geneNames: readonly string[]
   readonly geneAliases: ReadonlyMap<string, string>
+  readonly geneSearchColumns: GeneSearchColumns
   readonly coordinates: readonly DataPoint[]
   // Each row's z, in the units of its coordinates, from a third column of
   // obsm `spatial`; null for cells in a plane.
@@ -1295,6 +1311,44 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   ): Promise<ReadonlyMap<string, string>> {
     const cache = await this.cache(options.signal)
     return cache.geneAliases
+  }
+
+  // The var columns the gene search can match besides the gene names, and
+  // the one `geneAliases` holds.
+  async geneSearchColumns(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<GeneSearchColumns> {
+    const cache = await this.cache(options.signal)
+    return cache.geneSearchColumns
+  }
+
+  // Gene name to its value in one of `geneSearchColumns`, for the genes whose
+  // value is set and differs from the name.
+  async geneSearchAliases(
+    column: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ReadonlyMap<string, string>> {
+    const cache = await this.cache(options.signal)
+
+    if (column === cache.geneSearchColumns.column) {
+      return cache.geneAliases
+    }
+
+    if (!cache.geneSearchColumns.columns.some(({ key }) => key === column)) {
+      throw new Error(`/var/${column} is not a text column of the gene table.`)
+    }
+
+    const values = await readGeneNameColumn(
+      expectGroup(cache.root.get('/var'), '/var'),
+      column,
+    )
+    options.signal?.throwIfAborted()
+
+    if (values === null || values.length !== cache.geneNames.length) {
+      throw new Error(`/var/${column} does not hold one value per gene.`)
+    }
+
+    return geneAliasesByName(cache.geneNames, values)
   }
 
   // Every obs row's id in matrix row order, including rows without
@@ -3517,6 +3571,7 @@ async function readH5adCacheFromGroup(
       varNames.indexNames === null
         ? new Map()
         : geneAliasesByName(geneNames, varNames.indexNames),
+    geneSearchColumns: geneSearchColumnsOf(varGroup, varNames, geneNames.length),
     coordinates,
     // Visium spots are placed on their slide, in 2D.
     depths: visiumPlacement === null ? (obsmCoordinates?.depths ?? null) : null,
@@ -4001,6 +4056,14 @@ async function readDataframeIndex(
   group: H5GroupLike,
   label: string,
 ): Promise<readonly string[]> {
+  return (await readDataframeIndexColumn(group, label)).values
+}
+
+// The dataframe's index, and the key it is stored under.
+async function readDataframeIndexColumn(
+  group: H5GroupLike,
+  label: string,
+): Promise<{ readonly key: string; readonly values: readonly string[] }> {
   const indexKey = readStringAttribute(group, '_index')
   const candidateKeys = [
     indexKey,
@@ -4014,14 +4077,20 @@ async function readDataframeIndex(
     const entity = group.get(key)
 
     if (isDataset(entity)) {
-      return readStringArray(await readDatasetValue(entity), `/${label}/${key}`)
+      return {
+        key,
+        values: readStringArray(await readDatasetValue(entity), `/${label}/${key}`),
+      }
     }
 
     if (isNullableArrayGroup(entity)) {
-      return readStringArray(
-        await readNullableArray(entity, `/${label}/${key}`),
-        `/${label}/${key}`,
-      )
+      return {
+        key,
+        values: readStringArray(
+          await readNullableArray(entity, `/${label}/${key}`),
+          `/${label}/${key}`,
+        ),
+      }
     }
   }
 
@@ -4030,28 +4099,101 @@ async function readDataframeIndex(
 
 // The first gene-name column with one value per gene and at least one
 // non-empty value replaces the var index; `indexNames` is then the index,
-// otherwise null. Categorical columns (CELLxGENE stores `feature_name` that
-// way) are decoded, and missing codes become empty names, which `uniqueNames`
-// replaces with `var-N`.
+// otherwise null, and `column` names the column. Categorical columns
+// (CELLxGENE stores `feature_name` that way) are decoded, and missing codes
+// become empty names, which `uniqueNames` replaces with `var-N`.
 async function readGeneNames(varGroup: H5GroupLike): Promise<{
   readonly names: readonly string[]
   readonly indexNames: readonly string[] | null
+  readonly indexKey: string
+  readonly column: string | null
 }> {
-  const indexNames = await readDataframeIndex(varGroup, 'var')
+  const index = await readDataframeIndexColumn(varGroup, 'var')
 
   for (const key of ['gene_symbols', 'gene_symbol', 'feature_name', 'name']) {
     const values = await readGeneNameColumn(varGroup, key)
 
     if (
       values !== null &&
-      values.length === indexNames.length &&
+      values.length === index.values.length &&
       values.some((value) => value !== '')
     ) {
-      return { names: values, indexNames }
+      return { names: values, indexNames: index.values, indexKey: index.key, column: key }
     }
   }
 
-  return { names: indexNames, indexNames: null }
+  return { names: index.values, indexNames: null, indexKey: index.key, column: null }
+}
+
+// The var columns the gene search can match besides the names: the index,
+// when a column names the genes, then each column that holds text (by its
+// AnnData encoding, or for older files without one, any but a Zarr number
+// array), in the group's order. Only metadata is read. The index is matched
+// by default, as `geneAliases` holds it.
+function geneSearchColumnsOf(
+  varGroup: H5GroupLike,
+  names: { readonly indexKey: string; readonly column: string | null },
+  geneCount: number,
+): GeneSearchColumns {
+  const columns: GeneSearchColumn[] =
+    names.column === null ? [] : [{ key: names.indexKey, index: true }]
+  const categories = varGroup.get('__categories')
+
+  for (const key of varGroup.keys()) {
+    if (key === names.indexKey || key === names.column || key.startsWith('__')) {
+      continue
+    }
+
+    if (
+      isVarTextColumn(
+        varGroup.get(key),
+        geneCount,
+        isGroup(categories) && isDataset(categories.get(key)),
+      )
+    ) {
+      columns.push({ key, index: false })
+    }
+  }
+
+  return { columns, column: names.column === null ? null : names.indexKey }
+}
+
+function isVarTextColumn(
+  entity: unknown,
+  geneCount: number,
+  hasCategories: boolean,
+): boolean {
+  if (isCategoricalGroup(entity)) {
+    return true
+  }
+
+  if (isGroup(entity)) {
+    return readStringAttribute(entity, 'encoding-type') === 'nullable-string-array'
+  }
+
+  if (
+    !isDataset(entity) ||
+    (entity.shape !== null &&
+      (entity.shape.length !== 1 || entity.shape[0] !== geneCount))
+  ) {
+    return false
+  }
+
+  if (hasCategories) {
+    return true
+  }
+
+  const encodingType = readStringAttribute(entity, 'encoding-type')
+
+  if (encodingType !== undefined) {
+    return encodingType === 'string-array'
+  }
+
+  if (isZarrDataset(entity)) {
+    return !/^(u?int\d+|float\d+|bool)$/.test(entity.source.array.dtype)
+  }
+
+  return entity.value === undefined || !isNumericArray(entity.value)
 }
 
 async function readGeneNameColumn(

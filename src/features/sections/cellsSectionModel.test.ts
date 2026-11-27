@@ -49,6 +49,7 @@ function input(overrides: Partial<CellsSectionModelInput> = {}): CellsSectionMod
     setGeneExpressionScaleDomain: vi.fn(),
     setGeneExpressionScaleRange: vi.fn(),
     setGeneExpressionScoreMode: vi.fn(),
+    setGeneSearchColumn: vi.fn(),
     setManualTranscriptExactRequestKey: vi.fn(),
     setObservationColorMode: vi.fn(),
     setSavedGeneSets: vi.fn(),

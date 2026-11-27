@@ -113,6 +113,7 @@ export function testCellsSectionModel(
       selected: [],
       scoreMode: 'sum',
       onToggle: vi.fn(),
+      onSearchColumnChange: vi.fn(),
       onApply: vi.fn(),
       savedSets: [],
       onSavedSetsChange: vi.fn(),
