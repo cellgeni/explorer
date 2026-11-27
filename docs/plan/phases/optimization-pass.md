@@ -225,7 +225,7 @@ M1, interaction:
   - A fast-check test: the patched arrays equal the full pass for random
     cells, batches and colour modes.
   - Measure S3.
-  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+  - Built in [#478](https://github.com/cellgeni/explorer/pull/478):
     [Expression Colours Written Per Batch](#expression-colours-written-per-batch-2026-11-27).
 - [x] **O4. Colour outlines without rebuilding them.** (M) ViewerCore takes
       the unstyled outlines and applies expression colours as colour
@@ -1864,7 +1864,7 @@ Closed by the pass's tasks:
       without being rebuilt since O4 (2026-11-25), and a batch after the
       first writes only its cells since O3 (2026-11-27): 0–28 ms rather
       than 55–96 ms a zoomed-in view on 1.4 million cells
-      ([#PR](https://github.com/cellgeni/explorer/pull/PR))
+      ([#478](https://github.com/cellgeni/explorer/pull/478))
       ([Expression Colours Written Per Batch](#expression-colours-written-per-batch-2026-11-27)).
 - [x] The Xenium demo blocked the main thread for up to 4 s at a time in the
       first 30 s after load (O5, 2026-11-26). CPU profiles on 2026-11-12 put
