@@ -5946,6 +5946,7 @@ export function App({ dependencies }: AppProps = {}) {
               onCancelLoadingTask={handleCancelLoadingTask}
               legendSections={canvasLegendSections}
               legend={showLegend}
+              legendMovable={!narrowScreen}
               showZoomLevel={debugMode}
               selectionHighlight={selectionHighlight}
               onClearSelection={handleClearSelection}

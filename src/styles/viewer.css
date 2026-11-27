@@ -867,15 +867,24 @@
   padding-block: 4px;
 }
 
-.viewport-notification-stack {
+/* The bottom-left stack sits in a layer over the whole view, so a legend
+   moved out of it is placed in the view rather than in the stack. */
+.viewport-notification-layer {
   position: absolute;
   z-index: 5;
-  left: 12px;
-  bottom: 12px;
-  display: grid;
-  width: min(420px, calc(100% - 36px));
-  gap: 6px;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 0 0 12px 12px;
   pointer-events: none;
+}
+
+.viewport-notification-stack {
+  display: grid;
+  width: min(420px, calc(100% - 24px));
+  gap: 6px;
 }
 
 /* Canvas legend (ViewerLegend.tsx), top of the bottom-left stack. */
@@ -890,12 +899,63 @@
   pointer-events: auto;
 }
 
+/* Moved, anywhere in the view, 12 px inside its edges; its style places it
+   (viewerLegendPlacement.ts). Its list scrolls where the view is short. */
+.viewer-legend.is-moved {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  width: min(260px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+}
+
+.viewer-legend.is-moved .viewer-legend-body {
+  min-height: 0;
+}
+
+.viewer-legend.is-dragging {
+  box-shadow: var(--shadow-2);
+}
+
+.viewer-legend.is-dragging,
+.viewer-legend.is-dragging .viewer-legend-header * {
+  cursor: move;
+}
+
+/* Dragging the header moves the legend; the grip at its right moves it by
+   arrow keys. */
+.viewer-legend-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.viewer-legend-header.is-movable {
+  touch-action: none;
+  user-select: none;
+}
+
+.viewer-legend-move.ui-icon-button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  margin-right: 2px;
+  color: var(--text-2);
+  cursor: move;
+}
+
+.viewer-legend-move.ui-icon-button:hover {
+  color: var(--text-1);
+}
+
 .viewer-legend-toggle {
   display: flex;
+  flex: 1;
   gap: var(--space-1);
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  min-width: 0;
   min-height: 28px;
   padding: 0 var(--space-2);
   border: 0;

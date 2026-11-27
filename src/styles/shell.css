@@ -1963,16 +1963,18 @@
 
 /* Clear of the zoom buttons and scale bar at the bottom right, 94 px wide
    and 12 px in (EXP-305). */
-.shell-body.is-narrow .viewport-notification-stack {
-  --stack-bottom: calc(
+.shell-body.is-narrow .viewport-notification-layer {
+  padding-top: 8px;
+  padding-bottom: calc(
     max(8px, env(safe-area-inset-bottom)) + var(--canvas-bottom-sheet-height, 0px)
   );
+}
 
-  bottom: var(--stack-bottom);
+.shell-body.is-narrow .viewport-notification-stack {
   display: flex;
   flex-direction: column;
-  width: min(420px, calc(100% - 16px - 110px));
-  max-height: calc(100% - var(--stack-bottom) - 8px);
+  width: min(420px, calc(100% - 8px - 110px));
+  max-height: 100%;
 }
 
 .shell-body.is-narrow .viewport-notification-stack > :not(.viewer-legend) {

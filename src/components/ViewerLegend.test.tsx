@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ViewerLegend } from './ViewerLegend'
+import type { LegendPlacement } from './viewerLegendPlacement'
 import type { ViewerLegendSection } from './viewerLegendTypes'
 
 const categories: ViewerLegendSection = {
@@ -162,5 +164,180 @@ describe('ViewerLegend', () => {
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+// The legend, 260 × 300 px, in a 1000 × 800 px view at (100, 50) on the
+// page; at first in the stack, 12 px in from the view's bottom left.
+function stubLegendLayout() {
+  const view = document.createElement('div')
+  const box = { left: 12, top: 488, width: 260, height: 300 }
+  vi.spyOn(HTMLElement.prototype, 'offsetParent', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains('viewer-legend') ? view : null
+  })
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this === view) {
+      return { left: 100, top: 50, width: 1000, height: 800 } as DOMRect
+    }
+    if (this.classList.contains('viewer-legend')) {
+      return { ...box, left: 100 + box.left, top: 50 + box.top } as DOMRect
+    }
+    return { left: 0, top: 0, width: 0, height: 0 } as DOMRect
+  })
+  // Calls back as it starts to observe, as a ResizeObserver does.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(private readonly callback: () => void) {}
+      observe() {
+        this.callback()
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  )
+  // Where the legend is drawn, in the view.
+  return box
+}
+
+function MovableLegend({
+  initial = null,
+  onPlacementChange,
+}: {
+  readonly initial?: LegendPlacement | null
+  readonly onPlacementChange?: (placement: LegendPlacement | null) => void
+}) {
+  const [placement, setPlacement] = useState(initial)
+  return (
+    <ViewerLegend
+      sections={[categories]}
+      placement={placement}
+      onPlacementChange={(next) => {
+        onPlacementChange?.(next)
+        setPlacement(next)
+      }}
+    />
+  )
+}
+
+describe('ViewerLegend moved', () => {
+  it('follows its header and stays by the corner it is dropped nearer', () => {
+    stubLegendLayout()
+    const onPlacementChange = vi.fn()
+    render(<MovableLegend onPlacementChange={onPlacementChange} />)
+    const legend = screen.getByRole('region', { name: 'Legend' })
+    const toggle = screen.getByRole('button', { name: 'Legend' })
+    const grip = screen.getByRole('button', { name: 'Move the legend' })
+    expect(grip).toHaveAccessibleDescription('At the bottom left')
+
+    fireEvent.pointerDown(toggle, { clientX: 150, clientY: 550, pointerId: 1 })
+    // A quick drag's first move can be off the header already.
+    fireEvent.pointerMove(document.body, { clientX: 750, clientY: 150, pointerId: 1 })
+    expect(legend).toHaveClass('is-moved', 'is-dragging')
+    expect(legend.style.left).toBe('612px')
+    expect(legend.style.top).toBe('88px')
+
+    fireEvent.pointerUp(toggle, { clientX: 750, clientY: 150, pointerId: 1 })
+    // The click that ends the drag leaves the legend open.
+    fireEvent.click(toggle, { detail: 1 })
+    expect(onPlacementChange).toHaveBeenCalledExactlyOnceWith({
+      fromRight: true,
+      fromBottom: false,
+      x: 128,
+      y: 88,
+    })
+    expect(legend).toHaveClass('is-moved')
+    expect(legend).not.toHaveClass('is-dragging')
+    expect(legend.style.right).toBe('128px')
+    expect(legend.style.top).toBe('88px')
+    expect(grip).toHaveAccessibleDescription('88 px from the top, 128 px from the right')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+
+    // A click without a drag still closes it.
+    fireEvent.pointerDown(toggle, { clientX: 150, clientY: 550, pointerId: 2 })
+    fireEvent.pointerMove(toggle, { clientX: 151, clientY: 551, pointerId: 2 })
+    fireEvent.pointerUp(toggle, { clientX: 151, clientY: 551, pointerId: 2 })
+    fireEvent.click(toggle, { detail: 1 })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(onPlacementChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('goes back in the stack when dropped in the bottom-left corner', () => {
+    const box = stubLegendLayout()
+    const onPlacementChange = vi.fn()
+    box.left = 300
+    box.top = 200
+    render(
+      <MovableLegend
+        initial={{ fromRight: false, fromBottom: false, x: 300, y: 200 }}
+        onPlacementChange={onPlacementChange}
+      />,
+    )
+    const legend = screen.getByRole('region', { name: 'Legend' })
+    const toggle = screen.getByRole('button', { name: 'Legend' })
+
+    fireEvent.pointerDown(toggle, { clientX: 450, clientY: 260, pointerId: 1 })
+    fireEvent.pointerMove(toggle, { clientX: 170, clientY: 560, pointerId: 1 })
+    fireEvent.pointerUp(toggle, { clientX: 170, clientY: 560, pointerId: 1 })
+
+    expect(onPlacementChange).toHaveBeenCalledExactlyOnceWith(null)
+    expect(legend).not.toHaveClass('is-moved')
+    expect(legend.style.cssText).toBe('')
+  })
+
+  it('moves by arrow keys on its grip, and back on Home or a double-click', () => {
+    stubLegendLayout()
+    render(<MovableLegend />)
+    const legend = screen.getByRole('region', { name: 'Legend' })
+    const grip = screen.getByRole('button', { name: 'Move the legend' })
+
+    expect(fireEvent.keyDown(grip, { key: 'ArrowUp' })).toBe(false)
+    expect(legend.style.left).toBe('12px')
+    expect(legend.style.bottom).toBe('32px')
+    expect(grip).toHaveAccessibleDescription('32 px from the bottom, 12 px from the left')
+
+    fireEvent.keyDown(grip, { key: 'Home' })
+    expect(legend).not.toHaveClass('is-moved')
+    expect(grip).toHaveAccessibleDescription('At the bottom left')
+
+    fireEvent.keyDown(grip, { key: 'ArrowRight' })
+    expect(legend.style.left).toBe('32px')
+    fireEvent.doubleClick(grip)
+    expect(legend).not.toHaveClass('is-moved')
+  })
+
+  it('stays inside a view too short for where it was left', () => {
+    stubLegendLayout()
+    render(
+      <MovableLegend initial={{ fromRight: false, fromBottom: false, x: 40, y: 700 }} />,
+    )
+    const legend = screen.getByRole('region', { name: 'Legend' })
+
+    // 800 px less its 300 px and the 12 px inset.
+    expect(legend.style.top).toBe('488px')
+    expect(
+      screen.getByRole('button', { name: 'Move the legend' }),
+    ).toHaveAccessibleDescription('488 px from the top, 40 px from the left')
+  })
+
+  it('stays put without a place to keep, as on narrow screens', () => {
+    stubLegendLayout()
+    render(<ViewerLegend sections={[categories]} />)
+    const legend = screen.getByRole('region', { name: 'Legend' })
+    const toggle = screen.getByRole('button', { name: 'Legend' })
+
+    expect(screen.queryByRole('button', { name: 'Move the legend' })).toBeNull()
+    fireEvent.pointerDown(toggle, { clientX: 150, clientY: 550, pointerId: 1 })
+    fireEvent.pointerMove(toggle, { clientX: 750, clientY: 150, pointerId: 1 })
+    expect(legend).not.toHaveClass('is-moved')
   })
 })

@@ -229,6 +229,27 @@ describe('ShellLayout', () => {
     expect(canvas?.style.getPropertyValue('--canvas-bottom-right-width')).toBe('132px')
   })
 
+  // A legend dragged into the view leaves the corner to the loading list.
+  it('leaves a legend moved out of the stack out of the bottom corner', () => {
+    stubLayout({
+      'viewport-notification-stack': { left: 112, right: 532, height: 40 },
+      'viewport-loading': { left: 112, right: 412, height: 40 },
+      'viewer-legend': { left: 700, right: 960, height: 300 },
+      'shell-canvas': { left: 100, right: 1100, height: 800 },
+    })
+    stubScreenWidth(false)
+    const { container } = renderShell(
+      <div className="viewport-notification-stack">
+        <div className="viewer-legend is-moved" />
+        <div className="viewport-loading" />
+      </div>,
+    )
+    const canvas = container.querySelector<HTMLElement>('.shell-canvas')
+
+    expect(canvas?.style.getPropertyValue('--canvas-bottom-left-height')).toBe('40px')
+    expect(canvas?.style.getPropertyValue('--canvas-bottom-left-width')).toBe('312px')
+  })
+
   it('lifts the overlays above a card docked under 860 px until it closes', async () => {
     stubLayout({
       'shell-canvas': {
