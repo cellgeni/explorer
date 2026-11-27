@@ -156,14 +156,11 @@ export interface VisiumHdDatasetReaderControllerOptions {
   readonly featureSliceReader?: VisiumHdFeatureSliceReader
   readonly featureSliceMetadataReader?: VisiumHdFeatureSliceMetadataReader
   readonly maxTwoMicrometerFilteredBarcodes?: number
-  readonly maxInteractiveFeatureSliceBytes?: number
   readonly maxInteractiveSegmentationGeojsonBytes?: number
   readonly readObjects?: VisiumHdParquetObjectReader
   readonly loadCompressors?: () => Promise<Compressors>
   readonly byteRangeCache?: PersistentByteRangeCache | null
 }
-
-export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
 
 const readVisiumHdScalefactorsLazy = async (
   url: string,
@@ -271,7 +268,6 @@ export class VisiumHdDatasetReaderController {
   private readonly featureSliceH5Path: string
   private readonly featureSliceReader: VisiumHdFeatureSliceReader
   private readonly featureSliceMetadataReader: VisiumHdFeatureSliceMetadataReader
-  private readonly maxInteractiveFeatureSliceBytes: number
   private readonly maxInteractiveSegmentationGeojsonBytes: number | undefined
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
   private readonly loadCompressors: (() => Promise<Compressors>) | undefined
@@ -356,14 +352,24 @@ export class VisiumHdDatasetReaderController {
       normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(
         options.maxTwoMicrometerFilteredBarcodes,
       )
-    this.maxInteractiveFeatureSliceBytes =
-      options.maxInteractiveFeatureSliceBytes ??
-      DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET
     this.maxInteractiveSegmentationGeojsonBytes =
       options.maxInteractiveSegmentationGeojsonBytes
     this.readObjects = options.readObjects
     this.loadCompressors = options.loadCompressors
     this.byteRangeCache = options.byteRangeCache
+  }
+
+  // Forgets every read kept, so the next read starts afresh.
+  dispose(): void {
+    this.overviewLoads.clear()
+    this.coarsenedOverviewPromises.clear()
+    this.annotationGroupLoads.clear()
+    this.genePanelPromises.clear()
+    this.filteredMatrixBarcodePromises.clear()
+    this.barcodeMappingCellLoads.clear()
+    this.barcodeMappingSources.clear()
+    this.segmentationIndexPromises.clear()
+    this.segmentationSelections.clear()
   }
 
   async meta(binSizeMicrometers = this.defaultBinSizeMicrometers): Promise<DatasetMeta> {
@@ -670,7 +676,6 @@ export class VisiumHdDatasetReaderController {
       featureSliceReader: this.featureSliceReader,
       fetcher: this.fetcher,
       genes,
-      maxInteractiveFeatureSliceBytes: this.maxInteractiveFeatureSliceBytes,
       readBinnedOverview: (binSizeMicrometers) =>
         this.expressionOverview(binSizeMicrometers),
       queryOptions: options,
@@ -1143,7 +1148,6 @@ async function readVisiumHdGeneExpression(options: {
   readonly featureSliceReader: VisiumHdFeatureSliceReader
   readonly fetcher: typeof fetch
   readonly genes: readonly string[]
-  readonly maxInteractiveFeatureSliceBytes: number
   readonly readBinnedOverview: (
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
   ) => Promise<VisiumHdBinnedOverview>
@@ -1201,10 +1205,7 @@ async function readVisiumHdGeneExpression(options: {
     viewportBins,
     selectedGenes,
     {
-      backend: 'lazy-range-worker',
       binSizeMicrometers: overview.binSizeMicrometers,
-      fetcher: options.fetcher,
-      maxFullFileBytes: options.maxInteractiveFeatureSliceBytes,
       ...(queryOptions.signal === undefined ? {} : { signal: queryOptions.signal }),
       ...(queryOptions.onStageTiming === undefined
         ? {}

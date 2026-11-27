@@ -16,6 +16,8 @@
 //   --step-settle <s>    profile each step this long (default 2)
 //   --then <urls>        then open each of these datasets (comma-separated)
 //                        in turn from the dataset field, one profile each
+//   --then-gene <symbol> also colour each of those by this gene, with a
+//                        profile of its own
 //   --hash <params>      add these to the link's hash, e.g. cellBounds=0
 //   --until <selector>   CSS selector that marks the load as done (default:
 //                        the enabled gene search box, or the dataset field
@@ -39,7 +41,8 @@ const OPEN_DATASET = '.shell-dataset-name'
 const SPATIAL_VIEW = 'Spatial viewer canvas area'
 // Ids for CDP messages sent to workers through the browser session.
 const targetMessageIds = { next: 1 }
-const EXPRESSION_STATUS = /Expression (overview|all cells|sample|exact region): [\d,]+/
+// Cells, spots or bins (geneControlsModel.ts's status copy).
+const EXPRESSION_STATUS = /Expression( overview| all \w+| sample| exact region)?: [\d,]+/
 const TIMEOUT_MS = 600_000
 const LONG_STRETCH_MS = 50
 
@@ -48,7 +51,8 @@ const { positional, options } = parseArgs(process.argv.slice(2))
 if (positional.length < 2 || options.help !== undefined) {
   console.log(
     'Usage: node scripts/profile-load.mjs <app-url>[,<app-url>...] <dataset-url> ' +
-      '[--gene S] [--steps KEYS] [--step-settle S] [--then URLS] [--hash PARAMS] ' +
+      '[--gene S] [--steps KEYS] [--step-settle S] [--then URLS] [--then-gene S] ' +
+      '[--hash PARAMS] ' +
       '[--until SELECTOR] [--runs N] ' +
       '[--settle S] [--requests TEXT] [--memory] [--gpu] [--throttle MBIT,MS] ' +
       '[--raw PREFIX] [--json]',
@@ -131,11 +135,13 @@ async function profileRun(run, appIndex, appUrl) {
     await page.waitForTimeout(settleMs)
     await report('load', loadSeconds, (await cdp.send('Profiler.stop')).profile)
 
-    if (options.gene !== undefined) {
+    // Colours the cells by `gene`, profiled until the expression status line
+    // appears.
+    const colourByGene = async (gene, phase) => {
       await cdp.send('Profiler.start')
       const geneStarted = Date.now()
-      await page.locator(GENE_SEARCH).fill(options.gene)
-      await page.getByRole('button', { name: options.gene, exact: true }).first().click()
+      await page.locator(GENE_SEARCH).fill(gene)
+      await page.getByRole('button', { name: gene, exact: true }).first().click()
       await page.waitForFunction(
         (source) =>
           new RegExp(source).test(
@@ -146,14 +152,13 @@ async function profileRun(run, appIndex, appUrl) {
       )
       const geneSeconds = (Date.now() - geneStarted) / 1000
       const status = await page.locator('.analysis-status').textContent()
-      await report(
-        `gene ${options.gene}`,
-        geneSeconds,
-        (await cdp.send('Profiler.stop')).profile,
-        {
-          status,
-        },
-      )
+      await report(phase, geneSeconds, (await cdp.send('Profiler.stop')).profile, {
+        status,
+      })
+    }
+
+    if (options.gene !== undefined) {
+      await colourByGene(options.gene, `gene ${options.gene}`)
     }
 
     // Each step is a key pressed on the focused spatial view (deck.gl's
@@ -220,6 +225,13 @@ async function profileRun(run, appIndex, appUrl) {
         thenSeconds,
         (await cdp.send('Profiler.stop')).profile,
       )
+
+      if (options['then-gene'] !== undefined) {
+        await colourByGene(
+          options['then-gene'],
+          `then ${index + 1} gene ${options['then-gene']}`,
+        )
+      }
     }
   } finally {
     await browser.close()

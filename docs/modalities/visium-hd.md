@@ -284,7 +284,7 @@ count is every gene detected, not only the 8 it lists.
   is shared by every viewport request and not cancelled when one is; a failed
   read is retried by the next request.
 - Feature Slice and filtered-matrix reads run in H5 file workers that keep
-  their file open for the session and read it by range
+  their file open while the dataset is held and read it by range
   ([architecture](../architecture.md#workers)). A dropped connection is retried
   at once, a request still waiting for its worker is dropped when it is
   cancelled, and after a failed read the next one opens the file again.

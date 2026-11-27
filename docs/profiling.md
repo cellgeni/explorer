@@ -43,6 +43,7 @@ Other options:
 | `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, or click a button, one profile each   |
 | `--step-settle <s>`      | Profile each step this many seconds (default 2)                                                          |
 | `--then <urls>`          | Then open each of these datasets (comma-separated) in turn from the dataset field, with one profile each |
+| `--then-gene <symbol>`   | Also colour each of the `--then` datasets by this gene, with a profile of its own                        |
 | `--hash <params>`        | Add these parameters to the link's hash, for example `cellBounds=0` to start with cell outlines off      |
 | `--requests <text>`      | Count each phase's requests whose URL contains `<text>`, their megabytes, and the slowest five           |
 | `--memory`               | After each phase, report the JavaScript heap and ArrayBuffer memory of the page and of each live worker  |
@@ -212,7 +213,7 @@ Then open `http://127.0.0.1:4199/xenium/` or
 
 With `--what visium-hd` (or `--what xenium,h5ad,visium-hd`), the script also
 writes **`visium-hd/`**, a Space Ranger 4 Visium HD folder at the size of the
-reference run, about 240 MB:
+reference run, about 260 MB:
 
 - A grid of 3,350 × 3,350 bins of 2 µm (`--visium-hd-side`), with a disc of
   tissue a third of its area: 3,740,816 bins under tissue at 2 µm, 233,814
@@ -223,6 +224,8 @@ reference run, about 240 MB:
   from which the viewer reads that tier.
 - `barcode_mappings.parquet`, sorted by 2 µm barcode in row groups of about
   a million rows, with square cells of 5 × 5 bins.
+- `feature_slice.h5`, 20 MB: the 2 µm counts of each gene, from which the
+  viewer colours bins of every size by a gene.
 
 Open it as `http://127.0.0.1:4199/visium-hd/`.
 

@@ -361,6 +361,29 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return this.resolvedUnits ?? UNKNOWN_SPATIALDATA_UNITS
   }
 
+  // Drops what the dataset read, its table's arrays included (O19). Its
+  // stores, TIFF files and matrix workers are kept per file and released once
+  // no dataset that reads them is held (datasetResources.ts). A later read
+  // opens what it needs again.
+  dispose(): void {
+    const state = this.statePromise
+    this.statePromise = null
+    void state?.then(
+      (read) => read.table?.dispose(),
+      () => undefined,
+    )
+    this.presetUnitsPromise = null
+    this.imageLoad.clear()
+    this.boundaryIndexPromise = null
+    this.nucleusIndexPromise = null
+    this.labelReaders.clear()
+    this.shapeElements = null
+    this.nucleusElements = null
+    this.regionShapes = new Map()
+    this.regionRows = null
+    this.labelCellIdsByRegion.clear()
+  }
+
   async meta(): Promise<DatasetMeta> {
     const { table, view } = await this.state()
     const [loader, tableMeta, boundaries] = await Promise.all([

@@ -3,6 +3,7 @@ import * as zarr from 'zarrita'
 import { micrometers } from './coords'
 import type { BBox } from './coords'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
+import { releaseWithDatasets } from './datasetResources'
 import { isGeneFeature } from './geneFeatures'
 import {
   addTranscriptFeatureTally,
@@ -179,6 +180,7 @@ interface TranscriptZarrAggregateOptions {
 type ZarrArray = Awaited<ReturnType<typeof openZarrArray>>
 
 const transcriptZarrMetadataCache = new Map<string, Promise<TranscriptZarrMetadata>>()
+releaseWithDatasets(transcriptZarrMetadataCache)
 
 export async function loadTranscriptZarrViewport(
   url: string,

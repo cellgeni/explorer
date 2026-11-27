@@ -208,8 +208,23 @@ instances so a retry starts fresh. Opening one is a shared load
 cancelled. Instances are kept in a `DatasetCache`
 (`src/datasets/datasetCache.ts`): the viewer retains the dataset it shows
 and a collection preview the one it is reading (`retainDataset`), and of the
-others the two used last are kept. Older ones are disposed (`dispose()`),
-which closes a Xenium dataset's DuckDB client and an H5AD's file worker.
+others the two used last are kept. Older ones are disposed (`dispose()`):
+a Xenium dataset closes its DuckDB client, an H5AD its file worker, and
+Visium HD, SpatialData, MERSCOPE and Atera drop what they read (a standard
+Visium dataset is an H5AD one).
+
+Caches kept by file URL outside the dataset objects (`gex.ts`'s matrix
+workers and Zarr matrices, the `feature_slice.h5` workers, transcript Zarr
+metadata and the TIFF loader's open files) register with
+`releaseWithDatasets` (`src/data/datasetResources.ts`). Once no viewer,
+preview or dataset cache holds a URL, their entries for the files that
+dataset could read are released, ending their workers, unless a dataset
+still held reads them too. A dataset reads the files under its folder or its
+manifest's root, the files its manifest names and the image a collection
+pairs with it (`datasetReadsFile`). Files no dataset reads, such as an
+imported segmentation's image, stay until their cache's own limit drops
+them.
+
 When detection finds that a URL's [manifest](./dataset-manifest.md) has
 changed, the URL's instances are dropped from every cache (`dropDatasets`),
 so the next load opens the dataset again; one in use is disposed once it is
@@ -564,11 +579,11 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 | Dataset manifests                                      | Per entered URL                                                                                                                                                    | Replaced by each detection of that URL                                                                         | `src/data/datasetFiles.ts`                                      |
 | Range-probe results                                    | Per URL + label                                                                                                                                                    | Dropped on failure                                                                                             | `rangeSupport.ts`                                               |
 | Folder listings                                        | Per folder URL                                                                                                                                                     | Replaced by each detection of that folder                                                                      | `src/data/folderListing.ts`                                     |
-| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                                                                     | Cleared when a new Xenium dataset warms up                                                                     | `src/data/gex.ts`                                               |
-| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`, H5AD over 64 MiB                                          | 128 MiB of blocks each; dropped on failure                                                                     | `gex.ts`, `visiumFeatureSlice.ts`, `h5adDataset.ts`             |
+| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                                                                     | Cleared when a new Xenium dataset warms up, or released with their dataset                                     | `src/data/gex.ts`                                               |
+| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`, H5AD over 64 MiB                                          | 128 MiB of blocks each; dropped on failure; closed with their dataset                                          | `gex.ts`, `visiumFeatureSlice.ts`, `h5adDataset.ts`             |
 | SpatialData chunk cache                                | Per store                                                                                                                                                          | 256 MiB LRU                                                                                                    | `src/zarr/zarrStores.ts`                                        |
 | Decoded tile bitmaps                                   | Per image channel                                                                                                                                                  | Performance budget                                                                                             | `src/tiff/tileCache.ts`                                         |
-| Visium HD overviews, segmentations                     | Per dataset                                                                                                                                                        | No eviction                                                                                                    | `visiumHdDatasetReaders.ts`                                     |
+| Visium HD overviews, segmentations                     | Per dataset                                                                                                                                                        | Dropped when the dataset is disposed                                                                           | `visiumHdDatasetReaders.ts`                                     |
 
 The byte-range cache (database version 3) keeps each range's bytes, each
 range's size and last access, and the cache's totals in three object stores. A
@@ -682,9 +697,10 @@ reads, and matrix rows and Feature Slice genes are read inside the worker. A
 host that ignores Range, or hides the file's size, sends the file whole; for an
 H5AD the main thread then downloads it within the 300 MiB limit. An
 H5AD file's worker stays open for reads after load (embeddings, tissue images)
-and ends when the dataset is garbage collected; a range-read file's stays open
-for the session, keeping its barcode index (up to 2 million barcodes) and up to
-128 MiB of blocks; the standard Visium matrix's ends once it is read. Requests
+and ends when the dataset is disposed; a range-read file's stays open while a
+dataset that reads it is held, keeping its barcode index (up to 2 million
+barcodes) and up to 128 MiB of blocks; the standard Visium matrix's ends once
+it is read. Requests
 go to a worker one at a time, so a request still waiting is dropped when it is
 cancelled, and after a failed read the next one opens the file in a new
 worker. Where there is no `Worker` (Vitest's jsdom), the same handler runs on

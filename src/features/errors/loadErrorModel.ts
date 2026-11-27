@@ -552,20 +552,6 @@ export function createStructuredLoadError(
   }
 
   if (isFullFileMatrixBudgetError(error, normalizedMessage)) {
-    if (isFeatureSliceBudgetError(error, normalizedMessage)) {
-      return withOptionalDetail(
-        {
-          source,
-          code: 'unsupported',
-          title: 'Feature Slice H5 over budget',
-          message,
-          action:
-            'Use the lazy-range Feature Slice H5 backend for hosted Visium HD selected-gene overlays, or lower the full-file budget scope.',
-        },
-        detail,
-      )
-    }
-
     return withOptionalDetail(
       {
         source,
@@ -799,8 +785,6 @@ function isUnsupportedRoiGeneStatsError(
 function isFullFileMatrixBudgetError(error: unknown, normalizedMessage: string): boolean {
   return (
     (error instanceof Error && error.name === 'FullFileMatrixBudgetExceededError') ||
-    (error instanceof Error &&
-      error.name === 'FeatureSliceFullFileBudgetExceededError') ||
     normalizedMessage.includes('interactive full-file budget')
   )
 }
@@ -814,14 +798,6 @@ function isSegmentationGeojsonBudgetError(
       error.name === 'VisiumHdSegmentationGeojsonBudgetExceededError') ||
     (normalizedMessage.includes('segmentation geojson') &&
       normalizedMessage.includes('interactive full-file budget'))
-  )
-}
-
-function isFeatureSliceBudgetError(error: unknown, normalizedMessage: string): boolean {
-  return (
-    (error instanceof Error &&
-      error.name === 'FeatureSliceFullFileBudgetExceededError') ||
-    normalizedMessage.includes('feature slice h5')
   )
 }
 

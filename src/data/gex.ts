@@ -4,6 +4,7 @@ import { cellIdToInt, intToCellId, transcriptCellId } from './cellid'
 import { cachedZipFileStoreFromUrl } from '../zarr/cachedZipStore'
 import { getWholeArray } from '../zarr/zarrWholeArray'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
+import { closeSharedFile, releaseWithDatasets } from './datasetResources'
 import { coalesceCellMajorRanges, emptyCellsFor } from './featureBarcodeMatrixH5'
 import { createGeneFeatureIndex } from './geneFeatures'
 import { fetchHead } from './hostResponses'
@@ -104,13 +105,19 @@ const CELL_MAJOR_FULL_INDPTR_MAX_LENGTH = 6_000_000
 const CELL_MAJOR_ROI_WARMUP_ROW_COUNT = 128
 const SELECTED_GENE_CELL_MAJOR_CELL_THRESHOLD = 2_000
 const SELECTED_GENE_CELL_MAJOR_GENE_THRESHOLD = 32
-// Each matrix file stays open in its worker for the session, read by range,
-// so its barcodes are read once and a chunk read once is not fetched again.
+// Each matrix file stays open in its worker while a dataset that reads it is
+// held, read by range, so its barcodes are read once and a chunk read once is
+// not fetched again. These caches are released with their datasets (O19).
 const h5MatrixCache = new Map<string, SharedLoad<H5WorkerFile>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
 const zarrMatrixCellIdDataCache = new Map<string, Promise<Uint32Array>>()
 const featureMajorMatrixCache = new Map<string, Promise<FeatureMajorMatrix>>()
+releaseWithDatasets(h5MatrixCache, closeSharedFile)
+releaseWithDatasets(zarrMatrixCache)
+releaseWithDatasets(zarrMatrixCellIdCache)
+releaseWithDatasets(zarrMatrixCellIdDataCache)
+releaseWithDatasets(featureMajorMatrixCache)
 interface CellMajorIndptrCacheEntry {
   readonly promise: Promise<Uint32Array>
   state: 'pending' | 'ready'

@@ -12,7 +12,7 @@ This script writes, into a folder outside the repository:
 - visium-hd/: a Space Ranger 4 Visium HD output folder (with --what
   visium-hd), at the reference run's size: a grid of 3,350 x 3,350 bins of
   2 um, a third of them under tissue, binned to 8 and 16 um, with
-  barcode_mappings.parquet.
+  barcode_mappings.parquet and feature_slice.h5.
 
 Both share one model of a tissue: cells on a jittered 10 um grid, in
 clusters that are patches of the slide, each with five marker genes
@@ -665,12 +665,63 @@ def write_visium_hd(folder, side, genes, seed):
                 text.write("\n".join(kept_barcodes.tolist()))
                 text.write("\n")
 
+            write_visium_hd_feature_slice(
+                folder / "feature_slice.h5",
+                side,
+                names,
+                rows[kept][bin_index],
+                cols[kept][bin_index],
+                gene_index,
+                values,
+            )
+
         fullres = tier_side * pixels_per_bin + 80
         for kind, scalef in (("hires", 0.2), ("lowres", 0.02)):
             write_grey_png(tier / "spatial" / f"tissue_{kind}_image.png", int(fullres * scalef))
 
     write_visium_hd_barcode_mappings(folder, side, centre, radius)
     return counts
+
+
+def write_visium_hd_feature_slice(path, side, names, rows, cols, gene_index, values):
+    """feature_slice.h5: each gene's 2 um counts as COO rows, columns and counts.
+
+    Gene expression on Visium HD bins is read from it, at every size. The
+    spot transform places 2 um spot (col, row) at its bin's full-resolution
+    pixel, as the positions files do.
+    """
+    pixels_per_spot = 2 / VISIUM_HD_MICRONS_PER_PIXEL
+    metadata = {
+        "nrows": side,
+        "ncols": side,
+        "spot_pitch": 2,
+        "transform_matrices": {
+            "spot_colrow_to_microscope_colrow": [
+                [pixels_per_spot, 0, pixels_per_spot / 2 + 25],
+                [0, pixels_per_spot, pixels_per_spot / 2 + 40],
+                [0, 0, 1],
+            ]
+        },
+    }
+    order = np.argsort(gene_index, kind="stable")
+    starts = np.searchsorted(gene_index[order], np.arange(len(names) + 1))
+
+    with h5py.File(path, "w") as file:
+        file.attrs["metadata_json"] = json.dumps(metadata)
+        features = file.create_group("features")
+        features.create_dataset("name", data=np.array(names, dtype="S"))
+        features.create_dataset(
+            "feature_type", data=np.array([b"Gene Expression"] * len(names))
+        )
+        slices = file.create_group("feature_slices")
+
+        for gene in range(len(names)):
+            entries = order[starts[gene] : starts[gene + 1]]
+            group = slices.create_group(str(gene))
+
+            for name, column in (("row", rows), ("col", cols), ("data", values)):
+                data = column[entries].astype(np.int32)
+                group.create_dataset(name, data=data, **chunked(max(data.size, 1)))
 
 
 def write_grey_png(path, side):

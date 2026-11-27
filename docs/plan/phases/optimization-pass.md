@@ -392,7 +392,7 @@ M3, main thread:
 
 M4, memory:
 
-- [ ] **O19. Release what a dataset opened.** (L) A registry in
+- [x] **O19. Release what a dataset opened.** (L) A registry in
       `datasetCache.ts` of resources opened for a dataset URL, released when
       no viewer, preview or cache holds that URL any more. It covers the
       caches kept for the session above and the TIFF files. Visium HD,
@@ -401,6 +401,8 @@ M4, memory:
       (`visiumFeatureSlice.ts:56`, `:196-219`).
   - A test: releasing the last holder ends the workers.
   - Measure S8.
+  - Built in [#487](https://github.com/cellgeni/explorer/pull/487):
+    [Dataset Resources Released With Them](#dataset-resources-released-with-them-2026-11-27).
 - [ ] **O20. Memory telemetry.** (M) Each cache reports its bytes, entries
       and workers, and Data access notes shows the total. A ceiling is
       decided from these numbers
@@ -1972,6 +1974,70 @@ missing headers are named, the import (with a formula-guarded label and an
 empty value) equals the main thread's, a format error keeps its name, a
 failed worker falls back, and an abort ends the worker.
 
+## Dataset Resources Released With Them (2026-11-27)
+
+Task O19. On the base of this task's PR (#486):
+
+- **S8 as defined** opens Xenium folders and H5AD files without colouring
+  them, and ended with 9 workers on both builds. Those datasets' own
+  workers were already bounded: a disposed Xenium dataset closes its
+  DuckDB client and an H5AD its file worker, and the decode pools are
+  shared.
+- **What stayed open** were the caches kept by file URL outside the
+  dataset objects. In a variant of S8, ten datasets in turn (four copies of
+  the synthetic Visium HD folder, four Xenium folders and two H5AD files),
+  each coloured by `M03a`, every Visium HD copy kept its `feature_slice.h5`
+  open in an H5 worker for the session: four at the end, 151 MB on a 20 MB
+  synthetic file. On a real run each holds up to 128 MiB of blocks and its
+  barcode index.
+
+What changed:
+
+- **A registry** in `datasetCache.ts` tells listeners when a dataset URL
+  stops being held: no viewer or preview retains it, and no dataset cache
+  has it. The per-file caches register with `releaseWithDatasets`
+  (`src/data/datasetResources.ts`): `gex.ts`'s H5 matrix workers, Zarr
+  matrices and cell-ID arrays, the Feature Slice workers, transcript Zarr
+  metadata, and the TIFF loader's open files, pyramids and NDPI files.
+  When a dataset is released, its entries for the files it could read go,
+  and their workers close, unless a dataset still held reads them too.
+- **A dataset reads** the files under its folder or its manifest's root,
+  the files its manifest names, and the image a collection pairs with it.
+  Files no dataset reads, such as an imported segmentation's image, stay
+  until their cache's own limit drops them.
+- **`dispose()`** for Visium HD (overviews, bin tables, segmentation
+  indexes), SpatialData (its table and element caches), MERSCOPE and Atera
+  (their tables). A standard Visium dataset is an H5AD one, which had it.
+- **The full-file Feature Slice read goes**, with its byte budget and its
+  load error message: only tests used it.
+- The synthetic data script writes `feature_slice.h5`, so Visium HD can be
+  coloured, and `profile-load.mjs` gains `--then-gene`.
+
+Measured with unminified production builds of the base and the branch,
+alternating, three runs each, with GPU drawing. At the end of the Visium HD
+variant:
+
+| After ten datasets, each coloured | Base           | Branch         |
+| --------------------------------- | -------------- | -------------- |
+| H5 file workers                   | 4, 151 MB      | 2, 83–89 MB    |
+| All workers                       | 12, 373–378 MB | 10, 315–363 MB |
+| Page                              | 274–327 MB     | 278–402 MB     |
+
+- **The two left** are those of the two Visium HD datasets the dataset
+  cache keeps besides the one shown (`heldDatasetUrls()` on a dev build),
+  which reopen without reading their files again.
+- **Loads and colouring take as long** at every step, within the runs'
+  spread: a Visium HD load 188–220 ms busy against 203–215 ms.
+- **S8 as defined** is unchanged: 9 workers, 663–693 MB of them, and a page
+  of 1.25–1.33 GB after the tenth dataset, against 678–693 MB and
+  1.25–1.35 GB. The page's memory varies with when it was last collected.
+
+Tests: `src/data/datasetResources.test.ts` checks that the Feature Slice
+worker ends when the last of two holders releases its dataset and opens
+again on the next read, that a file stays while a cached dataset or a
+parent folder's dataset can read it, and that a manifest's root and files
+count as the dataset's.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -2179,3 +2245,11 @@ Closed by the pass's tasks:
       test image makes no requests rather than 114
       ([#460](https://github.com/cellgeni/explorer/pull/460))
       ([OME-Zarr Shard Ranges Kept Across Loads](#ome-zarr-shard-ranges-kept-across-loads-2026-11-26)).
+- [x] Per-URL caches that were never released (found 2026-11-16): one
+      h5wasm worker per matrix file (`gex.ts`) and per Feature Slice file
+      (`visiumFeatureSlice.ts`), transcript Zarr metadata and the TIFF
+      loader's open files (O19, 2026-11-27). They now go with the datasets
+      that read them, once no viewer, preview or dataset cache holds those:
+      after ten datasets, each coloured, 2 Feature Slice workers stay rather
+      than 4 ([#487](https://github.com/cellgeni/explorer/pull/487))
+      ([Dataset Resources Released With Them](#dataset-resources-released-with-them-2026-11-27)).
