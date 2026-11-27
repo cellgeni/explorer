@@ -41,6 +41,7 @@ import {
   platformRoiCompleteHandler,
   platformRoiSelection,
   platformSelectedEmbeddingElementId,
+  trueSizePointsFor,
 } from './platformAdapter'
 
 const readyLoadState: DatasetLoadState = {
@@ -790,6 +791,9 @@ describe('platformAdapter', () => {
     expect(adapter.labels.embeddingElementPlural).toBe('spots')
     expect(adapter.trueSizePoints).toBe(true)
     expect(appPlatformAdapterFor(readyLoadState, 'h5ad').trueSizePoints).toBe(false)
+    // A panel beside the main view draws a dataset as the main view would.
+    expect(trueSizePointsFor('visium')).toBe(true)
+    expect(trueSizePointsFor('xenium')).toBe(false)
     expect(isAnnDataPlatform(adapter)).toBe(true)
     expect(adapter.capabilities).toMatchObject({
       annotations: true,

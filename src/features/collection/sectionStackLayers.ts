@@ -4,12 +4,16 @@ import { metadataColor } from '../../rendering/cellStyling'
 import { DEFAULT_OVERVIEW_CELL_FILL_RGB } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
-import type { PreviewCells, PreviewClasses } from './collectionPreviewData'
+import {
+  PREVIEW_CELL_RADIUS_MICROMETERS,
+  type PreviewCells,
+  type PreviewClasses,
+} from './collectionPreviewData'
 import type { StackPythonLayers } from './stackPythonLayers'
 import { hexRgb, type PreviewOverlay } from './collectionPreviewRaster'
 import {
   deckPositions,
-  LINKED_SECTION_CELL_RADIUS_MICROMETERS,
+  radiusProp,
   scoredCells,
   valueLabel,
   type LinkedScoredCells,
@@ -19,8 +23,8 @@ import {
 // its collection preview, drawn at (x, -y) and lifted to its depth by a model
 // matrix, so changing the depth stretch uploads nothing. Cells with their own
 // depths (a dataset placing cells in 3D) are drawn at (x, -y, z), and the
-// model matrix stretches z the same way. Cells are balls 10
-// µm across that face the camera. The cells a section is coloured for (those
+// model matrix stretches z the same way. Cells are balls the size of their
+// area (10 µm across without one) that face the camera. The cells a section is coloured for (those
 // scoring for the genes, in a shown class, or with a value of the metadata
 // track; every cell without colouring) are drawn solid and hide what is
 // behind them; the others are a faint outline of the tissue that hides
@@ -93,7 +97,6 @@ export function sectionStackLayers(
     radiusScale: options.radiusScale,
     radiusMinPixels: CELL_RADIUS_MIN_PIXELS * options.radiusScale,
     radiusMaxPixels: CELL_RADIUS_MAX_PIXELS * options.radiusScale,
-    getRadius: LINKED_SECTION_CELL_RADIUS_MICROMETERS,
     billboard: true,
     stroked: false,
     filled: true,
@@ -109,6 +112,11 @@ export function sectionStackLayers(
     const { cells, overlay } = section
     const { modelMatrix } = section
     const id = (part: string) => `section-stack-${index.toString()}-${part}`
+    // A radius per cell travels with the points (DeckPoints.radii).
+    const cellRadius = {
+      ...radius,
+      ...radiusProp(cells.radius ?? PREVIEW_CELL_RADIUS_MICROMETERS),
+    }
 
     const points = cellPoints(cells)
     const python = section.python ?? null
@@ -122,8 +130,8 @@ export function sectionStackLayers(
           data: pointData(ringPoints(points, highlight.cells), null),
           modelMatrix,
           pickable: false,
-          ...radius,
-          getRadius: LINKED_SECTION_CELL_RADIUS_MICROMETERS * RING_RADIUS_SCALE,
+          ...cellRadius,
+          radiusScale: options.radiusScale * RING_RADIUS_SCALE,
           radiusMinPixels: RING_RADIUS_MIN_PIXELS * options.radiusScale,
           filled: false,
           stroked: true,
@@ -139,7 +147,7 @@ export function sectionStackLayers(
       const split = pythonSplit(cells, python)
 
       if (options.showContext && split.faded.positions.length > 0) {
-        context.push(contextLayer(id('context'), split.faded, modelMatrix, radius))
+        context.push(contextLayer(id('context'), split.faded, modelMatrix, cellRadius))
       }
 
       if (split.shown.index.length > 0) {
@@ -149,7 +157,7 @@ export function sectionStackLayers(
             data: pointData(split.shown, split.shown.colors),
             modelMatrix,
             pickable: true,
-            ...radius,
+            ...cellRadius,
           }) as Layer,
         )
         targets.set(id('python'), {
@@ -170,7 +178,7 @@ export function sectionStackLayers(
           getFillColor: CELL_RGBA,
           modelMatrix,
           pickable: true,
-          ...radius,
+          ...cellRadius,
         }) as Layer,
       )
       targets.set(id('cells'), { section: index, kind: 'cell', order: null })
@@ -185,7 +193,7 @@ export function sectionStackLayers(
       })
 
       if (options.showContext) {
-        context.push(contextLayer(id('context'), points, modelMatrix, radius))
+        context.push(contextLayer(id('context'), points, modelMatrix, cellRadius))
       }
 
       if (scored.order.length > 0) {
@@ -196,6 +204,7 @@ export function sectionStackLayers(
             modelMatrix,
             pickable: true,
             ...radius,
+            ...radiusProp(scored.radius),
           }) as Layer,
         )
         targets.set(id('scored'), { section: index, kind: 'score', order: scored.order })
@@ -208,7 +217,7 @@ export function sectionStackLayers(
       overlay.kind === 'classes' ? classSplit(cells, overlay) : valueSplit(cells, overlay)
 
     if (options.showContext && split.faded.positions.length > 0) {
-      context.push(contextLayer(id('context'), split.faded, modelMatrix, radius))
+      context.push(contextLayer(id('context'), split.faded, modelMatrix, cellRadius))
     }
 
     if (split.shown.index.length > 0) {
@@ -218,7 +227,7 @@ export function sectionStackLayers(
           data: pointData(split.shown, split.shown.colors),
           modelMatrix,
           pickable: true,
-          ...radius,
+          ...cellRadius,
         }) as Layer,
       )
       targets.set(id(overlay.kind), {
@@ -318,10 +327,15 @@ function contextLayer(
 }
 
 // Positions as deck.gl takes them: (x, -y), or (x, -y, z) for cells with
-// their own depths.
+// their own depths, and each point's radius when they differ.
 interface DeckPoints {
   readonly positions: Float32Array
   readonly size: 2 | 3
+  readonly radii?: Float32Array
+}
+
+function pointRadii(radius: PreviewCells['radius']): Pick<DeckPoints, 'radii'> {
+  return radius instanceof Float32Array ? { radii: radius } : {}
 }
 
 // Cached per cells read, so a camera move hands deck.gl the same arrays.
@@ -334,8 +348,8 @@ function cellPoints(cells: PreviewCells): DeckPoints {
   const flat = deckPositions(cells.positions)
   const points =
     cells.depths === undefined
-      ? { positions: flat, size: 2 as const }
-      : withDepths(flat, (index) => cells.depths?.values[index])
+      ? { positions: flat, size: 2 as const, ...pointRadii(cells.radius) }
+      : withDepths(flat, (index) => cells.depths?.values[index], cells.radius)
   cellPointsCache.set(cells, points)
   return points
 }
@@ -348,15 +362,21 @@ function scoredPoints(
   scored: LinkedScoredCells,
   depths: Float32Array | undefined,
 ): DeckPoints {
-  if (depths === undefined) return { positions: scored.positions, size: 2 }
+  if (depths === undefined) {
+    return { positions: scored.positions, size: 2, ...pointRadii(scored.radius) }
+  }
 
   const cached = scoredPointsCache.get(scored.positions)
   if (cached !== undefined) return cached
 
-  const points = withDepths(scored.positions, (index) => {
-    const scoreIndex = scored.order[index]
-    return scoreIndex === undefined ? undefined : depths[scoreIndex]
-  })
+  const points = withDepths(
+    scored.positions,
+    (index) => {
+      const scoreIndex = scored.order[index]
+      return scoreIndex === undefined ? undefined : depths[scoreIndex]
+    },
+    scored.radius,
+  )
   scoredPointsCache.set(scored.positions, points)
   return points
 }
@@ -365,6 +385,7 @@ function scoredPoints(
 function withDepths(
   flat: Float32Array,
   depthOf: (index: number) => number | undefined,
+  radius: PreviewCells['radius'],
 ): DeckPoints {
   const count = flat.length / 2
   const positions = new Float32Array(count * 3)
@@ -376,7 +397,7 @@ function withDepths(
     positions[index * 3 + 2] = z !== undefined && Number.isFinite(z) ? z : 0
   }
 
-  return { positions, size: 3 }
+  return { positions, size: 3, ...pointRadii(radius) }
 }
 
 interface ClassSplit {
@@ -547,26 +568,35 @@ function pythonSplit(cells: PreviewCells, python: StackPythonLayers): ClassSplit
 }
 
 function gather(points: DeckPoints, cells: readonly number[]): DeckPoints {
-  const { positions, size } = points
+  const { positions, size, radii } = points
   const gathered = new Float32Array(cells.length * size)
+  const gatheredRadii = radii === undefined ? null : new Float32Array(cells.length)
 
   cells.forEach((cell, index) => {
     for (let axis = 0; axis < size; axis += 1) {
       gathered[index * size + axis] = positions[cell * size + axis] ?? 0
     }
+    if (gatheredRadii !== null) {
+      gatheredRadii[index] = radii?.[cell] ?? PREVIEW_CELL_RADIUS_MICROMETERS
+    }
   })
 
-  return { positions: gathered, size }
+  return {
+    positions: gathered,
+    size,
+    ...(gatheredRadii === null ? {} : { radii: gatheredRadii }),
+  }
 }
 
 // Binary point data, one object per positions array (and colours), so
-// deck.gl sees unchanged data across renders.
+// deck.gl sees unchanged data across renders. A positions array always comes
+// with the same radii.
 type PointData = LayerData<unknown>
 
 const pointDataCache = new WeakMap<Float32Array, Map<Uint8Array | null, PointData>>()
 
 function pointData(points: DeckPoints, colors: Uint8Array | null): PointData {
-  const { positions, size } = points
+  const { positions, size, radii } = points
   let byColors = pointDataCache.get(positions)
 
   if (byColors === undefined) {
@@ -581,6 +611,7 @@ function pointData(points: DeckPoints, colors: Uint8Array | null): PointData {
     length: positions.length / size,
     attributes: {
       getPosition: { value: positions, size },
+      ...(radii === undefined ? {} : { getRadius: { value: radii, size: 1 } }),
       ...(colors === null
         ? {}
         : { getFillColor: { value: colors, size: 4, type: 'unorm8' } }),

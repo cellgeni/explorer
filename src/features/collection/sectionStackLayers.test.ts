@@ -80,6 +80,7 @@ interface LayerProps {
     >
   }
   readonly modelMatrix: Float32Array
+  readonly getRadius?: number
   readonly billboard: boolean
   readonly pickable: boolean
   readonly parameters?: { readonly depthWriteEnabled?: boolean }
@@ -162,6 +163,28 @@ describe('sectionStackLayers', () => {
     const picked = stackPick(pick('section-stack-0-classes', 1), targets)
     expect(picked).toEqual({ section: 0, kind: 'cell', index: 2 })
     expect(stackPickText(picked!, 'S1', input, [])).toBe('S1 · cell-2 · Neuron')
+  })
+
+  it('sizes cells by their radii, gathered with the cells each layer draws', () => {
+    const radius = Float32Array.of(4, 5, 6)
+    const input = section({
+      cells: { ...CELLS, radius },
+      classes: CLASSES,
+      overlay: { kind: 'classes', classOf: CLASSES.classOf, colors: ['#ff0000', null] },
+    })
+    const { layers } = sectionStackLayers([input], OPTIONS)
+
+    expect([...props(layers[0]).data.attributes.getRadius!.value]).toEqual([4, 6])
+    expect([...props(layers[1]).data.attributes.getRadius!.value]).toEqual([5])
+
+    // Visium spots share one radius; cells without an area are 10 µm across.
+    const spots = props(
+      sectionStackLayers([section({ cells: { ...CELLS, radius: 27.5 } })], OPTIONS)
+        .layers[0],
+    )
+    expect(spots.getRadius).toBe(27.5)
+    expect(spots.data.attributes.getRadius).toBeUndefined()
+    expect(props(sectionStackLayers([section()], OPTIONS).layers[0]).getRadius).toBe(5)
   })
 
   it('draws cells with a value of the track solid, those without as the outline', () => {

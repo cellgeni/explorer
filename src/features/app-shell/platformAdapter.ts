@@ -357,39 +357,30 @@ const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
   canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
 
+const PLATFORM_ADAPTERS: Readonly<Record<Platform, AppPlatformAdapter>> = {
+  xenium: XENIUM_PLATFORM_ADAPTER,
+  atera: ATERA_PLATFORM_ADAPTER,
+  visium: VISIUM_PLATFORM_ADAPTER,
+  'visium-hd': VISIUM_HD_PLATFORM_ADAPTER,
+  merscope: MERSCOPE_PLATFORM_ADAPTER,
+  h5ad: H5AD_PLATFORM_ADAPTER,
+  spatialdata: SPATIALDATA_PLATFORM_ADAPTER,
+  image: IMAGE_PLATFORM_ADAPTER,
+}
+
 export function appPlatformAdapterFor(
   loadState: DatasetLoadState,
   datasetPlatform: Platform | null,
 ): AppPlatformAdapter {
-  if (loadState.status === 'ready' && datasetPlatform === 'image') {
-    return IMAGE_PLATFORM_ADAPTER
-  }
+  return loadState.status === 'ready' && datasetPlatform !== null
+    ? PLATFORM_ADAPTERS[datasetPlatform]
+    : XENIUM_PLATFORM_ADAPTER
+}
 
-  if (loadState.status === 'ready' && datasetPlatform === 'visium-hd') {
-    return VISIUM_HD_PLATFORM_ADAPTER
-  }
-
-  if (loadState.status === 'ready' && datasetPlatform === 'h5ad') {
-    return H5AD_PLATFORM_ADAPTER
-  }
-
-  if (loadState.status === 'ready' && datasetPlatform === 'spatialdata') {
-    return SPATIALDATA_PLATFORM_ADAPTER
-  }
-
-  if (loadState.status === 'ready' && datasetPlatform === 'visium') {
-    return VISIUM_PLATFORM_ADAPTER
-  }
-
-  if (loadState.status === 'ready' && datasetPlatform === 'atera') {
-    return ATERA_PLATFORM_ADAPTER
-  }
-
-  if (loadState.status === 'ready' && datasetPlatform === 'merscope') {
-    return MERSCOPE_PLATFORM_ADAPTER
-  }
-
-  return XENIUM_PLATFORM_ADAPTER
+// Whether a dataset of the platform draws its points at their physical size,
+// for one drawn beside the open dataset (a collection panel).
+export function trueSizePointsFor(platform: Platform): boolean {
+  return PLATFORM_ADAPTERS[platform].trueSizePoints
 }
 
 // Whether the Cells section offers the `Nucleus boundaries` checkbox. A

@@ -157,6 +157,61 @@ describe('openPreviewSource', () => {
     expect((await source.cells()).depths).toBeUndefined()
   })
 
+  it('sizes cells by their areas, and Visium spots at their size at every zoom', async () => {
+    const spotArea = Math.PI * 27.5 ** 2
+    const sized = (x: number, cellId: string, cellArea?: number): CellOverviewPoint => ({
+      ...point(x, 0, cellId),
+      ...(cellArea === undefined ? {} : { cellArea }),
+    })
+    const dataset = {
+      meta: vi.fn(async () => ({ platform: 'visium' })),
+      overview: vi.fn(async (): Promise<CellOverviewPoint[]> => [
+        sized(0, 'a', spotArea),
+        sized(10, 'b', spotArea),
+      ]),
+      geneExpression: vi.fn(async () => ({
+        genes: ['Aqp4'],
+        maxCount: 1,
+        elements: [
+          {
+            id: 'b',
+            position: { x: micrometers(10), y: micrometers(0) },
+            count: 1,
+            cellArea: spotArea,
+          },
+        ],
+      })),
+    }
+    const source = await openPreviewSource(
+      URL_A,
+      loaders(
+        { platform: 'h5ad', h5adUrl: URL_A },
+        { getSpatialDataset: vi.fn(async () => dataset as never) },
+      ),
+    )
+
+    // Spots share one radius, so none is stored per spot.
+    const spots = await source.cells()
+    expect(spots.radius).toBeCloseTo(27.5)
+    expect(spots.trueSize).toBe(true)
+    expect((await source.scores(spots, ['Aqp4'], 'sum')).radius).toBeCloseTo(27.5)
+
+    // Cells of different areas keep their own; one without an area is a
+    // point 10 µm across.
+    dataset.meta.mockResolvedValueOnce({ platform: 'h5ad' })
+    dataset.overview.mockResolvedValueOnce([
+      sized(0, 'a', Math.PI * 4),
+      sized(10, 'b'),
+      sized(20, 'c', Math.PI * 36),
+    ])
+    const cells = await source.cells()
+    expect(cells.radius).toEqual(Float32Array.of(2, 5, 6))
+    expect(cells.trueSize).toBeUndefined()
+
+    dataset.overview.mockResolvedValueOnce([sized(0, 'a'), sized(10, 'b')])
+    expect((await source.cells()).radius).toBeUndefined()
+  })
+
   it('asks for the dataset again on each read, so a disposed one is reopened', async () => {
     const opened = [
       { overview: vi.fn(async () => [point(0, 0)]), geneExpression: vi.fn() },
