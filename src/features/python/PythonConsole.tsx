@@ -8,6 +8,7 @@ import {
   type PointerEvent,
 } from 'react'
 import { Button } from '../../components/ui'
+import { PYTHON_API_URL } from '../shell/docLinks'
 import { addPythonHistory, readPythonHistory, stepPythonHistory } from './pythonHistory'
 import { createPythonPrompt, type PythonPrompt } from './pythonPrompt'
 import { CODE_FILE_ACCEPT, readCodeFile } from './pythonCodeFile'
@@ -64,19 +65,26 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
   const historyRef = useRef<HistoryState | null>(null)
   const [promptReady, setPromptReady] = useState(false)
   const consoleRef = useRef<HTMLDivElement>(null)
-  // Null: the input grows with its text, up to 40% of the window.
+  // Null: the input and the output share the height evenly.
   const [promptHeight, setPromptHeight] = useState<number | null>(() =>
     readPromptHeight(),
   )
-  // The console's height, for the separator's range.
+  // The console's height, for the separator's range, and the input's, for
+  // its value while the height is shared.
   const [consoleHeight, setConsoleHeight] = useState(0)
+  const [sharedPromptHeight, setSharedPromptHeight] = useState(0)
   useEffect(() => {
     const element = consoleRef.current
-    if (element === null || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(([entry]) => {
-      setConsoleHeight(Math.round(entry?.contentRect.height ?? 0))
+    const input = promptHost.current
+    if (element === null || input === null || typeof ResizeObserver === 'undefined') {
+      return
+    }
+    const observer = new ResizeObserver(() => {
+      setConsoleHeight(Math.round(element.getBoundingClientRect().height))
+      setSharedPromptHeight(Math.round(input.getBoundingClientRect().height))
     })
     observer.observe(element)
+    observer.observe(input)
     return () => {
       observer.disconnect()
     }
@@ -219,9 +227,17 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
     prompt.current?.focus()
   }
 
+  // The rows (shell.css): the input shares the height evenly with the output
+  // until it has a height of its own, and is hidden without Python.
+  const layout = unavailable
+    ? ' is-unavailable'
+    : promptHeight === null
+      ? ''
+      : ' has-prompt-height'
+
   return (
     <div
-      className={`python-console${dropping ? ' is-dropping' : ''}`}
+      className={`python-console${layout}${dropping ? ' is-dropping' : ''}`}
       ref={consoleRef}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -259,11 +275,11 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
         aria-label="Input height"
         aria-valuemin={MIN_PROMPT_HEIGHT}
         aria-valuemax={clampPromptHeight(Number.MAX_SAFE_INTEGER, consoleHeight)}
-        aria-valuenow={promptHeight ?? MIN_PROMPT_HEIGHT}
+        aria-valuenow={promptHeight ?? Math.max(MIN_PROMPT_HEIGHT, sharedPromptHeight)}
         aria-valuetext={
-          promptHeight === null ? 'Fits the input' : `${promptHeight} pixels`
+          promptHeight === null ? 'Half the height' : `${promptHeight} pixels`
         }
-        title="Drag, or press Up and Down, to resize the input; double-click or Home to fit it"
+        title="Drag, or press Up and Down, to resize the input; double-click or Home to share the height evenly"
         tabIndex={0}
         hidden={unavailable}
         onPointerDown={onSplitterPointerDown}
@@ -279,13 +295,18 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
         className="python-prompt"
         ref={promptHost}
         hidden={unavailable}
-        style={
-          promptHeight === null
-            ? undefined
-            : { height: `${promptHeight}px`, maxHeight: 'none' }
-        }
+        style={promptHeight === null ? undefined : { height: `${promptHeight}px` }}
       />
       <div className="python-actions">
+        <a
+          className="python-api-link"
+          href={PYTHON_API_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="What cells, rois, view and the drawing functions do, on GitHub"
+        >
+          Python API
+        </a>
         <Button
           title="Run the input (Enter); Shift+Enter adds a line"
           variant="primary"

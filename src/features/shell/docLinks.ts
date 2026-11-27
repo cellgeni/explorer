@@ -12,6 +12,9 @@ export const UI_REFERENCE_URL = `${DOCS_BASE_URL}ui-reference.md`
 
 export const HOST_YOUR_OWN_DATA_URL = `${DOCS_BASE_URL}host-your-own-data.md`
 
+// The Python console's link to what its code can use (29-D11).
+export const PYTHON_API_URL = `${DOCS_BASE_URL}python-api.md`
+
 // The Help popover's links (15.3-B).
 export const HELP_LINKS: readonly { readonly label: string; readonly href: string }[] = [
   { label: 'User guide', href: USER_GUIDE_URL },

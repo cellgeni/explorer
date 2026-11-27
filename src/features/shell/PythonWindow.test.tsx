@@ -254,7 +254,36 @@ describe('the Python window (plan 29-D11)', () => {
 
     fireEvent.doubleClick(separator)
     expect(prompt.style.height).toBe('')
-    expect(separator).toHaveAttribute('aria-valuetext', 'Fits the input')
+    expect(separator).toHaveAttribute('aria-valuetext', 'Half the height')
+    expect(pythonWindow().querySelector('.python-console')).not.toHaveClass(
+      'has-prompt-height',
+    )
+  })
+
+  it('goes to the end of the last line on a click around the lines', async () => {
+    stubWideScreen()
+    const { Harness } = setup()
+    render(<Harness initial={{ ...DEFAULT_SHELL_PANELS, pythonOpen: true }} />)
+    const input = await within(pythonWindow()).findByRole('textbox', {
+      name: 'Python input',
+    })
+    const view = EditorView.findFromDOM(input)!
+    act(() => {
+      view.dispatch({
+        changes: { from: 0, insert: 'x = 1\ny = 2' },
+        selection: { anchor: 0 },
+      })
+    })
+    input.blur()
+
+    // Not a right-click, for the context menu.
+    fireEvent.mouseDown(input, { button: 2 })
+    expect(view.state.selection.main.head).toBe(0)
+
+    // The content fills the input, so this is a click below the lines.
+    fireEvent.mouseDown(input, { button: 0 })
+    expect(view.state.selection.main.head).toBe('x = 1\ny = 2'.length)
+    expect(view.hasFocus).toBe(true)
   })
 
   it('puts a code file in the input, opened or dropped, without running it', async () => {
@@ -292,6 +321,18 @@ describe('the Python window (plan 29-D11)', () => {
       expect(editor()).toBe('x = 1\ny = 2\nz = 3')
     })
     expect(worker.sent.some((message) => message.type === 'run')).toBe(false)
+  })
+
+  it('links to the Python API guide, also without Python', async () => {
+    stubWideScreen()
+    const { Harness } = setup({ supported: false })
+    render(<Harness initial={{ ...DEFAULT_SHELL_PANELS, pythonOpen: true }} />)
+    const link = await within(pythonWindow()).findByRole('link', { name: 'Python API' })
+    expect(link).toHaveAttribute(
+      'href',
+      'https://github.com/cellgeni/explorer/blob/main/docs/python-api.md',
+    )
+    expect(link).toHaveAttribute('target', '_blank')
   })
 
   it('arms Pick Point', async () => {
