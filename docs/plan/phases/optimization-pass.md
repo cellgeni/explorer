@@ -374,7 +374,7 @@ M3, main thread:
       row. Remove the whole-file mapping read nothing calls
       (`visiumHdBarcodeMappings.ts:124-150`). Look at the 2 µm
       `barcodes.tsv.gz` parse (`visiumHdBarcodes.ts:38-145`) too.
-  - Built in [#PR](https://github.com/cellgeni/explorer/pull/PR):
+  - Built in [#484](https://github.com/cellgeni/explorer/pull/484):
     [Visium HD Tables Read In A Worker](#visium-hd-tables-read-in-a-worker-2026-11-27).
 - [ ] **O17. A gene's CSR scan off the main thread.** (M) For an H5AD read
       by the H5 worker, use its `matrix-cells` request
