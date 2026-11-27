@@ -336,7 +336,7 @@ image the [generic opener](./image.md) reads works: OME-Zarr (including
 `bioformats2raw` stores and image groups inside a `.zarr` store, such as a
 SpatialData store's `images/he`), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
 
-- **Registration.** `useDatasetCollection` calls `registerCollectionImages`
+- **Registration.** `useDatasetCollection` calls `registerCollectionDatasets`
   (`src/data/datasetFiles.ts`) when the collection is read, before any of its
   datasets or previews opens. A manifest's image comes with the manifest,
   which detection registers (`manifestImageAttachment`). `datasetImageFor`

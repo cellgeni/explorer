@@ -7,6 +7,7 @@ import {
   type DatasetFileRole,
   type DatasetImageAttachment,
   type DatasetManifest,
+  type DatasetManifestChannelSetting,
   type DatasetManifestCustomImage,
   type DatasetManifestFile,
 } from '../datasets/datasetManifest'
@@ -46,10 +47,17 @@ export function datasetManifestFor(baseUrl: string): DatasetManifest | undefined
 // their placement) after the collection closes; a later collection listing
 // the same dataset replaces them.
 const datasetImages = new Map<string, DatasetImageAttachment>()
-// The custom image layers they list, kept the same way.
+// The custom image layers they list, and the channel settings the collection
+// gives their images, kept the same way.
 const datasetCustomImages = new Map<string, readonly DatasetManifestCustomImage[]>()
+const datasetChannelSettings = new Map<
+  string,
+  Readonly<Record<string, DatasetManifestChannelSetting>>
+>()
 
-export function registerCollectionImages(collection: DatasetCollection): void {
+export function registerCollectionDatasets(collection: DatasetCollection): void {
+  const channelSettings = collection.defaults?.channelSettings
+
   for (const entry of collection.datasets) {
     const key = datasetUrlKey(entry.url)
 
@@ -63,6 +71,12 @@ export function registerCollectionImages(collection: DatasetCollection): void {
       datasetCustomImages.delete(key)
     } else {
       datasetCustomImages.set(key, entry.customImages)
+    }
+
+    if (channelSettings === undefined) {
+      datasetChannelSettings.delete(key)
+    } else {
+      datasetChannelSettings.set(key, channelSettings)
     }
   }
 }
@@ -89,10 +103,18 @@ export function collectionCustomImagesFor(
   return datasetCustomImages.get(datasetUrlKey(baseUrl))
 }
 
+// The channel settings a collection gives the dataset's image.
+export function collectionChannelSettingsFor(
+  baseUrl: string,
+): Readonly<Record<string, DatasetManifestChannelSetting>> | undefined {
+  return datasetChannelSettings.get(datasetUrlKey(baseUrl))
+}
+
 // For tests.
-export function clearDatasetImages(): void {
+export function clearCollectionDatasets(): void {
   datasetImages.clear()
   datasetCustomImages.clear()
+  datasetChannelSettings.clear()
 }
 
 // URL of a file inside a dataset. Relative paths resolve against the

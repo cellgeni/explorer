@@ -1,4 +1,5 @@
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
+import { collectionChannelSettingsFor } from '../../data/datasetFiles'
 import {
   morphologyImageFromPyramidLoader,
   type MorphologyImage,
@@ -26,12 +27,16 @@ import {
 } from '../dataset/datasetManifestModel'
 import { merscopeImageForLoad } from '../dataset/merscopeImageModel'
 import { visiumImageForLoad } from '../dataset/visiumModel'
-import { defaultEnabledChannelIds } from '../morphology/morphologyChannels'
+import {
+  defaultEnabledChannelIds,
+  mergeMorphologyChannelDefaults,
+  type MorphologyChannelDefaults,
+} from '../morphology/morphologyChannels'
 
 // The image a dataset opens with in the main view, opened on its own for a
 // panel beside it (plan 30-D4): the same file, plane and placement, by the
 // same per-platform steps as the dataset load (useDatasetLifecycle.ts), with
-// the dataset manifest's defaults and nothing from the link. Only what the
+// the dataset manifest's and collection's defaults and nothing from the link. Only what the
 // image needs is read.
 
 export type PanelImage =
@@ -42,6 +47,8 @@ export type PanelImage =
       readonly enabledChannelIds: readonly string[] | undefined
       // Native RGB (H&E) keeps its full window, as in the main view.
       readonly autoContrast: boolean
+      // The colours and windows the dataset manifest and collection set.
+      readonly channelDefaults?: MorphologyChannelDefaults
     }
   | { readonly kind: 'flat'; readonly image: FlatMorphologyCanvasImage }
 
@@ -104,6 +111,10 @@ export async function loadPanelImage(
       : { timePoint: defaults.morphologyTimePoint }),
   }
   const selection = defaults.morphologyEnabledChannelIds
+  const channelDefaults = mergeMorphologyChannelDefaults(
+    detection.manifest?.defaults?.channelSettings,
+    collectionChannelSettingsFor(detection.baseUrl),
+  )
   // The dataset as the previews open it, so the image is placed with the
   // cells they draw.
   const dataset: unknown = await loaders.getSpatialDataset(detection.baseUrl, {
@@ -115,7 +126,12 @@ export async function loadPanelImage(
   if (detection.platform === 'xenium') {
     const image = await loaders.loadMorphologyImage(url, { ...signalOption, ...plane })
 
-    return pyramid(image, chosenChannels(image, selection, undefined), true)
+    return pyramid(
+      image,
+      chosenChannels(image, selection, undefined),
+      true,
+      channelDefaults,
+    )
   }
 
   if (detection.platform === 'atera') {
@@ -142,7 +158,12 @@ export async function loadPanelImage(
       ...(choice === '3d' ? { zchunkStoreUrl: null } : {}),
     })
 
-    return pyramid(image, chosenChannels(image, selection, undefined), true)
+    return pyramid(
+      image,
+      chosenChannels(image, selection, undefined),
+      true,
+      channelDefaults,
+    )
   }
 
   if (detection.platform === 'merscope') {
@@ -162,7 +183,12 @@ export async function loadPanelImage(
     const source = await dataset.imageSource(shown, signalOption)
 
     return source.kind === 'pyramid'
-      ? pyramid(await imageFromSource(source.loader.url, source, signal), undefined, true)
+      ? pyramid(
+          await imageFromSource(source.loader.url, source, signal),
+          undefined,
+          true,
+          channelDefaults,
+        )
       : null
   }
 
@@ -174,7 +200,12 @@ export async function loadPanelImage(
 
     const image = await imageFromSource(detection.imageUrl, source, signal, plane)
 
-    return pyramid(image, imageDatasetChannelIds(image.channelLoaders, selection), true)
+    return pyramid(
+      image,
+      imageDatasetChannelIds(image.channelLoaders, selection),
+      true,
+      channelDefaults,
+    )
   }
 
   if (detection.platform === 'visium-hd') {
@@ -206,6 +237,7 @@ export async function loadPanelImage(
       image,
       chosenChannels(image, selection, defaultEnabledChannelIds(image.channelLoaders)),
       !native,
+      channelDefaults,
     )
   }
 
@@ -242,8 +274,15 @@ function pyramid(
   image: MorphologyImage,
   enabledChannelIds: readonly string[] | undefined,
   autoContrast: boolean,
+  channelDefaults: MorphologyChannelDefaults | undefined,
 ): PanelImage {
-  return { kind: 'pyramid', image, enabledChannelIds, autoContrast }
+  return {
+    kind: 'pyramid',
+    image,
+    enabledChannelIds,
+    autoContrast,
+    ...(channelDefaults === undefined ? {} : { channelDefaults }),
+  }
 }
 
 function imageFromSource(

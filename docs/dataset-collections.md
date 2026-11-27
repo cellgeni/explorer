@@ -101,16 +101,16 @@ after `Stack in 3D` (34 MB more).
 
 ## Fields
 
-| Field         | Required | Value                                                                                                    |
-| ------------- | -------- | -------------------------------------------------------------------------------------------------------- |
-| `version`     | Yes      | `1`                                                                                                      |
-| `datasets`    | Yes      | The datasets, 1 to 500, in the order the bar lists them. See [Datasets](#datasets)                       |
-| `name`        | No       | Display name, shown in the collection bar                                                                |
-| `description` | No       | What the collection holds                                                                                |
-| `source`      | No       | Where the data comes from, with the same keys as a [manifest's](./dataset-manifest.md#source) `source`   |
-| `root`        | No       | Base for relative dataset paths instead of the collection's folder. Relative to the collection, or a URL |
-| `defaults`    | No       | Display settings for the first dataset opened. See [Defaults](#defaults)                                 |
-| `$schema`     | No       | Schema URL for editor completion and checking; the viewer ignores it                                     |
+| Field         | Required | Value                                                                                                                   |
+| ------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `version`     | Yes      | `1`                                                                                                                     |
+| `datasets`    | Yes      | The datasets, 1 to 500, in the order the bar lists them. See [Datasets](#datasets)                                      |
+| `name`        | No       | Display name, shown in the collection bar                                                                               |
+| `description` | No       | What the collection holds                                                                                               |
+| `source`      | No       | Where the data comes from, with the same keys as a [manifest's](./dataset-manifest.md#source) `source`                  |
+| `root`        | No       | Base for relative dataset paths instead of the collection's folder. Relative to the collection, or a URL                |
+| `defaults`    | No       | Display settings for the first dataset opened, and channel colours and windows for every one. See [Defaults](#defaults) |
+| `$schema`     | No       | Schema URL for editor completion and checking; the viewer ignores it                                                    |
 
 Unknown fields are errors, as in a dataset manifest.
 
@@ -328,17 +328,31 @@ micrometres while the cells are in image pixels:
 ### Defaults
 
 The dataset manifest's cross-dataset display settings: `genes`,
-`colorCellsBy`, `geneColorScale`, `geneRange`, `geneScoreMode`, and
-`cellPointScale`, with the [same values](./dataset-manifest.md#defaults).
-`geneRange` puts every section's colours and previews on one fixed scale.
-With a percentile top, such as `[null, "p95"]`, each section, open or
-previewed, tops out at that percentile of its own scores. Layer toggles,
-opacities
-and image channels belong to each dataset, so set them in that dataset's
+`colorCellsBy`, `geneColorScale`, `geneRange`, `geneScoreMode`,
+`cellPointScale`, and `channelSettings`, with the
+[same values](./dataset-manifest.md#defaults). `geneRange` puts every
+section's colours and previews on one fixed scale. With a percentile top,
+such as `[null, "p95"]`, each section, open or previewed, tops out at that
+percentile of its own scores. Layer toggles, opacities and which image
+channels are on belong to each dataset, so set them in that dataset's
 manifest.
+
+```json
+"defaults": {
+  "channelSettings": {
+    "DAPI": { "color": "#5890FF", "contrast": [0, 828] },
+    "ATP1A1/CD45/E-Cadherin": { "color": "#20A67A" }
+  }
+}
+```
 
 - The defaults apply to the first dataset opened from the collection, over
   that dataset's own manifest defaults.
+- `channelSettings` applies to every dataset opened from the collection, and
+  to the panels beside it, so sections stained alike show their channels in
+  the same colours and compare on one window. A link carries no channel
+  colours or windows, so it keeps them too. For a channel both name, the
+  collection's setting replaces the dataset manifest's.
 - A link that names a dataset as well as the collection is a shared view, so
   the link's settings apply instead.
 - A value that is not one of the listed options is ignored, with a line in

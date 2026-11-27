@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { parseDatasetCollection } from '../datasets/datasetCollection'
 import { parseDatasetManifest } from '../datasets/datasetManifest'
 import {
-  clearDatasetImages,
+  clearCollectionDatasets,
+  collectionChannelSettingsFor,
   collectionCustomImagesFor,
   datasetFileUrl,
   datasetFileUrlFor,
-  registerCollectionImages,
+  registerCollectionDatasets,
   setDatasetManifest,
 } from './datasetFiles'
 
@@ -15,6 +16,7 @@ const TOKEN = '?sv=2024&sig=abc'
 
 afterEach(() => {
   setDatasetManifest(FOLDER, undefined)
+  clearCollectionDatasets()
 })
 
 describe('dataset file URLs', () => {
@@ -47,7 +49,7 @@ describe('dataset file URLs', () => {
 
 describe('collection custom image layers', () => {
   afterEach(() => {
-    clearDatasetImages()
+    clearCollectionDatasets()
   })
 
   const collection = (customImages?: unknown) =>
@@ -62,14 +64,45 @@ describe('collection custom image layers', () => {
     )
 
   it('keeps a collection’s list per dataset until another collection lists the dataset', () => {
-    registerCollectionImages(collection([{ url: 'run-7/he.ome.tif' }]))
+    registerCollectionDatasets(collection([{ url: 'run-7/he.ome.tif' }]))
 
     expect(collectionCustomImagesFor('https://example.test/study/run-7')).toEqual([
       { path: 'run-7/he.ome.tif', url: 'https://example.test/study/run-7/he.ome.tif' },
     ])
 
     // A later collection without a list for the dataset drops it.
-    registerCollectionImages(collection())
+    registerCollectionDatasets(collection())
     expect(collectionCustomImagesFor('https://example.test/study/run-7')).toBeUndefined()
+  })
+})
+
+describe('collection channel settings', () => {
+  const collection = (defaults?: unknown) =>
+    parseDatasetCollection(
+      {
+        version: 1,
+        datasets: [{ dataset: 'a.zarr' }, { dataset: 'b.zarr' }],
+        ...(defaults === undefined ? {} : { defaults }),
+      },
+      'https://example.test/study/collection.json',
+    )
+
+  it('gives every dataset of the collection its channel settings', () => {
+    registerCollectionDatasets(
+      collection({ channelSettings: { DAPI: { color: '#5890FF' } } }),
+    )
+
+    for (const dataset of ['a.zarr', 'b.zarr']) {
+      expect(
+        collectionChannelSettingsFor(`https://example.test/study/${dataset}`),
+      ).toEqual({ DAPI: { color: [88, 144, 255] } })
+    }
+
+    // A later collection listing the datasets without settings replaces them.
+    registerCollectionDatasets(collection())
+
+    expect(collectionChannelSettingsFor('https://example.test/study/a.zarr')).toBe(
+      undefined,
+    )
   })
 })

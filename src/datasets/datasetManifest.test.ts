@@ -762,6 +762,53 @@ describe('parseDatasetManifest', () => {
     ).toContain('"defaults.customImages[1].url" names an image an earlier entry names')
   })
 
+  it('reads channel colours and contrast windows by channel name or ID', () => {
+    expect(
+      parse({
+        version: 1,
+        platform: 'xenium',
+        defaults: {
+          channelSettings: {
+            ' DAPI ': { color: '#5890ff', contrast: [0, 828] },
+            'Channel:2': { color: ' F0C84B ' },
+            '18S': { contrast: [-1.5, 423] },
+          },
+        },
+      }).defaults,
+    ).toEqual({
+      channelSettings: {
+        DAPI: { color: [88, 144, 255], contrast: [0, 828] },
+        'Channel:2': { color: [240, 200, 75] },
+        '18S': { contrast: [-1.5, 423] },
+      },
+    })
+
+    const settings = (value: unknown) =>
+      parseError({ version: 1, platform: 'xenium', defaults: { channelSettings: value } })
+
+    expect(settings(['DAPI'])).toContain('"defaults.channelSettings" must be an object')
+    expect(settings({ ' ': {} })).toContain('names a channel with a blank name')
+    expect(settings({ DAPI: {}, dapi: {} })).toContain(
+      'names the channel "dapi" more than once',
+    )
+    expect(settings({ DAPI: '#5890FF' })).toContain(
+      '"defaults.channelSettings.DAPI" must be an object',
+    )
+    expect(settings({ DAPI: { colour: '#5890FF' } })).toContain(
+      'unknown field "defaults.channelSettings.DAPI.colour"',
+    )
+    for (const color of ['blue', '#5890F', '#5890FFFF', 5_820_671]) {
+      expect(settings({ DAPI: { color } })).toContain(
+        '"defaults.channelSettings.DAPI.color" must be a hex colour',
+      )
+    }
+    for (const contrast of [[828, 0], [5, 5], [0], [0, '828'], [0, null], '0,828']) {
+      expect(settings({ DAPI: { contrast } })).toContain(
+        '"defaults.channelSettings.DAPI.contrast" must be [min, max]',
+      )
+    }
+  })
+
   it('reads where the data comes from and checks the source fields', () => {
     expect(
       parse({

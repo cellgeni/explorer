@@ -21,6 +21,7 @@ import {
 } from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
 import {
+  collectionChannelSettingsFor,
   collectionCustomImagesFor,
   collectionImageFor,
   datasetImageFor,
@@ -114,6 +115,9 @@ import {
   channelsToAutoContrastOnLoad,
   createMorphologyChannelSettings,
   defaultEnabledChannelIds,
+  mergeMorphologyChannelDefaults,
+  unmatchedMorphologyChannelDefaults,
+  type MorphologyChannelDefaults,
   type MorphologyChannelSetting,
 } from '../morphology/morphologyChannels'
 import type {
@@ -1041,6 +1045,23 @@ export function useDatasetLifecycle({
           appendFallbackNotice(notice)
         })
       }
+      // Channel settings that name no channel of the image, such as a
+      // misspelt name, are listed in the log.
+      const logUnmatchedChannelDefaults = (
+        image: MorphologyImage,
+        defaults: MorphologyChannelDefaults | undefined,
+      ) => {
+        const unmatched = unmatchedMorphologyChannelDefaults(
+          image.channelLoaders,
+          defaults,
+        )
+
+        if (unmatched.length > 0) {
+          appendDebugEvent(
+            `Channel settings that name no channel of the image: ${unmatched.join(', ')}`,
+          )
+        }
+      }
       const loadMorphologyInBackground = (
         load: () => Promise<MorphologyImage | null>,
         options: {
@@ -1049,6 +1070,7 @@ export function useDatasetLifecycle({
           // than only the first.
           readonly enableFirstChannelsByDefault?: boolean
           readonly skipNativeRgbAutoContrast?: boolean
+          readonly channelDefaults?: MorphologyChannelDefaults
         } = {},
       ) => {
         void load()
@@ -1078,10 +1100,13 @@ export function useDatasetLifecycle({
                       options.channelSelection,
                       defaultChannelIds,
                     )
-              const channelSettings = createMorphologyChannelSettings(
-                image,
-                enabledChannelIds === undefined ? {} : { enabledChannelIds },
-              )
+              const channelSettings = createMorphologyChannelSettings(image, {
+                ...(enabledChannelIds === undefined ? {} : { enabledChannelIds }),
+                ...(options.channelDefaults === undefined
+                  ? {}
+                  : { channelDefaults: options.channelDefaults }),
+              })
+              logUnmatchedChannelDefaults(image, options.channelDefaults)
 
               setMorphologyImage(image)
               setMorphologyChannelSettings((current) =>
@@ -1433,6 +1458,19 @@ export function useDatasetLifecycle({
             setCustomImagesToOpen?.({ datasetUrl: requestedUrl, images: customImages })
           })
         }
+
+        // Channel colours and windows belong to the image, so a link, which
+        // carries none, keeps them.
+        const channelDefaults = mergeMorphologyChannelDefaults(
+          manifest?.defaults?.channelSettings,
+          collectionChannelSettingsFor(detection.baseUrl),
+        )
+        const channelOptions = {
+          ...(restoreState.morphologyEnabledChannelIds === undefined
+            ? {}
+            : { channelSelection: restoreState.morphologyEnabledChannelIds }),
+          ...(channelDefaults === undefined ? {} : { channelDefaults }),
+        }
         const restoredPlane = {
           ...(restoreState.morphologyZPlane === undefined
             ? {}
@@ -1530,9 +1568,7 @@ export function useDatasetLifecycle({
               )
             },
             {
-              ...(restoreState.morphologyEnabledChannelIds === undefined
-                ? {}
-                : { channelSelection: restoreState.morphologyEnabledChannelIds }),
+              ...channelOptions,
               enableFirstChannelsByDefault: true,
               skipNativeRgbAutoContrast: true,
             },
@@ -1947,9 +1983,7 @@ export function useDatasetLifecycle({
                     // A manifest's sidecar covers the 2D channel files only.
                     ...(imageChoice === '3d' ? { zchunkStoreUrl: null } : {}),
                   }),
-            restoreState.morphologyEnabledChannelIds === undefined
-              ? {}
-              : { channelSelection: restoreState.morphologyEnabledChannelIds },
+            channelOptions,
           )
           return
         }
@@ -2091,34 +2125,37 @@ export function useDatasetLifecycle({
           appendDebugEvent(
             `MERSCOPE ${label} image loading from ${imageOptions.fileName} (${formatMerscopeImageSize(total)})`,
           )
-          loadMorphologyInBackground(async () => {
-            const imageSource = await dataset.imageSource(choice, {
-              signal,
-              onFallback: notifyFallbackWhenCommitted,
-              onProgress: (received, size) => {
-                appendDebugEvent(
-                  `MERSCOPE ${label} image: ${formatMerscopeImageSize(received)} of ${formatMerscopeImageSize(size)}`,
-                  { coalesceKey: `merscope-image-progress:${requestedUrl}` },
-                )
-              },
-            })
-
-            if (imageSource.kind !== 'pyramid') {
-              return null
-            }
-
-            return morphologyImageFromPyramidLoader(
-              imageSource.loader.url,
-              imageSource.loader,
-              {
-                onFallback: notifyFallbackWhenCommitted,
+          loadMorphologyInBackground(
+            async () => {
+              const imageSource = await dataset.imageSource(choice, {
                 signal,
-                ...(imageSource.openChannelLoader === undefined
-                  ? {}
-                  : { openImage: imageSource.openChannelLoader }),
-              },
-            )
-          })
+                onFallback: notifyFallbackWhenCommitted,
+                onProgress: (received, size) => {
+                  appendDebugEvent(
+                    `MERSCOPE ${label} image: ${formatMerscopeImageSize(received)} of ${formatMerscopeImageSize(size)}`,
+                    { coalesceKey: `merscope-image-progress:${requestedUrl}` },
+                  )
+                },
+              })
+
+              if (imageSource.kind !== 'pyramid') {
+                return null
+              }
+
+              return morphologyImageFromPyramidLoader(
+                imageSource.loader.url,
+                imageSource.loader,
+                {
+                  onFallback: notifyFallbackWhenCommitted,
+                  signal,
+                  ...(imageSource.openChannelLoader === undefined
+                    ? {}
+                    : { openImage: imageSource.openChannelLoader }),
+                },
+              )
+            },
+            channelDefaults === undefined ? {} : { channelDefaults },
+          )
           return
         }
 
@@ -2164,12 +2201,13 @@ export function useDatasetLifecycle({
             image.channelLoaders,
             restoreState.morphologyEnabledChannelIds,
           )
-          const channelSettings = createMorphologyChannelSettings(
-            image,
-            enabledChannelIds === undefined ? {} : { enabledChannelIds },
-          )
+          const channelSettings = createMorphologyChannelSettings(image, {
+            ...(enabledChannelIds === undefined ? {} : { enabledChannelIds }),
+            ...(channelDefaults === undefined ? {} : { channelDefaults }),
+          })
 
           commit()
+          logUnmatchedChannelDefaults(image, channelDefaults)
           setMorphologyImage(image)
           setMorphologyChannelSettings((current) =>
             mergeMorphologyChannelSettings({
@@ -2449,9 +2487,7 @@ export function useDatasetLifecycle({
               onFallback: notifyFallbackWhenCommitted,
               ...restoredPlane,
             }),
-          restoreState.morphologyEnabledChannelIds === undefined
-            ? {}
-            : { channelSelection: restoreState.morphologyEnabledChannelIds },
+          channelOptions,
         )
       } catch (error) {
         if (isAbortError(error)) {
