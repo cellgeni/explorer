@@ -1,18 +1,32 @@
-import type { Layer } from '@deck.gl/core'
+import type { Color, Layer } from '@deck.gl/core'
 import { OrthographicView } from '@deck.gl/core'
+import { DataFilterExtension } from '@deck.gl/extensions'
 import { ScatterplotLayer } from '@deck.gl/layers'
+import type { SpatialElement } from '../../datasets/spatialDataset'
+import {
+  boundaryElementsToLayerData,
+  createCellBoundaryLayerGeometry,
+  createCellBoundaryLayers,
+  createCellBoundaryLayerStyle,
+  EMPTY_CELL_BOUNDARY_LAYER_STYLE,
+} from '../../rendering/cellBoundaryRenderer'
 import { metadataColor } from '../../rendering/cellStyling'
 import {
   DEFAULT_OVERVIEW_CELL_FILL_RGB,
   geneExpressionColor,
   geneExpressionIntensity,
 } from '../../rendering/deckLayerColors'
-import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
+import type {
+  CellBoundaryLayerGeometry,
+  CellBoundaryLayerStyle,
+  GeneExpressionColorScale,
+} from '../../rendering/deckLayerTypes'
 import { metadataValueText } from '../annotations/annotationModel'
 import type { CollectionBarAnnotations } from './CollectionBar'
 import {
   PREVIEW_CELL_RADIUS_MICROMETERS,
   shownClassOf,
+  type PreviewBounds,
   type PreviewCells,
   type PreviewMetadataTrack,
   type PreviewRadius,
@@ -26,7 +40,10 @@ import type { PreviewEntry } from './collectionPreviewStore'
 // from its collection preview, coloured as the main view colours them. Each
 // cell is a point the size of its area, as in the main view (10 µm across
 // without one), kept between a minimum and a maximum size on screen. Data y
-// grows downwards; deck.gl's y is its negative, as in the main view.
+// grows downwards; deck.gl's y is its negative, as in the main view. With
+// its `Cell boundaries` on (plan 30-D9), the outlines read for the panel's
+// view are drawn as the main view draws them: under the points, each in its
+// cell's colour and filled while cells are coloured, in place of the point.
 
 export const LINKED_SECTION_VIEW = new OrthographicView({
   id: 'linked-section',
@@ -48,6 +65,35 @@ const UNSCORED_CELL_RGBA = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 120] as const
 // of the tissue.
 const FADED_CELL_RGBA = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 48] as const
 const SCORED_CELL_ALPHA = 235
+
+// A panel's outlines, matched to its cells.
+export interface LinkedSectionOutlines {
+  readonly geometry: CellBoundaryLayerGeometry
+  // Each outlined cell's index in the section's cells, by its ID.
+  readonly cellIndexById: ReadonlyMap<string, number>
+  // 1 for each outlined cell, whose point is not drawn; 0 for the rest.
+  readonly cellFilter: Float32Array
+  // Where the outlines lie, in the dataset's coordinates; null for none.
+  readonly bounds: PreviewBounds | null
+}
+
+// How the outlines are drawn.
+export interface LinkedSectionOutlineLayers {
+  readonly outlines: LinkedSectionOutlines
+  // Each outlined cell's index in the scores, by its ID.
+  readonly scoreIndexById: ReadonlyMap<string, number>
+  readonly style: CellBoundaryLayerStyle
+  // Filled while cells are coloured, as in the main view.
+  readonly filled: boolean
+  // The main view's Cell fill and Boundary opacities.
+  readonly fillOpacity: number
+  readonly lineOpacity: number
+}
+
+// Shared so the layers' extensions stay the same between renders.
+const OUTLINED_POINT_FILTER = new DataFilterExtension({ filterSize: 1 })
+// The points kept: those whose filter value is 0, without an outline.
+const OUTLINED_POINT_FILTER_RANGE: [number, number] = [0, 0.5]
 
 export interface LinkedSectionLayerOptions {
   readonly colorScale: GeneExpressionColorScale
@@ -114,6 +160,7 @@ export function linkedSectionLayers(
   cells: PreviewCells,
   overlay: PreviewOverlay | null,
   options: LinkedSectionLayerOptions,
+  outlineLayers: LinkedSectionOutlineLayers | null = null,
 ): Layer[] {
   const radius = {
     radiusUnits: 'common',
@@ -128,7 +175,26 @@ export function linkedSectionLayers(
       : overlay?.kind === 'values'
         ? valueColorAttribute(overlay)
         : null
-  const layers: Layer[] = [
+  // Outlined cells' points are left out. The filter is there with or
+  // without outlines: deck.gl sets up an extension only for a new layer, so
+  // one added when outlines first come would filter nothing.
+  const filter = {
+    extensions: [OUTLINED_POINT_FILTER],
+    filterRange: OUTLINED_POINT_FILTER_RANGE,
+  }
+  const layers: Layer[] =
+    outlineLayers === null
+      ? []
+      : (createCellBoundaryLayers({
+          geometry: outlineLayers.outlines.geometry,
+          style: outlineLayers.style,
+          fillEnabled: outlineLayers.filled,
+          cellFillOpacity: outlineLayers.fillOpacity,
+          cellBoundaryOpacity: outlineLayers.lineOpacity,
+          pickable: true,
+        }) as Layer[])
+
+  layers.push(
     new ScatterplotLayer({
       id: LINKED_CELLS_LAYER_ID,
       data: {
@@ -139,6 +205,12 @@ export function linkedSectionLayers(
           ...(classColors === null
             ? {}
             : { getFillColor: { value: classColors, size: 4, normalized: true } }),
+          getFilterValue: {
+            value:
+              outlineLayers?.outlines.cellFilter ??
+              noOutlines(cells.positions, cellCount),
+            size: 1,
+          },
         },
       },
       ...radius,
@@ -147,11 +219,12 @@ export function linkedSectionLayers(
       ...(classColors === null
         ? { getFillColor: overlay?.kind === 'scores' ? UNSCORED_CELL_RGBA : CELL_RGBA }
         : {}),
+      ...filter,
       pickable: true,
       stroked: false,
       filled: true,
     }) as Layer,
-  ]
+  )
 
   if (overlay?.kind === 'scores') {
     const scored = scoredCells(overlay.scores, options)
@@ -166,11 +239,19 @@ export function linkedSectionLayers(
               getPosition: { value: scored.positions, size: 2 },
               getFillColor: { value: scored.colors, size: 4, normalized: true },
               ...radiusAttribute(scored.radius),
+              getFilterValue: {
+                value:
+                  outlineLayers === null
+                    ? noOutlines(scored, scored.order.length)
+                    : scoredCellFilter(scored, outlineLayers.scoreIndexById),
+                size: 1,
+              },
             },
           },
           ...radius,
           ...radiusProp(scored.radius),
           radiusMinPixels: SCORED_CELL_RADIUS_MIN_PIXELS * options.radiusScale,
+          ...filter,
           pickable: true,
           stroked: false,
           filled: true,
@@ -194,6 +275,140 @@ export function radiusProp(radius: PreviewRadius): { readonly getRadius?: number
   return typeof radius === 'number' ? { getRadius: radius } : {}
 }
 
+// The outlines read for a panel, each matched to its cell by ID. Only cells
+// where the outlines lie are looked at.
+export function linkedSectionOutlines(
+  elements: readonly SpatialElement[],
+  cells: PreviewCells,
+): LinkedSectionOutlines {
+  const geometry = createCellBoundaryLayerGeometry(boundaryElementsToLayerData(elements))
+  const ids = geometry.boundaryCellIds
+  const cellFilter = new Float32Array(cells.positions.length / 2)
+  const cellIndexById = new Map<string, number>()
+  const bounds = outlineBounds(geometry)
+
+  if (bounds !== null) {
+    forEachPointIn(cells.positions, bounds, (index) => {
+      const id = cells.cellIds[index]
+
+      if (id !== undefined && ids.has(id)) {
+        cellIndexById.set(id, index)
+        cellFilter[index] = 1
+      }
+    })
+  }
+
+  return { geometry, cellIndexById, cellFilter, bounds }
+}
+
+// Each outlined cell's index in the scores, by its ID.
+export function outlinedScoreIndexes(
+  outlines: LinkedSectionOutlines,
+  scores: PreviewScores | null,
+): ReadonlyMap<string, number> {
+  const found = new Map<string, number>()
+  if (scores === null || outlines.bounds === null) return found
+
+  const ids = outlines.geometry.boundaryCellIds
+
+  forEachPointIn(scores.positions, outlines.bounds, (index) => {
+    const id = scores.ids[index]
+    if (id !== undefined && ids.has(id)) found.set(id, index)
+  })
+
+  return found
+}
+
+// Each outline in its cell's colour, as the overlay colours its point; with
+// no overlay, outlines keep the main view's grey.
+export function linkedSectionOutlineStyle(
+  outlines: LinkedSectionOutlines,
+  overlay: PreviewOverlay | null,
+  scoreIndexById: ReadonlyMap<string, number>,
+  scale: Pick<LinkedSectionLayerOptions, 'colorScale' | 'scaleMin' | 'scaleMax'>,
+): CellBoundaryLayerStyle {
+  if (overlay === null) return EMPTY_CELL_BOUNDARY_LAYER_STYLE
+
+  if (overlay.kind === 'scores') {
+    return createCellBoundaryLayerStyle(outlines.geometry, {
+      cellColor: (cellId) => {
+        const scoreIndex = scoreIndexById.get(cellId)
+        const score =
+          scoreIndex === undefined ? undefined : overlay.scores.scores[scoreIndex]
+
+        if (score === undefined || !Number.isFinite(score) || score <= 0) {
+          return outlines.cellIndexById.has(cellId) ? [...UNSCORED_CELL_RGBA] : undefined
+        }
+
+        const color = geneExpressionColor(
+          scale.colorScale,
+          geneExpressionIntensity(score, scale.scaleMin, scale.scaleMax),
+        )
+        return [color[0] ?? 0, color[1] ?? 0, color[2] ?? 0, SCORED_CELL_ALPHA]
+      },
+    })
+  }
+
+  const colors =
+    overlay.kind === 'classes'
+      ? classColorAttribute(overlay)
+      : valueColorAttribute(overlay)
+
+  return createCellBoundaryLayerStyle(outlines.geometry, {
+    cellColor: (cellId): Color | undefined => {
+      const index = outlines.cellIndexById.get(cellId)
+      if (index === undefined) return undefined
+
+      const offset = index * 4
+      return [
+        colors[offset] ?? 0,
+        colors[offset + 1] ?? 0,
+        colors[offset + 2] ?? 0,
+        colors[offset + 3] ?? 0,
+      ]
+    },
+  })
+}
+
+// Where the outlines lie: their vertices' extent, with y back in the
+// dataset's direction.
+function outlineBounds(geometry: CellBoundaryLayerGeometry): PreviewBounds | null {
+  const path = geometry.pathLayerData.attributes.getPath.value as Float32Array | undefined
+  if (path === undefined || path.length === 0) return null
+
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+
+  for (let index = 0; index < path.length; index += 3) {
+    const x = path[index] ?? Number.NaN
+    const y = -(path[index + 1] ?? Number.NaN)
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+
+  return minX <= maxX && minY <= maxY ? { minX, maxX, minY, maxY } : null
+}
+
+// Calls `visit` with the index of each point (interleaved x, y) in `bounds`.
+function forEachPointIn(
+  positions: Float32Array,
+  bounds: PreviewBounds,
+  visit: (index: number) => void,
+): void {
+  for (let index = 0; index < positions.length / 2; index += 1) {
+    const x = positions[index * 2] ?? Number.NaN
+    const y = positions[index * 2 + 1] ?? Number.NaN
+
+    if (x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY) {
+      visit(index)
+    }
+  }
+}
+
 // Cached per array, so a pan or zoom hands deck.gl the same attribute arrays
 // and nothing is uploaded again.
 const deckPositionsCache = new WeakMap<Float32Array, Float32Array>()
@@ -208,6 +423,11 @@ const valueColorsCache = new WeakMap<
 const scoredCellsCache = new WeakMap<
   PreviewScores,
   { readonly key: string; readonly cells: LinkedScoredCells }
+>()
+const noOutlinesCache = new WeakMap<object, Float32Array>()
+const scoredFilterCache = new WeakMap<
+  LinkedScoredCells,
+  { readonly outlined: ReadonlyMap<string, number>; readonly filter: Float32Array }
 >()
 
 export function deckPositions(positions: Float32Array): Float32Array {
@@ -333,4 +553,33 @@ export function scoredCells(
   const cells = { positions, colors, order, radius }
   scoredCellsCache.set(scores, { key, cells })
   return cells
+}
+
+// 1 for each drawn scored cell that is outlined, in draw order.
+function scoredCellFilter(
+  scored: LinkedScoredCells,
+  outlined: ReadonlyMap<string, number>,
+): Float32Array {
+  const cached = scoredFilterCache.get(scored)
+  if (cached?.outlined === outlined) return cached.filter
+
+  const outlinedScores = new Set(outlined.values())
+  const filter = new Float32Array(scored.order.length)
+
+  scored.order.forEach((scoreIndex, index) => {
+    if (outlinedScores.has(scoreIndex)) filter[index] = 1
+  })
+
+  scoredFilterCache.set(scored, { outlined, filter })
+  return filter
+}
+
+// A filter that keeps every point, one per array of points.
+function noOutlines(points: object, length: number): Float32Array {
+  const cached = noOutlinesCache.get(points)
+  if (cached?.length === length) return cached
+
+  const filter = new Float32Array(length)
+  noOutlinesCache.set(points, filter)
+  return filter
 }

@@ -134,6 +134,27 @@
   text-align: center;
 }
 
+/* Why a panel asked for its cell boundaries draws none, at its foot,
+   wrapping in a narrow panel. */
+.linked-section-note {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  bottom: var(--space-2);
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 2 * var(--space-2));
+  margin: 0;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  text-align: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
 .linked-section-tooltip {
   position: absolute;
   z-index: var(--z-canvas-overlay);

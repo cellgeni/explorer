@@ -156,9 +156,11 @@ Features:
       viewer), previews by metadata and sorted by expression, class colours
       in links, an embedding beside the view, `labels` without an `image`,
       and the transformations of an image group inside a SpatialData store.
-      Side-by-side panels show cells only (no image, boundaries, transcripts
-      or tools), and Visium HD and image-only datasets cannot be panels (see
-      [Phase 20](phases/20-dataset-collections.md#known-gaps)).
+      Side-by-side panels show cells, their image and cell boundaries only
+      (no nucleus boundaries, transcripts or tools; outlines at the first z
+      plane), and Visium HD and image-only datasets cannot be panels (see
+      [Phase 20](phases/20-dataset-collections.md#known-gaps) and
+      [Phase 30](phases/30-compare-panels.md)).
 - [ ] 3D section stack: cells only (no section images, boundaries or
       transcripts), placed by depth only (no per-section transform or
       SpatialData transformations), not measured on large stacks, no section

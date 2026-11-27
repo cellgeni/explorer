@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type RefObject,
 } from 'react'
 import type { LinkedViewChannel, LinkedViewState } from '../../components/linkedView'
 import {
@@ -16,6 +17,7 @@ import {
   type MorphologyCanvasChannel,
 } from '../../components/MorphologyCanvas'
 import {
+  BoundariesIcon,
   Button,
   ChannelsIcon,
   Checkbox,
@@ -33,11 +35,20 @@ import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
 import { PointerTooltip } from '../../components/PointerTooltip'
 import { ReleasingDeck } from '../../components/releasingDeck'
 import type { DatasetCollectionEntry } from '../../datasets/datasetCollection'
+import { BOUNDARY_VIEWPORT_CELL_LIMIT } from '../../rendering/boundaryViewport'
+import { CELL_BOUNDARY_HIT_AREA_LAYER_ID } from '../../rendering/cellBoundaryRenderer'
 import {
   overviewCellRadiusMaxPixels,
   UNCAPPED_RADIUS_PIXELS,
 } from '../../rendering/cellPointRenderer'
-import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
+import type {
+  CellBoundaryDatum,
+  GeneExpressionColorScale,
+} from '../../rendering/deckLayerTypes'
+import {
+  DEFAULT_CELL_BOUNDARY_OPACITY,
+  DEFAULT_CELL_FILL_OPACITY,
+} from '../../rendering/layerOpacity'
 import { fitExtentViewState } from '../../rendering/overviewViewState'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import { MorphologyChannelControls } from '../morphology/MorphologyChannelControls'
@@ -59,9 +70,13 @@ import {
   LINKED_SCORES_LAYER_ID,
   LINKED_SECTION_VIEW,
   linkedSectionLayers,
+  linkedSectionOutlines,
+  linkedSectionOutlineStyle,
+  outlinedScoreIndexes,
   scoredCells,
   sectionOverlay,
   valueLabel,
+  type LinkedSectionOutlineLayers,
 } from './linkedSectionLayers'
 import {
   hasOffset,
@@ -75,8 +90,10 @@ import {
   type ResolvedPanel,
   type ShownPanel,
 } from './linkedSectionsModel'
+import type { PanelBoundaryLoaders, PanelSize } from './panelBoundaries'
 import { useCollectionPreviewUpdates } from './useCollectionPreviews'
 import { useFocusHandOff } from './useFocusHandOff'
+import { usePanelBoundaries, type PanelBoundaryState } from './usePanelBoundaries'
 import {
   usePanelImage,
   type MainImageChannels,
@@ -90,7 +107,8 @@ import {
 // rest follow. An unlinked one pans and zooms on its own. Cells are coloured
 // as the main view colours them: by the selected genes, on the Gene scale, by
 // the annotation set's classes, or by a metadata track. Each panel's image
-// channels are its own.
+// channels are its own. A panel draws its section's cell boundaries when
+// asked (plan 30-D9), read for its own view by the main view's rules.
 
 export interface LinkedSectionsColoring {
   // The genes cells are coloured by; none draws the cells only.
@@ -123,15 +141,23 @@ interface LinkedSectionsProps {
   // An unlinked panel's view, once it has stopped moving, for the address:
   // by the link it has moved under.
   readonly onViewReport: (link: PanelLink, view: LinkedViewState | null) => void
-  // Shows or hides a panel's image or cells, or records its shown channels.
+  // Shows or hides a panel's image, cells or boundaries, or records its
+  // shown channels.
   readonly onPanelChange?: (
     panel: ResolvedPanel,
-    patch: Pick<Partial<ResolvedPanel>, 'image' | 'channels'>,
+    patch: Pick<Partial<ResolvedPanel>, 'image' | 'channels' | 'boundaries'>,
   ) => void
   // Reads a panel's image; without them, panels show cells only.
   readonly imageLoaders?: PanelImageLoaders | null
   // The main view's image channels, which a panel's image starts from.
   readonly mainChannels?: MainImageChannels | null
+  // Reads a panel's cell boundaries; without them, panels offer none.
+  readonly boundaryLoaders?: PanelBoundaryLoaders | null
+  // The main view's Boundary limit, Cell fill and Boundary opacities, which
+  // panels draw their outlines by.
+  readonly boundaryCellLimit?: number
+  readonly cellFillOpacity?: number
+  readonly cellBoundaryOpacity?: number
 }
 
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
@@ -151,6 +177,12 @@ const NO_IMAGE_LOADERS: PanelImageLoaders = {
   computeAutoChannelContrast: () => Promise.reject(new Error('No image')),
 }
 const NO_PANEL_CHANGE = () => {}
+const NO_BOUNDARY_LOADERS: PanelBoundaryLoaders = {
+  hasCellBoundaries: () => Promise.resolve(false),
+  loadBoundaryElements: () => Promise.resolve({ elements: [] }),
+  retainDataset: () => () => {},
+}
+const NO_SCORE_INDEXES: ReadonlyMap<string, number> = new Map()
 
 export function LinkedSections({
   panels,
@@ -167,6 +199,10 @@ export function LinkedSections({
   onPanelChange = NO_PANEL_CHANGE,
   imageLoaders = null,
   mainChannels = null,
+  boundaryLoaders = null,
+  boundaryCellLimit = BOUNDARY_VIEWPORT_CELL_LIMIT,
+  cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
+  cellBoundaryOpacity = DEFAULT_CELL_BOUNDARY_OPACITY,
   openUrl = null,
 }: LinkedSectionsProps) {
   useCollectionPreviewUpdates(store)
@@ -205,6 +241,7 @@ export function LinkedSections({
             link={panel.link}
             image={panel.image ?? null}
             channels={panel.channels ?? null}
+            boundaries={panel.boundaries === true}
             preview={store?.entry(entry.url) ?? null}
             channel={channel}
             coloring={shownColoring}
@@ -219,6 +256,10 @@ export function LinkedSections({
             onPanelChange={onPanelChange}
             imageLoaders={imageLoaders}
             mainChannels={mainChannels}
+            boundaryLoaders={boundaryLoaders}
+            boundaryCellLimit={boundaryCellLimit}
+            cellFillOpacity={cellFillOpacity}
+            cellBoundaryOpacity={cellBoundaryOpacity}
           />
         )
       })}
@@ -275,6 +316,7 @@ interface LinkedSectionPanelProps {
   readonly link: PanelLink
   readonly image: PanelImageMode
   readonly channels: readonly string[] | null
+  readonly boundaries: boolean
   readonly preview: PreviewEntry | null
   readonly channel: LinkedViewChannel
   readonly coloring: LinkedSectionsColoring
@@ -289,6 +331,10 @@ interface LinkedSectionPanelProps {
   readonly onPanelChange: NonNullable<LinkedSectionsProps['onPanelChange']>
   readonly imageLoaders: PanelImageLoaders | null
   readonly mainChannels: MainImageChannels | null
+  readonly boundaryLoaders: PanelBoundaryLoaders | null
+  readonly boundaryCellLimit: number
+  readonly cellFillOpacity: number
+  readonly cellBoundaryOpacity: number
 }
 
 interface PanelHover {
@@ -305,6 +351,7 @@ function LinkedSectionPanel({
   link,
   image,
   channels,
+  boundaries,
   preview,
   channel,
   coloring,
@@ -319,10 +366,15 @@ function LinkedSectionPanel({
   onPanelChange,
   imageLoaders,
   mainChannels,
+  boundaryLoaders,
+  boundaryCellLimit,
+  cellFillOpacity,
+  cellBoundaryOpacity,
 }: LinkedSectionPanelProps) {
   const source = useId()
   const panelRef = useRef<HTMLElement>(null)
   useFocusHandOff(panelRef)
+  const size = usePanelSize(panelRef)
   const mainView = useSyncExternalStore(channel.subscribe, channel.getView)
   // An unlinked panel's view, kept here as it moves; it starts from the
   // link's, again whenever the link changes.
@@ -449,21 +501,89 @@ function LinkedSectionPanel({
           pointSizeFullViewScale,
         )
   const showsCells = imageMode !== 'only'
+  // Outlines are read while they can be drawn: over the cells.
+  const boundariesShown = boundaries && boundaryLoaders !== null && !noCells && showsCells
+  const boundaryState = usePanelBoundaries({
+    url: entry.url,
+    enabled: boundariesShown,
+    loaders: boundaryLoaders ?? NO_BOUNDARY_LOADERS,
+    positions: cells?.positions ?? null,
+    view:
+      viewState === null
+        ? null
+        : { target: [viewState.target[0], viewState.target[1]], zoom: viewState.zoom },
+    size,
+    cellLimit: boundaryCellLimit,
+  })
+  const boundaryElements = boundaryState.elements
+  const outlines = useMemo(
+    () =>
+      !boundariesShown || cells === null
+        ? null
+        : linkedSectionOutlines(boundaryElements, cells),
+    [boundariesShown, boundaryElements, cells],
+  )
+  const outlineScores = overlay?.kind === 'scores' ? overlay.scores : null
+  const scoreIndexById = useMemo(
+    () =>
+      outlines === null
+        ? NO_SCORE_INDEXES
+        : outlinedScoreIndexes(outlines, outlineScores),
+    [outlineScores, outlines],
+  )
+  const outlineStyle = useMemo(
+    () =>
+      outlines === null
+        ? null
+        : linkedSectionOutlineStyle(outlines, overlay, scoreIndexById, {
+            colorScale,
+            scaleMin,
+            scaleMax,
+          }),
+    [colorScale, outlines, overlay, scaleMax, scaleMin, scoreIndexById],
+  )
+  const outlineLayers = useMemo(
+    (): LinkedSectionOutlineLayers | null =>
+      outlines === null || outlineStyle === null
+        ? null
+        : {
+            outlines,
+            scoreIndexById,
+            style: outlineStyle,
+            filled: overlay !== null,
+            fillOpacity: cellFillOpacity,
+            lineOpacity: cellBoundaryOpacity,
+          },
+    [
+      cellBoundaryOpacity,
+      cellFillOpacity,
+      outlineStyle,
+      outlines,
+      overlay,
+      scoreIndexById,
+    ],
+  )
   const layers = useMemo(
     () =>
       cells === null || !showsCells
         ? []
-        : linkedSectionLayers(cells, overlay, {
-            colorScale,
-            scaleMin,
-            scaleMax,
-            radiusScale: cellPointScale,
-            radiusMaxPixels,
-          }),
+        : linkedSectionLayers(
+            cells,
+            overlay,
+            {
+              colorScale,
+              scaleMin,
+              scaleMax,
+              radiusScale: cellPointScale,
+              radiusMaxPixels,
+            },
+            outlineLayers,
+          ),
     [
       cellPointScale,
       cells,
       colorScale,
+      outlineLayers,
       overlay,
       radiusMaxPixels,
       scaleMax,
@@ -525,17 +645,21 @@ function LinkedSectionPanel({
     (info: PickingInfo) => {
       if (!hoverTooltips) return
 
-      const text = hoverText(info, preview, overlay, showsGenes ? coloring.genes : [], {
-        colorScale,
-        scaleMin,
-        scaleMax,
-      })
+      const text = hoverText(
+        info,
+        preview,
+        overlay,
+        showsGenes ? coloring.genes : [],
+        { colorScale, scaleMin, scaleMax },
+        outlineLayers,
+      )
       setHover(text === null ? null : { x: info.x, y: info.y, text })
     },
     [
       colorScale,
       coloring.genes,
       hoverTooltips,
+      outlineLayers,
       overlay,
       preview,
       scaleMax,
@@ -566,6 +690,14 @@ function LinkedSectionPanel({
         : imageMode === null
           ? `Show the image of ${label} under its cells, without opening it`
           : `Hide the image of ${label}`
+  const boundaryTitle = panelBoundaryTitle(
+    label,
+    boundariesShown ? boundaryState : null,
+    boundaryCellLimit,
+  )
+  const boundaryNote = boundariesShown
+    ? panelBoundaryNote(label, boundaryState, boundaryCellLimit)
+    : null
   const stat =
     showsGenes && scores !== null
       ? typeof scaleRange.max === 'number'
@@ -579,7 +711,11 @@ function LinkedSectionPanel({
       className="viewer-tile linked-section"
       aria-label={label}
       data-loading={
-        preview?.loading === true || panelImage.status === 'loading' || undefined
+        preview?.loading === true ||
+        panelImage.status === 'loading' ||
+        (boundariesShown &&
+          (boundaryState.status === 'checking' || boundaryState.status === 'loading')) ||
+        undefined
       }
       onPointerLeave={() => {
         setHover(null)
@@ -658,6 +794,18 @@ function LinkedSectionPanel({
             )}
           </Popover>
         )}
+        {noCells || boundaryLoaders === null ? null : (
+          <IconButton
+            className="viewer-tile-action"
+            title={boundaryTitle}
+            aria-label={`Show the cell boundaries of ${label}`}
+            aria-pressed={boundaries}
+            icon={<BoundariesIcon />}
+            onClick={() => {
+              onPanelChange(panel, { boundaries: !boundaries })
+            }}
+          />
+        )}
         <IconButton
           className="viewer-tile-action"
           title={
@@ -723,6 +871,9 @@ function LinkedSectionPanel({
           {status}
         </p>
       )}
+      {status !== null || boundaryNote === null ? null : (
+        <p className="linked-section-note">{boundaryNote}</p>
+      )}
       {hover === null || !hoverTooltips ? null : (
         <PointerTooltip x={hover.x} y={hover.y} className="linked-section-tooltip">
           {hover.text}
@@ -745,39 +896,137 @@ function deckExtent(bounds: PreviewBounds) {
   }
 }
 
-// The hovered cell: its ID and class or value, or its score for the genes.
+// The hovered cell or outline: its ID and class or value, or its score for
+// the genes.
 function hoverText(
   info: PickingInfo,
   preview: PreviewEntry | null,
   overlay: PreviewOverlay | null,
   genes: readonly string[],
   scale: Parameters<typeof scoredCells>[1],
+  outlineLayers: LinkedSectionOutlineLayers | null,
 ): string | null {
   if (info.index < 0 || preview === null || preview.cells === null) return null
 
   const layerId = info.layer?.id
+
+  if (layerId === CELL_BOUNDARY_HIT_AREA_LAYER_ID) {
+    const id = (info.object as CellBoundaryDatum | undefined)?.id
+    if (id === undefined || outlineLayers === null) return null
+
+    const scoreIndex = outlineLayers.scoreIndexById.get(id)
+    const score =
+      overlay?.kind === 'scores' && scoreIndex !== undefined
+        ? overlay.scores.scores[scoreIndex]
+        : undefined
+    if (score !== undefined && Number.isFinite(score) && score > 0) {
+      return scoreText(genes, score)
+    }
+
+    const cellIndex = outlineLayers.outlines.cellIndexById.get(id)
+    return cellIndex === undefined ? id : cellText(preview, overlay, cellIndex)
+  }
 
   if (layerId === LINKED_SCORES_LAYER_ID && overlay?.kind === 'scores') {
     const scoreIndex = scoredCells(overlay.scores, scale).order[info.index]
     const score = scoreIndex === undefined ? undefined : overlay.scores.scores[scoreIndex]
     if (score === undefined) return null
 
-    return `${genes.length === 1 ? genes[0] : 'Score'} ${formatGeneScaleValue(score)}`
+    return scoreText(genes, score)
   }
 
   if (layerId !== LINKED_CELLS_LAYER_ID) return null
 
-  const cellId = preview.cells.cellIds[info.index] ?? ''
+  return cellText(preview, overlay, info.index)
+}
+
+function scoreText(genes: readonly string[], score: number): string {
+  return `${genes.length === 1 ? genes[0] : 'Score'} ${formatGeneScaleValue(score)}`
+}
+
+// A cell's ID, and its class or value.
+function cellText(
+  preview: PreviewEntry,
+  overlay: PreviewOverlay | null,
+  index: number,
+): string | null {
+  const cellId = preview.cells?.cellIds[index] ?? ''
   // The class it is drawn in, else its first, hidden, class.
-  const shownClass =
-    overlay?.kind === 'classes' ? (overlay.classOf[info.index] ?? -1) : -1
+  const shownClass = overlay?.kind === 'classes' ? (overlay.classOf[index] ?? -1) : -1
   const classIndex =
-    shownClass >= 0 ? shownClass : (preview.classes?.classOf[info.index] ?? -1)
+    shownClass >= 0 ? shownClass : (preview.classes?.classOf[index] ?? -1)
   const classLabel =
     overlay?.kind === 'classes' ? preview.classes?.classes[classIndex]?.label : undefined
-  const parts = [cellId, classLabel, valueLabel(overlay, info.index)].filter(
+  const parts = [cellId, classLabel, valueLabel(overlay, index)].filter(
     (part): part is string => part !== undefined && part !== '',
   )
 
   return parts.length === 0 ? null : parts.join(' · ')
+}
+
+// The boundaries button's tooltip: what it does, or why nothing is drawn.
+function panelBoundaryTitle(
+  label: string,
+  state: PanelBoundaryState | null,
+  cellLimit: number,
+): string {
+  if (state === null) {
+    return `Draw the cell boundaries of ${label}, once fewer than ${cellLimit.toLocaleString()} cells are in view`
+  }
+
+  if (state.status === 'none') {
+    return `${label} has no cell boundaries. Click to stop showing them`
+  }
+
+  if (state.status === 'error') {
+    return `The cell boundaries of ${label} could not be read: ${state.error ?? ''}. Click to stop showing them`
+  }
+
+  return `Hide the cell boundaries of ${label}`
+}
+
+// Why a panel asked for its boundaries draws none: too many cells in view,
+// none to draw, or a failed read.
+function panelBoundaryNote(
+  label: string,
+  state: PanelBoundaryState,
+  cellLimit: number,
+): string | null {
+  switch (state.status) {
+    case 'zoom':
+      return `Zoom in for cell boundaries: ${state.visibleCellCount.toLocaleString()} cells in view, over the Boundary limit of ${cellLimit.toLocaleString()}`
+    case 'none':
+      return `${label} has no cell boundaries`
+    case 'error':
+      return 'The cell boundaries could not be read'
+    default:
+      return null
+  }
+}
+
+// A panel's size on screen, followed as it changes; null until measured.
+function usePanelSize(ref: RefObject<HTMLElement | null>): PanelSize | null {
+  const [size, setSize] = useState<PanelSize | null>(null)
+
+  useEffect(() => {
+    const element = ref.current
+    if (element === null || typeof ResizeObserver === 'undefined') return undefined
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry === undefined) return
+
+      const { width, height } = entry.contentRect
+      setSize((current) =>
+        current !== null && current.width === width && current.height === height
+          ? current
+          : { width, height },
+      )
+    })
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+    }
+  }, [ref])
+
+  return size
 }

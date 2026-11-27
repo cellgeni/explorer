@@ -178,7 +178,8 @@ the canvas, a `nav` named "Collection":
   accent border.
 - `Close Collection` (×) removes the bar, `collection=`,
   `collectionView=`, `collectionPreviewSize=`, `compare=`, `compareLink=`,
-  `compareImage=`, `compareChannels=` and `sectionView=` from the address;
+  `compareImage=`, `compareChannels=`, `compareBoundaries=` and
+  `sectionView=` from the address;
   the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
@@ -221,11 +222,18 @@ has a pill at its top centre with the name, its top or highest score,
 without cells, which shows its image at once), `Channels of {label}` (three
 sliders, once the image is read: a popover named `Image of {label}`, centred
 under the pill and kept inside the panel, with `Cells` and the Image
-section's channel controls), `Link {label} to the main view` (a chain,
+section's channel controls), `Show the cell boundaries of {label}` (two
+outlines, `aria-pressed`; not on a section without cells; its tooltip says
+why none are drawn: the section has none, or they could not be read),
+`Link {label} to the main view` (a chain,
 `aria-pressed`; a broken chain unlinked), `Reset the offset of {label}` (target; disabled with no offset)
 while linked or `Fit {label}` while unlinked, `Open` and `Close {label}` (×). Instead of cells: "Loading…", the reason it has no
-preview, or "Could not be read". Hovering a cell shows a small label with its
-ID and class, or the gene and score. Closing a panel, or opening its section,
+preview, or "Could not be read". With its boundaries on, a box at the
+panel's foot (`.linked-section-note`) says "Zoom in for cell boundaries:
+{n} cells in view, over the Boundary limit of {limit}", "{label} has no
+cell boundaries" or "The cell boundaries could not be read". Hovering a
+cell or its outline shows a small label with its ID and class, or the gene
+and score. Closing a panel, or opening its section,
 hands keyboard focus back to the control that showed it, or else to the
 canvas.
 
@@ -236,7 +244,8 @@ channel's view at its offset and publishes the main view its own stands
 for; an unlinked one keeps its own view, which the link takes 180 ms after
 it rests (`compareLink=`). Panels are drawn by `linkedSectionLayers`
 (`linkedSectionLayers.ts`) from the preview store's data, which reads the
-shown sections first (`setLinked`).
+shown sections first (`setLinked`), and a panel's outlines by
+`usePanelBoundaries` (`usePanelBoundaries.ts`).
 
 ## Top Bar
 

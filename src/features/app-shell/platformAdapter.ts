@@ -377,6 +377,12 @@ export function appPlatformAdapterFor(
     : XENIUM_PLATFORM_ADAPTER
 }
 
+// The adapter of a dataset's platform, whether or not it is the open one, as
+// for a panel beside the main view.
+export function platformAdapterForPlatform(platform: Platform): AppPlatformAdapter {
+  return PLATFORM_ADAPTERS[platform]
+}
+
 // Whether a dataset of the platform draws its points at their physical size,
 // for one drawn beside the open dataset (a collection panel).
 export function trueSizePointsFor(platform: Platform): boolean {

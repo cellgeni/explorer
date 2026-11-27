@@ -145,6 +145,7 @@ import { sectionSplitLink } from './features/collection/sectionSplitModel'
 import { useSectionColumns } from './features/collection/useSectionColumns'
 import { stackSections, type StackSection } from './features/collection/sectionStackModel'
 import {
+  compareBoundariesForLink,
   compareChannelsForLink,
   compareImagesForLink,
   compareLinksForLink,
@@ -160,6 +161,7 @@ import {
   type PanelLink,
   type ResolvedPanel,
 } from './features/collection/linkedSectionsModel'
+import type { PanelBoundaryLoaders } from './features/collection/panelBoundaries'
 import { loadPanelImage, type PanelImage } from './features/collection/panelImage'
 import type {
   MainImageChannels,
@@ -212,6 +214,7 @@ import {
   loadPlatformTranscriptViewport,
   nucleusBoundaryControlsVisibleFor,
   PLATFORM_NAMES,
+  platformAdapterForPlatform,
   platformAnalysisEmbeddingOptions,
   platformActiveBoundaryCell,
   platformBoundarySurfaceReserved,
@@ -547,6 +550,7 @@ export function App({ dependencies }: AppProps = {}) {
       initialShareableState.compareLinks,
       initialShareableState.compareImages,
       initialShareableState.compareChannels,
+      initialShareableState.compareBoundaries,
     ),
   )
   // Where each unlinked panel has moved to, for the address, by its link:
@@ -1029,7 +1033,10 @@ export function App({ dependencies }: AppProps = {}) {
     [linkedSections],
   )
   const handlePanelChange = useCallback(
-    (panel: ResolvedPanel, patch: Pick<Partial<ResolvedPanel>, 'image' | 'channels'>) => {
+    (
+      panel: ResolvedPanel,
+      patch: Pick<Partial<ResolvedPanel>, 'image' | 'channels' | 'boundaries'>,
+    ) => {
       setComparePanels(withPanel(linkedSections, panel, patch))
     },
     [linkedSections],
@@ -1081,6 +1088,35 @@ export function App({ dependencies }: AppProps = {}) {
       loadMorphologyImage,
       retainDataset,
     ],
+  )
+  // A panel reads its section's outlines as the main view reads its own
+  // (plan 30-D9).
+  const panelBoundaryLoaders = useMemo(
+    (): PanelBoundaryLoaders => ({
+      hasCellBoundaries: async (url, signal) => {
+        const dataset = await getSpatialDataset(url, { signal })
+        const meta = await dataset.meta()
+
+        return meta.capabilities.cellBoundaries
+      },
+      loadBoundaryElements: async (url, bbox, options) => {
+        const dataset = await getSpatialDataset(
+          url,
+          options?.signal === undefined ? {} : { signal: options.signal },
+        )
+        const meta = await dataset.meta()
+
+        return loadPlatformBoundaryElements(
+          platformAdapterForPlatform(meta.platform),
+          { getSpatialDataset, loadBoundaryElements },
+          url,
+          bbox,
+          options,
+        )
+      },
+      retainDataset,
+    }),
+    [getSpatialDataset, loadBoundaryElements, retainDataset],
   )
   const mainImageChannels = useMemo(
     (): MainImageChannels | null =>
@@ -1142,6 +1178,9 @@ export function App({ dependencies }: AppProps = {}) {
   const linkCompareChannels = panelsSettled
     ? compareChannelsForLink(linkPanels)
     : initialShareableState.compareChannels
+  const linkCompareBoundaries = panelsSettled
+    ? compareBoundariesForLink(linkPanels)
+    : initialShareableState.compareBoundaries
   // A link's view is for the dataset it names. Once another dataset loads,
   // datasets open fitted to their extent again.
   const [linkViewApplies, setLinkViewApplies] = useState(
@@ -4591,6 +4630,7 @@ export function App({ dependencies }: AppProps = {}) {
       compareLinks: linkCompareLinks,
       compareImages: linkCompareImages,
       compareChannels: linkCompareChannels,
+      compareBoundaries: linkCompareBoundaries,
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L), and its reader.
       datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
@@ -6081,6 +6121,10 @@ export function App({ dependencies }: AppProps = {}) {
             onPanelChange={handlePanelChange}
             imageLoaders={panelImageLoaders}
             mainChannels={mainImageChannels}
+            boundaryLoaders={panelBoundaryLoaders}
+            boundaryCellLimit={boundaryCellLimit}
+            cellFillOpacity={cellFillOpacity}
+            cellBoundaryOpacity={cellBoundaryOpacity}
           />
         )}
       </div>

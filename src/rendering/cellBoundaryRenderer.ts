@@ -77,6 +77,9 @@ interface CellBoundaryLayerOptions {
   readonly pickable: boolean
 }
 
+// The layer a hovered or picked outline is found on.
+export const CELL_BOUNDARY_HIT_AREA_LAYER_ID = 'cell-boundary-hit-areas'
+
 const cellBoundaryLayerDataCache = new WeakMap<
   CellBoundaryLayerGeometry,
   CellBoundaryLayerDataCache
@@ -150,7 +153,7 @@ export function createCellBoundaryLayers(options: CellBoundaryLayerOptions): Lay
   if (options.pickable) {
     layers.push(
       new CellBoundaryHitAreaLayer({
-        id: 'cell-boundary-hit-areas',
+        id: CELL_BOUNDARY_HIT_AREA_LAYER_ID,
         data: cellBoundaryHitAreaLayerData(options.geometry),
         dataComparator: hasSameCellBoundaryLayerGeometry,
         cells: options.geometry.boundaries,

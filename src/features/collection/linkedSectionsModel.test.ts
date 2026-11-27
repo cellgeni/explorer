@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDatasetCollection } from '../../datasets/datasetCollection'
 import {
   canShowBeside,
+  compareBoundariesForLink,
   compareLinksForLink,
   comparePanelsFromLink,
   defaultPanelLink,
@@ -316,5 +317,27 @@ describe('sections side by side', () => {
       { url: S2, link: UNLINKED },
     ])
     expect(comparePanelsFromLink(undefined, undefined)).toEqual([])
+  })
+
+  it('keeps which panels draw their cell boundaries (plan 30-D9)', () => {
+    expect(
+      comparePanelsFromLink([S2, S3], [null, null], undefined, undefined, [false, true]),
+    ).toEqual([
+      { url: S2, link: null },
+      { url: S3, link: null, boundaries: true },
+    ])
+    expect(compareBoundariesForLink([panel(S2), panel(S3)])).toBeUndefined()
+    expect(
+      compareBoundariesForLink([panel(S2), { ...panel(S3), boundaries: true }]),
+    ).toEqual([false, true])
+
+    // Opening a panel's section, the open dataset takes its place, drawing
+    // its outlines as the panel did.
+    const shown = shownPanels(COLLECTION, S1, [
+      { ...panel(S2, LINKED), boundaries: true },
+    ])
+    expect(panelsAfterOpening(COLLECTION, S1, shown, S2, MAIN).panels).toEqual([
+      { url: S1, link: LINKED, boundaries: true },
+    ])
   })
 })

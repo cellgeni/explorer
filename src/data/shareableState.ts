@@ -44,6 +44,9 @@ export interface ShareableState {
   // Each one's shown channels (`compareChannels=`), as `channels=` gives the
   // main view's: `-` for none, empty (null) for the image's defaults.
   readonly compareChannels?: readonly (readonly string[] | null)[]
+  // Whether each draws its cell boundaries (`compareBoundaries=`): `1` for
+  // yes, empty for no.
+  readonly compareBoundaries?: readonly boolean[]
   // `3d` when the collection's serial sections are stacked in 3D:
   // `sectionView=`.
   readonly sectionView?: string
@@ -182,6 +185,9 @@ export function parseShareableState(hash: string): ShareableState {
   const compareLinks = params.getAll('compareLink').map(parsePanelLink)
   const compareImages = params.getAll('compareImage').map(parsePanelImage)
   const compareChannels = params.getAll('compareChannels').map(parsePanelChannels)
+  const compareBoundaries = params
+    .getAll('compareBoundaries')
+    .map((value) => value.trim() === '1')
   const sectionView = readString(params, 'sectionView')
   const datasetUrl = readString(params, 'dataset')
   const datasetReader = readString(params, 'reader')
@@ -289,6 +295,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (compareChannels.length > 0) {
     state.compareChannels = compareChannels
+  }
+
+  if (compareBoundaries.some(Boolean)) {
+    state.compareBoundaries = compareBoundaries
   }
 
   if (sectionView !== undefined) {
@@ -640,6 +650,12 @@ export function formatShareableState(state: ShareableState): string {
             ? '-'
             : channels.map(escapeCsvEntry).join(','),
       )
+    }
+  }
+
+  if (state.compareBoundaries?.some(Boolean) === true) {
+    for (const boundaries of state.compareBoundaries) {
+      params.append('compareBoundaries', boundaries ? '1' : '')
     }
   }
 

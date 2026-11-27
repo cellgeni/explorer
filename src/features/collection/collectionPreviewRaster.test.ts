@@ -56,6 +56,7 @@ describe('rasterizePreview', () => {
           // Two cells on the top left pixel, and a zero score at the bottom right.
           positions: new Float32Array([0, 0, 0, 0, 9, 9]),
           scores: new Float32Array([1, 4, 0]),
+          ids: ['a', 'b', 'c'],
           maxScore: 4,
         },
       },
@@ -74,6 +75,7 @@ describe('rasterizePreview', () => {
         scores: {
           positions: new Float32Array([0, 0]),
           scores: new Float32Array([1]),
+          ids: ['a'],
           maxScore: 1,
         },
       },
@@ -91,6 +93,7 @@ describe('rasterizePreview', () => {
         scores: {
           positions: new Float32Array([0, 0, 9, 9]),
           scores: new Float32Array([3, 7]),
+          ids: ['a', 'b'],
           maxScore: 7,
         },
       },
@@ -119,6 +122,7 @@ describe('rasterizePreview', () => {
         scores: {
           positions: new Float32Array(positions),
           scores: new Float32Array(scores),
+          ids: scores.map((_, index) => `cell-${index}`),
           maxScore: 100,
         },
       },
@@ -145,6 +149,7 @@ describe('rasterizePreview', () => {
         scores: {
           positions: new Float32Array([0, 0, 9, 9]),
           scores: new Float32Array([1, 4]),
+          ids: ['a', 'b'],
           maxScore: 4,
         },
       },
@@ -245,6 +250,7 @@ describe('rasterizePreview', () => {
         scores: {
           positions: new Float32Array([0, 1]),
           scores: new Float32Array([4]),
+          ids: ['a'],
           maxScore: 4,
         },
       },
@@ -305,6 +311,7 @@ describe('rasterizePreview', () => {
         scores: {
           positions: new Float32Array([0, 0, 9, 9, 9, 0]),
           scores: new Float32Array([Number.POSITIVE_INFINITY, Number.NaN, 4]),
+          ids: ['a', 'b', 'c'],
           maxScore: 4,
         },
       },

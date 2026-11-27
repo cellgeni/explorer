@@ -46,7 +46,8 @@ Non-goals:
 - Registration. Offsets are translations and zoom. Rotation, flips and
   warps are for the collection's coordinates (plan 24).
 - The main view's tools in panels: selection, Magic Lens, measuring,
-  cards, boundaries and transcripts stay the main view's (plan 20).
+  cards, nucleus boundaries and transcripts stay the main view's (plan 20).
+  Cell boundaries were added later, on request (D9, M4).
 - More than three panels.
 - Screenshots of the panels. The Screenshot (plan 27) is the main view's.
 
@@ -147,6 +148,21 @@ offset, starting from the main view's channels. Its cells come from the
 open dataset's preview (`useOpenDatasetPreviewStore`). It closes when
 another dataset opens, unless the collection keeps it as a section (D3).
 
+**D9. A panel draws its section's cell boundaries on request.** Added
+2026-11-27, asked for after M3: a collection entry's `labels` (a Xenium
+`cell_boundaries.parquet`, say) showed only once the section was opened. A
+`Show the cell boundaries of {label}` toggle in the panel's header, off by
+default and kept as `compareBoundaries=`, reads the outlines the section
+draws in the main view, from the dataset the preview opened, through the
+same per-platform read (`loadPlatformBoundaryElements`). They are read for
+the panel's own view and a margin by the main view's rules
+(`shouldLoadBoundaryPolygons`, `paddedBoundaryBbox`,
+`boundaryRequestCovers`), with the main view's Boundary limit, counting the
+preview's cells in view, 180 ms after the view rests. They are drawn by the
+main view's boundary layers, coloured as the panel colours the cell, in
+place of its point (a data filter), with the main view's opacities. The
+panel retains its dataset while they are on (D7).
+
 ## Tasks
 
 ### M1. Links And Offsets (S) — built 2026-11-27
@@ -218,6 +234,24 @@ another dataset opens, unless the collection keeps it as a section (D3).
   the open dataset's own panels go when another dataset opens outside the
   collection flow. Tests: model, App (image without a collection, channels
   apart, a numbered second panel); docs.
+
+### M4. Cell Boundaries In Panels (S) — built 2026-11-27
+
+- D1. `platformAdapterForPlatform` for a dataset that is not the open one;
+  `PreviewScores.ids`, so an outline takes its cell's score colour.
+- D2. `panelBoundaries.ts` (`panelViewBbox`, `cellsInBox`, the loaders) and
+  `usePanelBoundaries`: whether the dataset has outlines, then reads per
+  rested view, keeping what is drawn until the next read; `zoom`, `none` and
+  `error` states; a margin over the limit is read again without it.
+- D3. `linkedSectionLayers`: `linkedSectionOutlines` (outlines matched to
+  cells by ID, only where they lie), `outlinedScoreIndexes`,
+  `linkedSectionOutlineStyle`, and the boundary layers under the points,
+  which leave out outlined cells' points by a `DataFilterExtension`.
+- D4. The header toggle (`BoundariesIcon`), the panel's size by
+  `ResizeObserver`, hover on outlines, and a note at the panel's foot.
+- D5. `compareBoundaries=`; `panelsAfterOpening` carries it to the open
+  dataset's panel on a swap.
+- D6. Tests: the model, the hook, the layers, the link and an App test.
 
 ### Docs
 
