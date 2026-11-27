@@ -62,6 +62,38 @@ export const DEFAULT_CHANNEL_COLORS: readonly (readonly [number, number, number]
   [255, 253, 247],
 ]
 
+// The colour of a channel whose metadata gives none: by its stain or purpose
+// when its name or purpose says (DAPI or nuclear blue), else by its index.
+export function defaultChannelColor(options: {
+  readonly index: number
+  readonly name: string
+  readonly purpose?: string
+}): readonly [number, number, number] {
+  const label = `${options.name} ${options.purpose ?? ''}`.toLowerCase()
+
+  if (label.includes('dapi') || label.includes('nuclear')) {
+    return [88, 144, 255]
+  }
+
+  if (label.includes('boundary') || label.includes('cadherin')) {
+    return [32, 166, 122]
+  }
+
+  if (label.includes('rna') || label.includes('18s')) {
+    return [240, 200, 75]
+  }
+
+  if (label.includes('protein') || label.includes('vimentin')) {
+    return [215, 63, 124]
+  }
+
+  return (
+    DEFAULT_CHANNEL_COLORS[options.index % DEFAULT_CHANNEL_COLORS.length] ?? [
+      255, 253, 247,
+    ]
+  )
+}
+
 export interface ImagePyramidZStack {
   readonly sizeZ: number
   readonly micrometersPerPlane?: number

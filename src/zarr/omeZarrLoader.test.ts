@@ -345,6 +345,71 @@ describe('OME-Zarr image loader', () => {
     }
   })
 
+  it('colours by name channels bioformats2raw coloured R, G, B by index', async () => {
+    const open = (
+      colors: readonly string[],
+      options: { readonly dtype?: string; readonly method?: string } = {},
+    ) =>
+      openOmeZarrImageWithOptions('https://example.test/images/xenium.zarr', {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/xenium.zarr', {
+            omero: {
+              channels: ['DAPI', 'ATP1A1/CD45/E-Cadherin', '18S'].map((label, index) => ({
+                label,
+                color: colors[index],
+              })),
+            },
+            dtype: options.dtype ?? '<u2',
+            multiscaleMetadata: {
+              method: options.method ?? 'loci.common.image.SimpleImageScaler',
+              version: 'Bio-Formats 9.0.0-rc2',
+            },
+          }),
+        ),
+      })
+    const colorsOf = (loader: { readonly channels: readonly { color: unknown }[] }) =>
+      loader.channels.map((channel) => channel.color)
+
+    // A converted Xenium morphology image: DAPI blue, as its OME-TIFF opens.
+    for (const method of [
+      'loci.common.image.SimpleImageScaler',
+      'org.opencv.imgproc.Imgproc.INTER_AREA',
+    ]) {
+      expect(colorsOf(await open(['FF0000', '00FF00', '0000FF'], { method }))).toEqual([
+        [88, 144, 255],
+        [32, 166, 122],
+        [240, 200, 75],
+      ])
+    }
+
+    // Colours other than the index fallback are the file's, as are the
+    // fallback colours of another writer's image.
+    expect(colorsOf(await open(['0000FF', '00FF00', 'FF0000']))).toEqual([
+      [0, 0, 255],
+      [0, 255, 0],
+      [255, 0, 0],
+    ])
+    expect(
+      colorsOf(await open(['FF0000', '00FF00', '0000FF'], { method: 'mean' })),
+    ).toEqual([
+      [255, 0, 0],
+      [0, 255, 0],
+      [0, 0, 255],
+    ])
+
+    // An 8-bit image coloured R, G, B is still an RGB image.
+    const rgb = await open(['FF0000', '00FF00', '0000FF'], { dtype: '|u1' })
+
+    expect(colorsOf(rgb)).toEqual([
+      [255, 0, 0],
+      [0, 255, 0],
+      [0, 0, 255],
+    ])
+    expect(rgb.channels.every((channel) => channel.alphaFromIntensity === false)).toBe(
+      true,
+    )
+  })
+
   it('keeps the omero labels of 8-bit three-channel images coloured R, G, B', async () => {
     const loader = await openOmeZarrImageWithOptions(
       'https://example.test/images/stained.zarr',
@@ -1524,12 +1589,19 @@ describe('OME-Zarr image loader', () => {
 
 function legacyV2OmeZarrFiles(
   rootPath: string,
-  options: { readonly omero?: unknown; readonly dtype?: string } = {},
+  options: {
+    readonly omero?: unknown
+    readonly dtype?: string
+    readonly multiscaleMetadata?: unknown
+  } = {},
 ): Map<string, Uint8Array> {
   const attrs = {
     ...(options.omero === undefined ? {} : { omero: options.omero }),
     multiscales: [
       {
+        ...(options.multiscaleMetadata === undefined
+          ? {}
+          : { metadata: options.multiscaleMetadata }),
         axes: [
           { name: 'c', type: 'channel' },
           { name: 'y', type: 'space', unit: 'micrometer' },

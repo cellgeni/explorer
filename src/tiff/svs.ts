@@ -1,4 +1,4 @@
-import { defaultChannelColor } from './omeMetadata'
+import { defaultChannelColor } from '../data/imagePyramid'
 import type { TiffChannelInfo } from './omeMetadata'
 
 // Aperio SVS, written by Aperio/Leica scanners and by others that copy the

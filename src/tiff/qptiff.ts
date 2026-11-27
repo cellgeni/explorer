@@ -1,4 +1,5 @@
-import { defaultChannelColor, DEFAULT_MICROMETERS_PER_PIXEL } from './omeMetadata'
+import { defaultChannelColor } from '../data/imagePyramid'
+import { DEFAULT_MICROMETERS_PER_PIXEL } from './omeMetadata'
 import type { TiffChannelInfo } from './omeMetadata'
 
 // Akoya (PerkinElmer) QPTIFF, written by PhenoCycler, PhenoImager, and Vectra
