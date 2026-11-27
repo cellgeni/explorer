@@ -260,8 +260,10 @@ is, at an offset, so sections lined up by hand then move together, and the
 target button resets the offset. The panels show cells coloured like the
 main view; the image button in a panel's header loads that section's image
 under them, and the channels button beside it chooses that panel's channels,
-colours and windows. Choose `Open` in a panel to swap that section into the
-main view, with its tools. A link from `Share` opens with the same sections beside the
+colours and windows. The cell boundaries button (two outlines) draws that
+section's cell boundaries in its panel once you zoom in below the
+`Boundary limit`, as the main view does. Choose `Open` in a panel to swap
+that section into the main view, with its other tools. A link from `Share` opens with the same sections beside the
 dataset. See [Side by Side](./dataset-collections.md#side-by-side).
 
 When the collection also gives each of those sections its depth (`z`), the

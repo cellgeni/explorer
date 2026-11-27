@@ -13,7 +13,10 @@ import {
   pendingPromise,
   type AppTestDependencyProps,
 } from '../../test/appTestHarness'
-import type { SpatialDatasetDetector } from '../app-shell/appDependencies'
+import type {
+  SpatialDatasetDetector,
+  SpatialDatasetLoader,
+} from '../app-shell/appDependencies'
 
 interface MockViewState {
   readonly target?: readonly number[]
@@ -23,6 +26,7 @@ type MockViewStateChange = (info: { readonly viewState: MockViewState }) => void
 type MockHover = (info: {
   readonly index: number
   readonly layer: { readonly id: string }
+  readonly object?: { readonly id: string }
   readonly x: number
   readonly y: number
 }) => void
@@ -34,6 +38,8 @@ const deckView = vi.hoisted(() => ({
   linked: undefined as MockViewState | undefined,
   onLinkedChange: undefined as MockViewStateChange | undefined,
   onLinkedHover: undefined as MockHover | null | undefined,
+  // The layer IDs of a section beside.
+  linkedLayerIds: undefined as readonly string[] | undefined,
   // The layer IDs of the sections stacked in 3D.
   stackLayerIds: undefined as readonly string[] | undefined,
 }))
@@ -58,6 +64,7 @@ vi.mock('@deck.gl/react', () => ({
       deckView.linked = viewState
       deckView.onLinkedChange = onViewStateChange
       deckView.onLinkedHover = onHover
+      deckView.linkedLayerIds = layers?.map((layer) => layer.id)
     } else {
       deckView.current = viewState
       deckView.onChange = onViewStateChange
@@ -648,6 +655,7 @@ describe('App with a dataset collection', () => {
       deckView.linked = undefined
       deckView.onLinkedChange = undefined
       deckView.onLinkedHover = undefined
+      deckView.linkedLayerIds = undefined
       deckView.stackLayerIds = undefined
     })
 
@@ -1150,6 +1158,121 @@ describe('App with a dataset collection', () => {
       const popover = within(panel).getByRole('dialog', { name: 'Image of Section 2' })
       expect(within(popover).getByRole('checkbox', { name: 'DAPI' })).not.toBeChecked()
       expect(within(popover).getByRole('checkbox', { name: 'Cells' })).toBeChecked()
+    })
+
+    it('draws a panel’s cell boundaries for its view, in the link (plan 30-D9)', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}`,
+      )
+      // Each panel is 400 × 300 px; other elements are never measured, as
+      // without the stub.
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          constructor(
+            private readonly callback: (
+              entries: readonly { readonly contentRect: DOMRectReadOnly }[],
+            ) => void,
+          ) {}
+          observe(element: Element) {
+            if (!element.classList.contains('linked-section')) return
+            this.callback([
+              { contentRect: { width: 400, height: 300 } as DOMRectReadOnly },
+            ])
+          }
+          unobserve() {}
+          disconnect() {}
+        },
+      )
+      const square = (x: number, y: number) =>
+        [
+          [x - 2, y - 2],
+          [x + 2, y - 2],
+          [x + 2, y + 2],
+          [x - 2, y + 2],
+        ].map(([px, py]) => ({ x: micrometers(px ?? 0), y: micrometers(py ?? 0) }))
+      const section2 = {
+        ...h5adDataset(),
+        meta: vi.fn(async () => ({
+          platform: 'h5ad' as const,
+          capabilities: { cellBoundaries: true },
+        })),
+        elements: vi.fn(async () => ({
+          elements: [
+            { id: 'cell-a', geometry: { kind: 'polygon', rings: [square(0, 0)] } },
+          ],
+        })),
+      }
+      const section1 = h5adDataset()
+      const retainDataset = vi.fn(() => () => {})
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={vi.fn<SpatialDatasetLoader>(
+            async (url) =>
+              (url === SECTION_2 ? section2 : section1) as unknown as Awaited<
+                ReturnType<SpatialDatasetLoader>
+              >,
+          )}
+          retainDataset={retainDataset}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      await waitFor(() => {
+        expect(deckView.linkedLayerIds).toEqual(['linked-section-cells'])
+      })
+      // Zoomed in on both cells.
+      act(() => {
+        deckView.onChange?.({ viewState: { target: [5, -5, 0], zoom: 3 } })
+      })
+
+      const show = within(panel).getByRole('button', {
+        name: 'Show the cell boundaries of Section 2',
+      })
+      expect(show).toHaveAttribute('aria-pressed', 'false')
+      fireEvent.click(show)
+      expect(show).toHaveAttribute('aria-pressed', 'true')
+
+      // Read for the panel's view and a margin: 50 × 37.5 µm at 8 px per µm.
+      await waitFor(() => {
+        expect(deckView.linkedLayerIds).toEqual([
+          'cell-boundary-paths',
+          'cell-boundary-hit-areas',
+          'linked-section-cells',
+        ])
+      })
+      expect(section2.elements).toHaveBeenCalledWith({
+        minX: -32.5,
+        maxX: 42.5,
+        minY: -23.125,
+        maxY: 33.125,
+      })
+      expect(section1.overview).toHaveBeenCalled()
+      expect(retainDataset).toHaveBeenCalledWith(SECTION_2)
+      expect((await hashAfterWrite()).getAll('compareBoundaries')).toEqual(['1'])
+
+      // Hovering an outline names its cell.
+      await waitFor(() => {
+        deckView.onLinkedHover?.({
+          index: 0,
+          layer: { id: 'cell-boundary-hit-areas' },
+          object: { id: 'cell-a' },
+          x: 10,
+          y: 10,
+        })
+        expect(within(panel).getByText('cell-a')).toBeInTheDocument()
+      })
+
+      fireEvent.click(show)
+      await waitFor(() => {
+        expect(deckView.linkedLayerIds).toEqual(['linked-section-cells'])
+      })
+      expect((await hashAfterWrite()).has('compareBoundaries')).toBe(false)
     })
 
     it('names the hovered cell of a section beside, unless Settings turns tooltips off', async () => {

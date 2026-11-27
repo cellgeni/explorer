@@ -266,6 +266,16 @@ export function ChannelsIcon() {
   )
 }
 
+// Cell boundaries: two cells' outlines side by side.
+export function BoundariesIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 6l2.5-3h3l1 3.5-2 3.5h-3z" />
+      <path d="M9 6.5l3-1 1.5 3-1 4-3.5 1-2-3" />
+    </svg>
+  )
+}
+
 // A panel beside the main view with a view of its own: the link icon broken.
 export function UnlinkIcon() {
   return (

@@ -16,6 +16,7 @@ export { Slider, type SliderProps } from './Slider'
 export { Switch, type SwitchProps } from './Switch'
 export { Tooltip, type TooltipProps } from './Tooltip'
 export {
+  BoundariesIcon,
   BoxSelectIcon,
   CameraIcon,
   ChannelsIcon,

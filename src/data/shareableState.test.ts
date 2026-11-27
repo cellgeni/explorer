@@ -302,6 +302,24 @@ describe('shareableState', () => {
     ).toEqual([null, null, { linked: true }])
   })
 
+  it('round-trips which sections beside draw their cell boundaries', () => {
+    const hash = formatShareableState({
+      compareUrls: ['https://example.test/s2.zarr', 'https://example.test/s3.zarr'],
+      compareBoundaries: [false, true],
+    })
+
+    expect(new URLSearchParams(hash.slice(1)).getAll('compareBoundaries')).toEqual([
+      '',
+      '1',
+    ])
+    expect(parseShareableState(hash).compareBoundaries).toEqual([false, true])
+    // None drawn writes nothing.
+    expect(formatShareableState({ compareBoundaries: [false, false] })).not.toContain(
+      'compareBoundaries',
+    )
+    expect(parseShareableState('#compareBoundaries=0').compareBoundaries).toBeUndefined()
+  })
+
   it('round-trips the serial sections stacked in 3D', () => {
     const hash = formatShareableState({
       collectionUrl: 'https://example.test/c.json',

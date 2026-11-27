@@ -47,14 +47,16 @@ function unlinked(): PanelLink {
 // its cells, the image alone, or none (its cells only).
 export type PanelImageMode = 'cells' | 'only' | null
 
-// A panel as compare=, compareLink=, compareImage= and compareChannels= name
-// it. A null link is the section's default, known once the collection is
-// read; null channels are the image's defaults.
+// A panel as compare=, compareLink=, compareImage=, compareChannels= and
+// compareBoundaries= name it. A null link is the section's default, known
+// once the collection is read; null channels are the image's defaults.
 export interface ComparePanel {
   readonly url: string
   readonly link: PanelLink | null
   readonly image?: PanelImageMode
   readonly channels?: readonly string[] | null
+  // Whether it draws its section's cell boundaries (plan 30-D9).
+  readonly boundaries?: boolean
 }
 
 export interface ResolvedPanel extends ComparePanel {
@@ -213,7 +215,8 @@ export function withOwnPanel(
   ].slice(0, MAX_LINKED_SECTIONS)
 }
 
-// Changes one shown panel: its image, its channels or its link.
+// Changes one shown panel: its image, its channels, its boundaries or its
+// link.
 export function withPanel(
   shown: readonly ShownPanel[],
   panel: ResolvedPanel,
@@ -298,8 +301,10 @@ export function panelsAfterOpening(
                 ? { linked: true, offset: negatedOffset(link.offset) }
                 : { linked: false, view: mainView },
               // The open dataset shows its image in the panel if the panel
-              // showed one, with its own channels.
+              // showed one, with its own channels, and its outlines if the
+              // panel drew them.
               ...(swapped.panel.image == null ? {} : { image: swapped.panel.image }),
+              ...(swapped.panel.boundaries === true ? { boundaries: true } : {}),
             }
           : item.panel,
       ),
@@ -381,6 +386,7 @@ export function comparePanelsFromLink(
   links: readonly (ShareablePanelLink | null)[] | undefined,
   images?: readonly ShareablePanelImage[],
   channels?: readonly (readonly string[] | null)[],
+  boundaries?: readonly boolean[],
 ): readonly ComparePanel[] {
   return (urls ?? []).map((url, index) => {
     const image = images?.[index] ?? null
@@ -391,6 +397,7 @@ export function comparePanelsFromLink(
       link: panelLinkFromShareable(links?.[index] ?? null),
       ...(image === null ? {} : { image }),
       ...(shown === null ? {} : { channels: shown }),
+      ...(boundaries?.[index] === true ? { boundaries: true } : {}),
     }
   })
 }
@@ -402,6 +409,15 @@ export function compareImagesForLink(
   const images = panels.map((panel) => panel.image ?? null)
 
   return images.every((image) => image === null) ? undefined : images
+}
+
+// Each panel's compareBoundaries=, none when no panel draws its outlines.
+export function compareBoundariesForLink(
+  panels: readonly ComparePanel[],
+): readonly boolean[] | undefined {
+  const boundaries = panels.map((panel) => panel.boundaries === true)
+
+  return boundaries.some(Boolean) ? boundaries : undefined
 }
 
 // Each panel's compareChannels=, for panels showing their image with

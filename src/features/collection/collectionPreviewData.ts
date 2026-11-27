@@ -75,6 +75,8 @@ export interface PreviewScores {
   // Interleaved x, y of the scored cells, and each one's score.
   readonly positions: Float32Array
   readonly scores: Float32Array
+  // Each scored cell's ID, for the outline of the cell a panel draws.
+  readonly ids: readonly string[]
   readonly maxScore: number
   // Each scored cell's z, for cells placed in 3D.
   readonly depths?: Float32Array
@@ -506,6 +508,7 @@ function previewScores(
   )
   const positions = new Float32Array(batch.elements.length * 2)
   const values = new Float32Array(batch.elements.length)
+  const ids = new Array<string>(batch.elements.length)
   const cellDepths = cells.depths?.values
   const cellIndex = cellDepths === undefined ? null : previewCellIndex(cells)
   const depths = cellIndex === null ? null : new Float32Array(batch.elements.length)
@@ -516,6 +519,7 @@ function previewScores(
     positions[index * 2] = element.position.x
     positions[index * 2 + 1] = element.position.y
     values[index] = score
+    ids[index] = element.id
     // A stored NaN or infinity is no score, as in the main view.
     if (Number.isFinite(score)) maxScore = Math.max(maxScore, score)
 
@@ -533,6 +537,7 @@ function previewScores(
   return {
     positions,
     scores: values,
+    ids,
     maxScore,
     ...(depths === null ? {} : { depths }),
     ...(radius === undefined ? {} : { radius }),

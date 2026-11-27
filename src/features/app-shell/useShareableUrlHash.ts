@@ -45,6 +45,8 @@ interface ShareableDatasetHashOptions {
   // compareChannels=).
   readonly compareImages?: readonly ShareablePanelImage[] | undefined
   readonly compareChannels?: readonly (readonly string[] | null)[] | undefined
+  // Whether each draws its cell boundaries (compareBoundaries=).
+  readonly compareBoundaries?: readonly boolean[] | undefined
   // `3d` while its serial sections are stacked in 3D (sectionView=).
   readonly sectionView?: string | undefined
   readonly datasetUrl: string
@@ -268,6 +270,10 @@ export function useShareableUrlHash({
     dataset.compareImages === undefined ? '' : JSON.stringify(dataset.compareImages)
   const compareChannelsKey =
     dataset.compareChannels === undefined ? '' : JSON.stringify(dataset.compareChannels)
+  const compareBoundariesKey =
+    dataset.compareBoundaries === undefined
+      ? ''
+      : JSON.stringify(dataset.compareBoundaries)
   const spatialDataTable = dataset.spatialDataSelection?.spatialDataTable
   const spatialDataCoordinateSystem =
     dataset.spatialDataSelection?.spatialDataCoordinateSystem
@@ -428,6 +434,11 @@ export function useShareableUrlHash({
                   readonly string[] | null
                 )[],
               }),
+          ...(compareBoundariesKey === ''
+            ? {}
+            : {
+                compareBoundaries: JSON.parse(compareBoundariesKey) as readonly boolean[],
+              }),
           ...(sectionView === undefined ? {} : { sectionView }),
           datasetUrl,
           ...(datasetReader === undefined ? {} : { datasetReader }),
@@ -556,6 +567,7 @@ export function useShareableUrlHash({
     compareLinksKey,
     compareImagesKey,
     compareChannelsKey,
+    compareBoundariesKey,
     sectionView,
     boundaryCellLimit,
     deviceBoundaryCellLimit,

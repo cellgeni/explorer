@@ -33,6 +33,7 @@ const CELLS: PreviewCells = (() => {
 const SCORES: PreviewScores = {
   positions: CELLS.positions,
   scores: new Float32Array([3, 0, 1]),
+  ids: ['cell-0', 'cell-1', 'cell-2'],
   maxScore: 3,
 }
 const CLASSES: PreviewClasses = {

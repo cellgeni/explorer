@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { micrometers } from '../../data/coords'
+import type { SpatialElement } from '../../datasets/spatialDataset'
+import { CELL_BOUNDARY_HIT_AREA_LAYER_ID } from '../../rendering/cellBoundaryRenderer'
 import { geneExpressionColor } from '../../rendering/deckLayerColors'
 import { previewBounds, type PreviewCells } from './collectionPreviewData'
 import {
@@ -6,10 +9,14 @@ import {
   LINKED_CELLS_LAYER_ID,
   LINKED_SCORES_LAYER_ID,
   linkedSectionLayers,
+  linkedSectionOutlines,
+  linkedSectionOutlineStyle,
+  outlinedScoreIndexes,
   scoredCells,
   sectionOverlay,
   valueLabel,
   type LinkedSectionLayerOptions,
+  type LinkedSectionOutlineLayers,
 } from './linkedSectionLayers'
 
 const OPTIONS: LinkedSectionLayerOptions = {
@@ -74,6 +81,7 @@ describe('linkedSectionLayers', () => {
     const scores = {
       positions: new Float32Array([0, 0, 10, 20, 30, 5]),
       scores: new Float32Array([4, 0, 1]),
+      ids: ['a', 'b', 'c'],
       maxScore: 4,
     }
     const layers = linkedSectionLayers(section, { kind: 'scores', scores }, OPTIONS)
@@ -110,6 +118,7 @@ describe('linkedSectionLayers', () => {
     const scores = {
       positions: new Float32Array([0, 0, 10, 20, 30, 5]),
       scores: new Float32Array([4, 0, 1]),
+      ids: ['a', 'b', 'c'],
       maxScore: 4,
       radius,
     }
@@ -127,6 +136,7 @@ describe('linkedSectionLayers', () => {
     const scores = {
       positions: new Float32Array([0, 0, 10, 20, 30, 5]),
       scores: new Float32Array([Number.POSITIVE_INFINITY, Number.NaN, 2]),
+      ids: ['a', 'b', 'c'],
       maxScore: 2,
     }
 
@@ -137,6 +147,7 @@ describe('linkedSectionLayers', () => {
     const scores = {
       positions: new Float32Array([0, 0]),
       scores: new Float32Array([0]),
+      ids: ['a'],
       maxScore: 0,
     }
 
@@ -192,6 +203,7 @@ describe('linkedSectionLayers', () => {
     const scores = {
       positions: new Float32Array(2),
       scores: Float32Array.of(3),
+      ids: ['a'],
       maxScore: 3,
     }
 
@@ -210,11 +222,167 @@ describe('linkedSectionLayers', () => {
     const scores = {
       positions: new Float32Array([0, 0]),
       scores: new Float32Array([2]),
+      ids: ['a'],
       maxScore: 2,
     }
     const first = scoredCells(scores, OPTIONS)
     expect(scoredCells(scores, OPTIONS)).toBe(first)
     // A new scale colours them again.
     expect(scoredCells(scores, { ...OPTIONS, scaleMax: 2 })).not.toBe(first)
+  })
+})
+
+// A square outline of `size` µm around (x, y).
+function outline(id: string, x: number, y: number, size = 4): SpatialElement {
+  const half = size / 2
+  return {
+    id,
+    geometry: {
+      kind: 'polygon',
+      rings: [
+        [
+          { x: micrometers(x - half), y: micrometers(y - half) },
+          { x: micrometers(x + half), y: micrometers(y - half) },
+          { x: micrometers(x + half), y: micrometers(y + half) },
+          { x: micrometers(x - half), y: micrometers(y + half) },
+        ],
+      ],
+    },
+  }
+}
+
+describe('panel outlines (plan 30-D9)', () => {
+  // Outlines of the first two cells, and of a cell the section does not have.
+  const elements = [
+    outline('cell-0', 0, 0),
+    outline('cell-1', 10, 20),
+    outline('x', 50, 50),
+  ]
+
+  it('matches outlines to cells by ID and leaves out their points', () => {
+    const outlines = linkedSectionOutlines(elements, section)
+
+    expect([...outlines.cellIndexById]).toEqual([
+      ['cell-0', 0],
+      ['cell-1', 1],
+    ])
+    expect([...outlines.cellFilter]).toEqual([1, 1, 0])
+    expect(outlines.bounds).toEqual({ minX: -2, maxX: 52, minY: -2, maxY: 52 })
+    expect(outlines.geometry.boundaries).toHaveLength(3)
+
+    const layers = linkedSectionLayers(section, null, OPTIONS, {
+      outlines,
+      scoreIndexById: new Map(),
+      style: linkedSectionOutlineStyle(outlines, null, new Map(), OPTIONS),
+      filled: false,
+      fillOpacity: 0.5,
+      lineOpacity: 0.5,
+    })
+    const ids = layers.map((layer) => layer.id)
+
+    // Outlines under the points, which a pointer finds by their hit areas.
+    expect(ids).toEqual([
+      'cell-boundary-paths',
+      CELL_BOUNDARY_HIT_AREA_LAYER_ID,
+      LINKED_CELLS_LAYER_ID,
+    ])
+    const cellLayer = props(layers[2]) as LayerProps & {
+      readonly filterRange: readonly number[]
+    }
+    expect(cellLayer.data.attributes.getFilterValue?.value).toBe(outlines.cellFilter)
+    expect(cellLayer.filterRange).toEqual([0, 0.5])
+  })
+
+  it('filters the points with or without outlines, so turning them on hides points', () => {
+    // deck.gl sets up an extension only for a new layer.
+    const cellLayer = props(
+      linkedSectionLayers(section, null, OPTIONS)[0],
+    ) as LayerProps & {
+      readonly extensions: readonly unknown[]
+    }
+    expect(cellLayer.extensions).toHaveLength(1)
+    expect([...cellLayer.data.attributes.getFilterValue!.value]).toEqual([0, 0, 0])
+  })
+
+  it('draws no outlines and keeps every point while none are read', () => {
+    const outlines = linkedSectionOutlines([], section)
+
+    expect(outlines.bounds).toBeNull()
+    expect([...outlines.cellFilter]).toEqual([0, 0, 0])
+
+    const layers = linkedSectionLayers(section, null, OPTIONS, {
+      outlines,
+      scoreIndexById: new Map(),
+      style: linkedSectionOutlineStyle(outlines, null, new Map(), OPTIONS),
+      filled: false,
+      fillOpacity: 0.5,
+      lineOpacity: 0.5,
+    })
+    expect(layers.map((layer) => layer.id)).toEqual([LINKED_CELLS_LAYER_ID])
+  })
+
+  it('colours each outline as its cell: by class, then by score', () => {
+    const outlines = linkedSectionOutlines(elements, section)
+    const classes = linkedSectionOutlineStyle(
+      outlines,
+      { kind: 'classes', classOf: Int32Array.from([0, -1, 0]), colors: ['#ff0000'] },
+      new Map(),
+      OPTIONS,
+    )
+
+    expect(classes.lineColorByCellId.get('cell-0')?.slice(0, 3)).toEqual([255, 0, 0])
+    // A cell in no class is faded, as its point is.
+    expect(classes.lineColorByCellId.get('cell-1')?.slice(0, 3)).toEqual([
+      ...props(linkedSectionLayers(section, null, OPTIONS)[0]).getFillColor!.slice(0, 3),
+    ])
+    // An outline of no cell keeps the main view's grey.
+    expect(classes.lineColorByCellId.has('x')).toBe(false)
+
+    const scores = {
+      positions: new Float32Array([0, 0, 10, 20]),
+      scores: new Float32Array([4, 0]),
+      ids: ['cell-0', 'cell-1'],
+      maxScore: 4,
+    }
+    const scoreIndexById = outlinedScoreIndexes(outlines, scores)
+    expect([...scoreIndexById]).toEqual([
+      ['cell-0', 0],
+      ['cell-1', 1],
+    ])
+
+    const byScore = linkedSectionOutlineStyle(
+      outlines,
+      { kind: 'scores', scores },
+      scoreIndexById,
+      OPTIONS,
+    )
+    expect(byScore.lineColorByCellId.get('cell-0')?.slice(0, 3)).toEqual(
+      geneExpressionColor('plasma', 1).slice(0, 3),
+    )
+    // A cell scoring 0 is drawn as an unscored point.
+    expect(byScore.lineColorByCellId.get('cell-1')?.slice(0, 3)).toEqual(
+      props(
+        linkedSectionLayers(section, { kind: 'scores', scores }, OPTIONS)[0],
+      ).getFillColor!.slice(0, 3),
+    )
+
+    // Scored outlined cells lose their score points too.
+    const outlineLayers: LinkedSectionOutlineLayers = {
+      outlines,
+      scoreIndexById,
+      style: byScore,
+      filled: true,
+      fillOpacity: 0.5,
+      lineOpacity: 0.5,
+    }
+    const layers = linkedSectionLayers(
+      section,
+      { kind: 'scores', scores },
+      OPTIONS,
+      outlineLayers,
+    )
+    const scoreLayer = props(layers.find((layer) => layer.id === LINKED_SCORES_LAYER_ID))
+    expect([...scoreLayer.data.attributes.getFilterValue!.value]).toEqual([1])
+    expect(layers[0]?.id).toBe('cell-boundary-fills')
   })
 })

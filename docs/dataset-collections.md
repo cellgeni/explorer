@@ -265,7 +265,8 @@ micrometres while the cells are in image pixels:
 
 - **Drawing.** `Cell boundaries` starts on, and outlines load for the view as
   for Xenium: once fewer than the Boundary limit's cells (50,000 by default)
-  are in view. A mask is read from the finest pyramid level whose pixels in
+  are in view. A [panel](#side-by-side) beside the main view draws them too
+  when its boundaries button is on. A mask is read from the finest pyramid level whose pixels in
   view fit 16 million, and traced in the decode workers. A
   polygon file is read whole in a worker the first time boundaries load,
   then kept. Outlines are coloured like the cells; hovering one shows its
@@ -493,16 +494,31 @@ viewers sit side by side, three in a row, four in a 2 by 2 grid; under
   and window for channels of the same name, so sections compare on one
   scale, and auto-windows the others. A section without cells, such as an
   image, shows its image at once.
+- **Cell boundaries.** The boundaries button (two outlines) in a panel's
+  header draws the section's cell boundaries in that panel: the outlines the
+  section draws in the main view, from its own files or the collection's
+  `labels`, read for the panel's view once fewer cells than the main view's
+  `Boundary limit` are in it, after the panel's view rests for 180 ms, as
+  the main view does. They are drawn as there: in each cell's colour,
+  filled while cells are coloured, in place of the cell's point, with the
+  main view's `Cell fill` and `Boundary` opacities, and hovering one names
+  its cell. Zoomed out further, a note at the panel's foot says how many
+  cells are in view; a section without boundaries says so instead. The
+  panel keeps its dataset open while they are on, so a polygon file read
+  whole is read once. Hiding the panel's cells (`Cells` in its channels
+  popover) hides its outlines too. Outlines follow no z plane or time
+  point: a label image's first is read.
 - **The open dataset beside itself.** The Image section's `Show beside`
   opens the open dataset's own image in a panel, linked, with channels of
   its own, to compare channel sets of one image. It takes the image the
   main view has open rather than reading it again. It works with or without
   a collection, and closes when another dataset opens outside the
   collection.
-- **What a panel does not show.** Cell boundaries, transcripts and the tools
-  (selection, Magic Lens, measuring, cards) are the main view's only. To use
-  them on a section, choose `Open` in its panel: it swaps places with the
-  main view's dataset.
+- **What a panel does not show.** Nucleus boundaries, transcripts and the
+  tools (selection, Magic Lens, measuring, cards) are the main view's only.
+  To use them on a section, choose `Open` in its panel: it swaps places
+  with the main view's dataset, which takes the panel's image and cell
+  boundaries if the panel showed them.
 - **Linked and unlinked.** A section registered to the open one (the same
   `coordinateSystem`) opens linked: it shows the same point at its centre at
   the same scale, and pan or zoom any linked viewer and the others follow.
@@ -690,7 +706,8 @@ panel is not linked or unlinked as it opens by default (`1` linked or `0`
 unlinked, then its offset or its own view as x, y and zoom), a
 `compareImage=` each when any panel shows its image (`1` under its cells,
 `only` alone) with its shown channels as `compareChannels=` (`-` for none),
-and `sectionView=3d` while the sections
+a `compareBoundaries=` each when any panel draws its cell boundaries (`1`
+for those that do), and `sectionView=3d` while the sections
 are stacked in 3D (not the 3D camera). It keeps the bar's `Expand`
 grid as `collectionView=grid`, with its `Size` as `collectionPreviewSize=`,
 and `Previews` off as `collectionView=names`, so the bar opens the same way. Opening a dataset that is not
@@ -733,8 +750,10 @@ message naming the entry.
 
 ## Known Limitations
 
-- Panels beside the open dataset show their cells and image only: no
-  boundaries or transcripts, and no side-by-side embedding views. Sections
+- Panels beside the open dataset show their cells, image and cell
+  boundaries only: no nucleus boundaries or transcripts, and no
+  side-by-side embedding views. A panel's outlines are read at the image's
+  first z plane and time point. Sections
   that are not registered are lined up by hand, by moving and zooming only.
 - Panels draw every cell at one size, 10 µm across, so Visium spots are
   smaller than in the main view. So does the 3D stack.
